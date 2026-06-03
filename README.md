@@ -22,7 +22,7 @@ bot/
     ├── common.py      # /start, /help, /id
     └── admin.py       # /admin panel, stats, broadcast
 deploy/
-├── deploy.sh          # one-command remote deploy over SSH
+├── deploy.sh          # one-command remote deploy over SSH (ssh + tar)
 └── telegram-bot.service  # systemd unit
 Dockerfile
 docker-compose.yml
@@ -87,20 +87,23 @@ container rebuilds.
 
 ### Option B — One-command deploy from your machine
 
-From your local checkout (requires `ssh` + `rsync` locally, and Docker on the
+From your local checkout (needs only `ssh` + `tar` locally, and Docker on the
 server):
 
 ```bash
-# uses root@62.60.250.242 by default
+# uses root@62.60.250.242 by default; key already loaded in ssh-agent
 ./deploy/deploy.sh
 
-# or target a different host / user
-SSH_HOST=deploy@62.60.250.242 ./deploy/deploy.sh
+# with an explicit SSH key
+SSH_KEY=~/.ssh/id_ed25519 SSH_HOST=root@62.60.250.242 ./deploy/deploy.sh
+
+# with a password (requires `sshpass` installed locally)
+SSH_PASSWORD='secret' SSH_HOST=root@62.60.250.242 ./deploy/deploy.sh
 ```
 
-The script syncs the project to `/opt/telegram-bot` on the server and runs
-`docker compose up -d --build`. Your local `.env` must exist (it is copied to
-the server); it is never committed to git.
+The script transfers the project to `/opt/telegram-bot` on the server (via
+`tar` over SSH) and runs `docker compose up -d --build`. Your local `.env` must
+exist (it is copied to the server); it is never committed to git.
 
 ### Option C — systemd (no Docker)
 
