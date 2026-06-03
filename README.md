@@ -21,6 +21,11 @@ bot/
     ├── __init__.py    # router assembly
     ├── common.py      # /start, /help, /id
     └── admin.py       # /admin panel, stats, broadcast
+deploy/
+├── deploy.sh          # one-command remote deploy over SSH
+└── telegram-bot.service  # systemd unit
+Dockerfile
+docker-compose.yml
 ```
 
 ## Setup
@@ -59,6 +64,62 @@ python -m bot
 ```
 
 The bot uses long polling, so no public URL or webhook setup is required.
+
+## Deployment
+
+The repo ships with Docker, Docker Compose, a systemd unit, and a deploy
+script. The intended target server is `62.60.250.242`.
+
+### Option A — Docker Compose (recommended)
+
+On the server:
+
+```bash
+git clone <this-repo> /opt/telegram-bot
+cd /opt/telegram-bot
+cp .env.example .env      # set BOT_TOKEN (and ADMIN_IDS)
+docker compose up -d --build
+docker compose logs -f bot
+```
+
+The SQLite database is stored in the `bot-data` Docker volume, so it survives
+container rebuilds.
+
+### Option B — One-command deploy from your machine
+
+From your local checkout (requires `ssh` + `rsync` locally, and Docker on the
+server):
+
+```bash
+# uses root@62.60.250.242 by default
+./deploy/deploy.sh
+
+# or target a different host / user
+SSH_HOST=deploy@62.60.250.242 ./deploy/deploy.sh
+```
+
+The script syncs the project to `/opt/telegram-bot` on the server and runs
+`docker compose up -d --build`. Your local `.env` must exist (it is copied to
+the server); it is never committed to git.
+
+### Option C — systemd (no Docker)
+
+```bash
+sudo useradd --system --create-home --home-dir /opt/telegram-bot botuser
+sudo -u botuser git clone <this-repo> /opt/telegram-bot
+cd /opt/telegram-bot
+sudo -u botuser python3 -m venv .venv
+sudo -u botuser .venv/bin/pip install -r requirements.txt
+sudo -u botuser cp .env.example .env   # then edit .env
+
+sudo cp deploy/telegram-bot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now telegram-bot
+sudo journalctl -u telegram-bot -f
+```
+
+> Security: deploy your real `BOT_TOKEN` only via the server's `.env` (or your
+> platform's secret manager). It must never be committed to the repository.
 
 ## Notes on secrets
 
