@@ -15,5 +15,10 @@ variables, not committed to Git.
 
    - `TELEGRAM_BOT_TOKEN` to your Telegram bot token
    - `ADMIN_ID` to the Telegram user ID that should have admin access
+   - `SERVER_HOST` to the server IP address or hostname used for deployment
 
-The `.env` file is ignored by Git so real credentials stay local.
+For example, set `SERVER_HOST` in your local `.env` file to the server IP
+address or hostname.
+
+The `.env` file is ignored by Git so real credentials and deployment details
+stay local.
