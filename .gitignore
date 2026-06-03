@@ -19,6 +19,12 @@ env/
 *.db
 data/
 
+# Local deploy helpers / vendored installs (not part of the project)
+.pkgs/
+_proj.tgz
+_remote.py
+_upload.py
+
 # OS / editor
 .DS_Store
 .idea/
