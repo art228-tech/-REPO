@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Рулетка</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#080610;
+    --bg-1:#120a22;
+    --gold-1:#ffe27a;
+    --gold-2:#ffb83d;
+    --gold-3:#a25b00;
+    --magenta:#ff3aa1;
+    --violet:#9b4dff;
+    --cyan:#4de4ff;
+    --text:#ffffff;
+    --muted:rgba(255,255,255,.65);
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%; overscroll-behavior:none;}
+  body{
+    font-family:'Manrope', system-ui, -apple-system, sans-serif;
+    color:var(--text);
+    background:
+      radial-gradient(circle at 20% 0%, rgba(155,77,255,.25), transparent 50%),
+      radial-gradient(circle at 80% 100%, rgba(255,58,161,.22), transparent 55%),
+      radial-gradient(circle at 50% 50%, rgba(77,228,255,.10), transparent 60%),
+      linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
+    min-height:100vh;
+    min-height:100dvh;
+    overflow:hidden;
+    position:relative;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+  /* Звёздное небо */
+  .stars{position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.7;}
+  .stars span{
+    position:absolute; width:2px; height:2px; background:#fff; border-radius:50%;
+    box-shadow:0 0 6px rgba(255,255,255,.9), 0 0 14px rgba(255,255,255,.5);
+    animation:twinkle 3s infinite ease-in-out;
+  }
+  @keyframes twinkle{
+    0%,100%{opacity:.2; transform:scale(.6)}
+    50%{opacity:1; transform:scale(1.1)}
+  }
+  /* Свечение по краям */
+  .aurora{position:fixed; inset:0; pointer-events:none; z-index:0; mix-blend-mode:screen;}
+  .aurora::before, .aurora::after{
+    content:""; position:absolute; border-radius:50%;
+    filter:blur(80px); opacity:.55;
+  }
+  .aurora::before{
+    width:60vmin; height:60vmin; top:-20vmin; left:-10vmin;
+    background:radial-gradient(circle, var(--magenta), transparent 70%);
+    animation:float1 14s infinite ease-in-out;
+  }
+  .aurora::after{
+    width:55vmin; height:55vmin; bottom:-20vmin; right:-10vmin;
+    background:radial-gradient(circle, var(--cyan), transparent 70%);
+    animation:float2 16s infinite ease-in-out;
+  }
+  @keyframes float1{
+    0%,100%{transform:translate(0,0) scale(1)}
+    50%{transform:translate(8vmin,6vmin) scale(1.1)}
+  }
+  @keyframes float2{
+    0%,100%{transform:translate(0,0) scale(1)}
+    50%{transform:translate(-6vmin,-8vmin) scale(1.05)}
+  }
+
+  .stage{
+    position:relative; z-index:1;
+    height:100vh; height:100dvh;
+    display:flex; flex-direction:column;
+    align-items:center;
+    padding:24px 16px 24px;
+    text-align:center;
+  }
+
+  .crown{
+    font-size:30px;
+    filter:drop-shadow(0 0 18px rgba(255,184,61,.7));
+    animation:bob 4s infinite ease-in-out;
+  }
+  @keyframes bob{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(-6px)}
+  }
+
+  .title{
+    margin-top:6px;
+    font-family:'Cormorant Garamond', serif;
+    font-weight:700;
+    font-size:34px;
+    letter-spacing:.5px;
+    background:linear-gradient(180deg, #fff 0%, var(--gold-1) 50%, var(--gold-2) 100%);
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 4px 18px rgba(255,180,40,.3));
+  }
+  .subtitle{
+    font-size:13px; color:var(--muted);
+    margin-top:4px; letter-spacing:.4px;
+  }
+
+  .wheel-wrap{
+    position:relative;
+    margin-top:14px;
+    width:min(86vw, 380px);
+    aspect-ratio:1;
+    display:flex; align-items:center; justify-content:center;
+  }
+  /* Внешнее кольцо со светящимися лампочками */
+  .ring{
+    position:absolute; inset:-12px;
+    border-radius:50%;
+    background:
+      conic-gradient(from 0deg, var(--gold-1), var(--gold-3), var(--gold-1), var(--gold-3), var(--gold-1));
+    filter:drop-shadow(0 0 22px rgba(255,200,80,.45));
+  }
+  .ring::before{
+    content:""; position:absolute; inset:6px; border-radius:50%;
+    background:radial-gradient(circle, #1a0e30 0%, #0b0617 100%);
+  }
+  .bulbs{
+    position:absolute; inset:0; border-radius:50%;
+    pointer-events:none;
+  }
+  .bulbs span{
+    position:absolute; left:50%; top:50%;
+    width:7px; height:7px; margin:-3.5px 0 0 -3.5px;
+    background:radial-gradient(circle, #fff 0%, var(--gold-1) 60%, transparent 70%);
+    border-radius:50%;
+    box-shadow:0 0 8px var(--gold-1), 0 0 14px rgba(255,200,80,.9);
+    animation:bulb 1.6s infinite ease-in-out;
+  }
+  @keyframes bulb{
+    0%,100%{opacity:.35; transform:translate(var(--x), var(--y)) scale(.7)}
+    50%{opacity:1; transform:translate(var(--x), var(--y)) scale(1.2)}
+  }
+
+  canvas#wheel{
+    position:relative;
+    width:90%; height:90%;
+    border-radius:50%;
+    filter:drop-shadow(0 16px 30px rgba(0,0,0,.5));
+  }
+
+  .pointer{
+    position:absolute; left:50%; top:-4px;
+    transform:translateX(-50%);
+    z-index:5;
+    filter:drop-shadow(0 4px 10px rgba(0,0,0,.55));
+  }
+  .pointer svg{display:block;}
+
+  .hub{
+    position:absolute; left:50%; top:50%;
+    width:64px; height:64px; margin:-32px 0 0 -32px;
+    border-radius:50%;
+    background:
+      radial-gradient(circle at 30% 30%, #fff7d0 0%, var(--gold-1) 35%, var(--gold-2) 70%, var(--gold-3) 100%);
+    box-shadow:
+      inset 0 -6px 10px rgba(0,0,0,.35),
+      inset 0 4px 8px rgba(255,255,255,.7),
+      0 0 24px rgba(255,200,80,.55);
+    display:flex; align-items:center; justify-content:center;
+    font-size:28px;
+    z-index:4;
+  }
+
+  .spin-btn{
+    margin-top:auto;
+    width:min(86vw, 380px);
+    height:62px;
+    border:0; border-radius:18px;
+    font-family:'Manrope', sans-serif;
+    font-weight:800; font-size:18px; letter-spacing:.5px;
+    color:#fff;
+    background:linear-gradient(135deg, #ff5e9c 0%, #ff3aa1 35%, #9b4dff 100%);
+    box-shadow:
+      0 12px 28px rgba(255,58,161,.45),
+      inset 0 1px 0 rgba(255,255,255,.45),
+      inset 0 -3px 0 rgba(0,0,0,.18);
+    cursor:pointer;
+    position:relative;
+    overflow:hidden;
+    transition:transform .12s ease, box-shadow .2s ease;
+  }
+  .spin-btn:active{transform:translateY(2px) scale(.99); box-shadow:0 6px 16px rgba(255,58,161,.4);}
+  .spin-btn[disabled]{opacity:.55; cursor:not-allowed; transform:none}
+  .spin-btn::after{
+    content:""; position:absolute; left:-50%; top:0;
+    width:50%; height:100%;
+    background:linear-gradient(120deg, transparent, rgba(255,255,255,.45), transparent);
+    transform:skewX(-25deg);
+    animation:shine 2.4s infinite;
+  }
+  @keyframes shine{
+    0%{left:-50%}
+    60%{left:130%}
+    100%{left:130%}
+  }
+
+  /* Экран "победа" */
+  .win-screen{
+    position:fixed; inset:0; z-index:10;
+    background:
+      radial-gradient(circle at 50% 30%, rgba(255,184,61,.35), transparent 60%),
+      radial-gradient(circle at 50% 70%, rgba(155,77,255,.30), transparent 60%),
+      rgba(8,6,16,.92);
+    backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px);
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    padding:24px;
+    opacity:0; pointer-events:none;
+    transition:opacity .5s ease;
+  }
+  .win-screen.show{opacity:1; pointer-events:auto}
+  .win-emoji{
+    font-size:84px;
+    animation:pop .8s ease forwards, bob 3s 1s infinite ease-in-out;
+    filter:drop-shadow(0 0 30px rgba(255,200,60,.8));
+  }
+  @keyframes pop{
+    0%{transform:scale(.3) rotate(-20deg); opacity:0}
+    60%{transform:scale(1.2) rotate(8deg); opacity:1}
+    100%{transform:scale(1) rotate(0)}
+  }
+  .win-title{
+    font-family:'Cormorant Garamond', serif;
+    font-weight:700;
+    font-size:36px;
+    margin-top:10px;
+    background:linear-gradient(180deg, #fff 0%, var(--gold-1) 50%, var(--gold-2) 100%);
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent;
+    letter-spacing:.6px;
+  }
+  .prize-card{
+    margin-top:18px;
+    padding:20px 28px;
+    border-radius:24px;
+    background:
+      linear-gradient(135deg, rgba(255,226,122,.18), rgba(155,77,255,.18));
+    border:1px solid rgba(255,226,122,.4);
+    box-shadow:
+      0 18px 50px rgba(255,184,61,.25),
+      inset 0 1px 0 rgba(255,255,255,.18);
+    text-align:center;
+    animation:cardin .9s .2s ease backwards;
+  }
+  @keyframes cardin{
+    0%{opacity:0; transform:translateY(20px) scale(.9)}
+    100%{opacity:1; transform:translateY(0) scale(1)}
+  }
+  .prize-amount{
+    font-family:'Cormorant Garamond', serif;
+    font-weight:700;
+    font-size:64px;
+    line-height:1;
+    color:var(--gold-1);
+    text-shadow:0 0 20px rgba(255,200,80,.6);
+  }
+  .prize-label{
+    margin-top:6px;
+    font-size:18px;
+    color:#fff;
+    letter-spacing:.5px;
+  }
+  .claim-btn{
+    margin-top:32px;
+    width:min(86vw, 380px);
+    height:62px;
+    border:0; border-radius:18px;
+    font-family:'Manrope', sans-serif;
+    font-weight:800; font-size:18px;
+    color:#1a0a00;
+    background:linear-gradient(180deg, #fff7d0 0%, var(--gold-1) 50%, var(--gold-2) 100%);
+    box-shadow:
+      0 14px 32px rgba(255,184,61,.55),
+      inset 0 2px 0 rgba(255,255,255,.7),
+      inset 0 -3px 0 rgba(0,0,0,.15);
+    cursor:pointer;
+    animation:cardin .9s .5s ease backwards;
+    position:relative;
+    overflow:hidden;
+  }
+  .claim-btn::after{
+    content:""; position:absolute; left:-50%; top:0;
+    width:50%; height:100%;
+    background:linear-gradient(120deg, transparent, rgba(255,255,255,.6), transparent);
+    transform:skewX(-25deg);
+    animation:shine 2s infinite;
+  }
+  .claim-btn:active{transform:translateY(2px) scale(.99)}
+
+  /* Конфетти */
+  .confetti{position:fixed; inset:0; pointer-events:none; z-index:9; overflow:hidden;}
+
+  /* Adaptivity */
+  @media (max-height:680px){
+    .title{font-size:28px}
+    .crown{font-size:24px}
+    .wheel-wrap{margin-top:6px}
+    .spin-btn{height:56px}
+  }
+</style>
+</head>
+<body>
+  <div class="aurora"></div>
+  <div class="stars" id="stars"></div>
+
+  <div class="stage">
+    <div class="crown">👑</div>
+    <div class="title">КОЛЕСО ФОРТУНЫ</div>
+    <div class="subtitle">Один спин — один шанс на крупный приз</div>
+
+    <div class="wheel-wrap">
+      <div class="ring"></div>
+      <div class="bulbs" id="bulbs"></div>
+      <canvas id="wheel" width="640" height="640"></canvas>
+      <div class="hub">🎰</div>
+      <div class="pointer">
+        <svg width="40" height="50" viewBox="0 0 40 50">
+          <defs>
+            <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fff7d0"/>
+              <stop offset="50%" stop-color="#ffe27a"/>
+              <stop offset="100%" stop-color="#ffb83d"/>
+            </linearGradient>
+          </defs>
+          <path d="M20 50 L0 8 Q20 -6 40 8 Z" fill="url(#pg)" stroke="#7a4500" stroke-width="2"/>
+          <circle cx="20" cy="14" r="4" fill="#7a4500"/>
+        </svg>
+      </div>
+    </div>
+
+    <button class="spin-btn" id="spinBtn">🎰 КРУТИТЬ КОЛЕСО</button>
+  </div>
+
+  <div class="confetti" id="confetti"></div>
+
+  <div class="win-screen" id="winScreen">
+    <div class="win-emoji">🎉</div>
+    <div class="win-title">ПОЗДРАВЛЯЕМ!</div>
+    <div class="prize-card">
+      <div class="prize-amount">5000 ⭐</div>
+      <div class="prize-label">ты выиграл главный приз!</div>
+    </div>
+    <button class="claim-btn" id="claimBtn">✨ ЗАБРАТЬ ПРИЗ</button>
+  </div>
+
+<script>
+"use strict";
+
+// ---------- Telegram WebApp ----------
+const tg = window.Telegram && window.Telegram.WebApp;
+if (tg){
+  try {
+    tg.ready();
+    tg.expand();
+    tg.setHeaderColor && tg.setHeaderColor('#080610');
+    tg.setBackgroundColor && tg.setBackgroundColor('#080610');
+    tg.disableVerticalSwipes && tg.disableVerticalSwipes();
+  } catch(e){}
+}
+
+// ---------- Парсим параметры ----------
+const params = new URLSearchParams(location.search);
+const BID = parseInt(params.get('bid') || '0', 10);
+const SID = parseInt(params.get('sid') || '0', 10);
+
+// ---------- Звёзды ----------
+(function makeStars(){
+  const c = document.getElementById('stars');
+  const N = 60;
+  for (let i=0; i<N; i++){
+    const s = document.createElement('span');
+    s.style.left = Math.random()*100 + 'vw';
+    s.style.top = Math.random()*100 + 'vh';
+    s.style.animationDelay = (Math.random()*3) + 's';
+    s.style.opacity = (0.3 + Math.random()*0.7).toFixed(2);
+    c.appendChild(s);
+  }
+})();
+
+// ---------- Лампочки по кольцу ----------
+(function makeBulbs(){
+  const c = document.getElementById('bulbs');
+  const wrap = c.parentElement;
+  const N = 28;
+  const R = 49; // % от центра
+  for (let i=0; i<N; i++){
+    const a = (i/N) * Math.PI*2 - Math.PI/2;
+    const x = Math.cos(a)*R;
+    const y = Math.sin(a)*R;
+    const sp = document.createElement('span');
+    sp.style.setProperty('--x', `calc(${x}vmin)`);
+    sp.style.setProperty('--y', `calc(${y}vmin)`);
+    sp.style.left = `calc(50% + ${x}%)`;
+    sp.style.top = `calc(50% + ${y}%)`;
+    sp.style.transform = `translate(-50%, -50%)`;
+    sp.style.animationDelay = `${(i*0.06).toFixed(2)}s`;
+    c.appendChild(sp);
+  }
+})();
+
+// ---------- Призы (сегменты) ----------
+// ВАЖНО: один сегмент — 5000 ⭐ (главный приз), визуально выделяется.
+// Сегменты упорядочены так, чтобы вокруг главного приза были разные значения.
+const SEGMENTS = [
+  { label:'15 ⭐',   value:15,   color1:'#7a3eff', color2:'#5b22d4' },
+  { label:'40 ⭐',   value:40,   color1:'#ff5e9c', color2:'#d62e7d' },
+  { label:'20 ⭐',   value:20,   color1:'#4de4ff', color2:'#1eaecf' },
+  { label:'25 ⭐',   value:25,   color1:'#7a3eff', color2:'#5b22d4' },
+  { label:'5000 ⭐', value:5000, color1:'#fff7d0', color2:'#ffb83d', jackpot:true },
+  { label:'30 ⭐',   value:30,   color1:'#ff5e9c', color2:'#d62e7d' },
+  { label:'10 ⭐',   value:10,   color1:'#4de4ff', color2:'#1eaecf' },
+  { label:'50 ⭐',   value:50,   color1:'#7a3eff', color2:'#5b22d4' },
+];
+const JACKPOT_INDEX = SEGMENTS.findIndex(s => s.jackpot);
+
+// ---------- Canvas: отрисовка колеса ----------
+const canvas = document.getElementById('wheel');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const CX = W/2, CY = H/2;
+const R_OUT = W*0.48;
+const R_IN = W*0.13;
+let rotation = 0; // радианы
+
+function drawWheel(){
+  ctx.clearRect(0,0,W,H);
+  const N = SEGMENTS.length;
+  const step = (Math.PI*2) / N;
+
+  ctx.save();
+  ctx.translate(CX, CY);
+  ctx.rotate(rotation);
+
+  for (let i=0; i<N; i++){
+    const a0 = i*step - Math.PI/2;
+    const a1 = a0 + step;
+    const seg = SEGMENTS[i];
+
+    // Заливка
+    const mid = (a0+a1)/2;
+    const grad = ctx.createRadialGradient(0,0,R_IN, 0,0,R_OUT);
+    grad.addColorStop(0, seg.color1);
+    grad.addColorStop(1, seg.color2);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.arc(0,0,R_OUT,a0,a1);
+    ctx.closePath();
+    ctx.fill();
+
+    // Глянец сверху
+    if (seg.jackpot){
+      // блестящий джекпот: дополнительный глянец и блёстки
+      ctx.save();
+      const gloss = ctx.createLinearGradient(
+        Math.cos(a0)*R_OUT*0.6, Math.sin(a0)*R_OUT*0.6,
+        Math.cos(a1)*R_OUT*0.6, Math.sin(a1)*R_OUT*0.6
+      );
+      gloss.addColorStop(0, 'rgba(255,255,255,.55)');
+      gloss.addColorStop(0.4, 'rgba(255,255,255,.18)');
+      gloss.addColorStop(1, 'rgba(255,255,255,.0)');
+      ctx.fillStyle = gloss;
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      ctx.arc(0,0,R_OUT,a0,a1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Разделитель
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,0,0,.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(Math.cos(a0)*R_OUT, Math.sin(a0)*R_OUT);
+    ctx.stroke();
+    ctx.restore();
+
+    // Текст
+    ctx.save();
+    ctx.rotate(mid);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = seg.jackpot ? '#3a1c00' : '#ffffff';
+    ctx.font = (seg.jackpot ? '800 ' : '700 ') + (seg.jackpot ? '34px' : '28px') + ' Manrope, sans-serif';
+    if (seg.jackpot){
+      ctx.shadowColor = 'rgba(255,255,255,.7)';
+      ctx.shadowBlur = 10;
+    }
+    ctx.fillText(seg.label, R_OUT - 18, 0);
+    ctx.restore();
+  }
+
+  // Внутренний круг (центр)
+  ctx.beginPath();
+  ctx.arc(0,0,R_IN,0,Math.PI*2);
+  const innerGrad = ctx.createRadialGradient(0,0,0, 0,0,R_IN);
+  innerGrad.addColorStop(0, '#241333');
+  innerGrad.addColorStop(1, '#0b0617');
+  ctx.fillStyle = innerGrad;
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(255,226,122,.35)';
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+drawWheel();
+
+// ---------- Анимация спина ----------
+let spinning = false;
+let onSpinEnd = null;
+
+function easeOutQuint(t){ return 1 - Math.pow(1 - t, 5); }
+
+function spinTo(targetIndex, duration, cb){
+  if (spinning) return;
+  spinning = true;
+  onSpinEnd = cb;
+  const N = SEGMENTS.length;
+  const step = (Math.PI*2)/N;
+  // Центр сегмента (если rotation=0) находится под углом (targetIndex*step + step/2 - Math.PI/2) от центра.
+  // Стрелка указывает строго вверх (-π/2 в нашей системе, т.е. отрицательная Y).
+  // Нам нужно: после поворота, центр сегмента оказался под стрелкой (т.е. под углом -π/2).
+  // Перед поворотом segCenter = targetIndex*step + step/2 - π/2.
+  // После поворота он будет под углом (segCenter + finalRotation) mod 2π — нам надо чтобы это было -π/2 (mod 2π).
+  // => finalRotation ≡ -π/2 - segCenter (mod 2π) = -π/2 - (targetIndex*step + step/2 - π/2) = -(targetIndex*step + step/2)
+  // Прибавим много полных оборотов для эффекта.
+  const baseTarget = -(targetIndex*step + step/2);
+  // Добавим небольшое случайное отклонение в пределах половины сегмента (но всё равно попадёт на джекпот)
+  const jitter = (Math.random() - 0.5) * step * 0.45;
+  const fullTurns = 6 + Math.floor(Math.random()*2); // 6..7
+  const finalRot = baseTarget + fullTurns * Math.PI*2 + jitter;
+
+  const start = performance.now();
+  const initRot = rotation;
+  const delta = finalRot - (initRot % (Math.PI*2));
+  // normalize delta to be ≥ minimal full turns
+  const normalized = ((delta % (Math.PI*2)) + Math.PI*2) % (Math.PI*2) + fullTurns*Math.PI*2;
+
+  function tick(now){
+    const t = Math.min(1, (now - start) / duration);
+    const k = easeOutQuint(t);
+    rotation = initRot + normalized * k;
+    drawWheel();
+    if (t < 1){
+      requestAnimationFrame(tick);
+    } else {
+      spinning = false;
+      if (onSpinEnd) onSpinEnd();
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+// ---------- Конфетти ----------
+function spawnConfetti(){
+  const c = document.getElementById('confetti');
+  c.innerHTML = '';
+  const colors = ['#ffe27a','#ffb83d','#ff3aa1','#9b4dff','#4de4ff','#ffffff'];
+  const N = 100;
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:absolute; inset:0; width:100%; height:100%;';
+  c.appendChild(canvas);
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const cctx = canvas.getContext('2d');
+  const parts = [];
+  for (let i=0; i<N; i++){
+    parts.push({
+      x: Math.random()*canvas.width,
+      y: -10 - Math.random()*canvas.height*0.4,
+      vx: (Math.random()-0.5)*4,
+      vy: 2 + Math.random()*4,
+      r: 4 + Math.random()*6,
+      color: colors[Math.floor(Math.random()*colors.length)],
+      rot: Math.random()*Math.PI*2,
+      vr: (Math.random()-0.5)*0.2,
+      shape: Math.random()<0.5?'rect':'circle',
+    });
+  }
+  let frames = 0;
+  function tick(){
+    frames++;
+    cctx.clearRect(0,0,canvas.width,canvas.height);
+    for (const p of parts){
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.06;
+      p.rot += p.vr;
+      cctx.save();
+      cctx.translate(p.x, p.y);
+      cctx.rotate(p.rot);
+      cctx.fillStyle = p.color;
+      if (p.shape === 'rect'){
+        cctx.fillRect(-p.r/2, -p.r/3, p.r, p.r*0.6);
+      } else {
+        cctx.beginPath();
+        cctx.arc(0,0,p.r/2,0,Math.PI*2);
+        cctx.fill();
+      }
+      cctx.restore();
+    }
+    if (frames < 280){
+      requestAnimationFrame(tick);
+    } else {
+      c.innerHTML = '';
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+// ---------- Логика ----------
+let claimed = false;
+let autoTimeout = null;
+
+async function notifyWin(){
+  if (claimed) return;
+  claimed = true;
+  if (autoTimeout){ clearTimeout(autoTimeout); autoTimeout = null; }
+  // Закрываем веб-апп — бот сам продвинет сценарий по серверной ноте
+  try {
+    await fetch('/api/win', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        bid: BID, sid: SID,
+        init_data: (tg && tg.initData) || '',
+      }),
+    });
+  } catch(e){}
+  // Закрываем мини-апп — телега вернёт юзера в чат бота
+  setTimeout(() => {
+    try { tg && tg.close && tg.close(); } catch(e){}
+  }, 200);
+}
+
+document.getElementById('spinBtn').addEventListener('click', () => {
+  if (spinning) return;
+  const btn = document.getElementById('spinBtn');
+  btn.disabled = true;
+  try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred('heavy'); } catch(e){}
+
+  spinTo(JACKPOT_INDEX, 5200, () => {
+    try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success'); } catch(e){}
+    spawnConfetti();
+    document.getElementById('winScreen').classList.add('show');
+    // Автозабор через 5 секунд бездействия
+    autoTimeout = setTimeout(() => {
+      notifyWin();
+    }, 5000);
+  });
+});
+
+document.getElementById('claimBtn').addEventListener('click', () => {
+  try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred('medium'); } catch(e){}
+  notifyWin();
+});
+</script>
+</body>
+</html>
