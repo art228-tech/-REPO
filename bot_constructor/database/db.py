@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS steps (
     duplicate_after     INTEGER DEFAULT 60,            -- через сколько секунд дублировать
     duplicate_increment INTEGER DEFAULT 0,             -- прибавлять с каждым разом
     duplicate_max       INTEGER DEFAULT 3,             -- макс. кол-во дублей
+    copy_broken         INTEGER NOT NULL DEFAULT 0,    -- 1 = оригинал скопированного поста удалён (патч 26)
     FOREIGN KEY (bot_id) REFERENCES greeting_bots(id) ON DELETE CASCADE
 );
 
@@ -145,7 +146,21 @@ CREATE TABLE IF NOT EXISTS scheduled_starts (
     FOREIGN KEY (bot_id) REFERENCES greeting_bots(id) ON DELETE CASCADE
 );
 
+-- Каналы приветки: приветка отвечает только на заявки из этих каналов,
+-- у каждого канала своя задержка старта сценария (патч 27).
+CREATE TABLE IF NOT EXISTS welcome_channels (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    bot_id      INTEGER NOT NULL,
+    chat_id     INTEGER NOT NULL,
+    title       TEXT,
+    start_delay INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL,
+    UNIQUE(bot_id, chat_id),
+    FOREIGN KEY (bot_id) REFERENCES greeting_bots(id) ON DELETE CASCADE
+);
+
 -- Индексы
+CREATE INDEX IF NOT EXISTS idx_wch ON welcome_channels(bot_id, chat_id);
 CREATE INDEX IF NOT EXISTS idx_steps_bot_order ON steps(bot_id, step_order);
 CREATE INDEX IF NOT EXISTS idx_users_bot ON bot_users(bot_id);
 CREATE INDEX IF NOT EXISTS idx_users_step ON bot_users(bot_id, current_step_order);
@@ -207,6 +222,28 @@ class DB:
         self._conn = await aiosqlite.connect(self.path)
         self._conn.row_factory = aiosqlite.Row
         await self._conn.executescript(SCHEMA)
+        await self._conn.commit()
+        await self._migrate()
+
+    async def _migrate(self) -> None:
+        """Добавляет недостающие колонки в уже существующие БД (старые установки,
+        где таблицы были созданы до появления патчей). CREATE TABLE IF NOT EXISTS
+        не добавляет колонки в существующую таблицу — для этого нужен ALTER."""
+        # (таблица, колонка, DDL для ALTER ADD COLUMN)
+        wanted = [
+            ("steps", "copy_broken", "INTEGER NOT NULL DEFAULT 0"),
+            ("greeting_bots", "typing_mode", "INTEGER DEFAULT 0"),
+            ("bot_users", "source", "TEXT DEFAULT 'start'"),
+            ("bot_users", "joined_channel", "INTEGER DEFAULT 0"),
+            ("bot_users", "channel_link_id", "INTEGER"),
+        ]
+        for table, column, ddl in wanted:
+            cur = await self._conn.execute(f"PRAGMA table_info({table})")
+            cols = [r[1] for r in await cur.fetchall()]
+            if cols and column not in cols:
+                await self._conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"
+                )
         await self._conn.commit()
 
     async def close(self) -> None:
