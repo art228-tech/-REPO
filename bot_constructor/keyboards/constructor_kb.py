@@ -33,12 +33,15 @@ def bot_menu(bot_id: int) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📊 Статистика", callback_data=f"stat:{bot_id}")],
         [InlineKeyboardButton(text="📣 Рассылка", callback_data=f"bc:{bot_id}")],
         [InlineKeyboardButton(text="🔗 Реф-ссылки", callback_data=f"refs:{bot_id}")],
+        [InlineKeyboardButton(text="📊 Ссылки канала", callback_data=f"chlinks:{bot_id}")],
         [InlineKeyboardButton(text="🗑 Удалить приветку", callback_data=f"delbot:{bot_id}")],
         [InlineKeyboardButton(text="« К списку", callback_data="mybots")],
     ])
 
 
-def settings_menu(bot_id: int, join_delay: int, delete_timer: int) -> InlineKeyboardMarkup:
+def settings_menu(bot_id: int, join_delay: int, delete_timer: int,
+                  typing_mode: int = 0) -> InlineKeyboardMarkup:
+    _tm = "✍️ С имитацией печати" if typing_mode else "💬 Обычная"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text=f"⏱ Задержка перед стартом: {join_delay} с",
@@ -47,6 +50,14 @@ def settings_menu(bot_id: int, join_delay: int, delete_timer: int) -> InlineKeyb
         [InlineKeyboardButton(
             text=f"🗑 Таймер удаления старых: {delete_timer} с",
             callback_data=f"set_dt:{bot_id}",
+        )],
+        [InlineKeyboardButton(
+            text=f"Вид приветки: {_tm}",
+            callback_data=f"set_tm:{bot_id}",
+        )],
+        [InlineKeyboardButton(
+            text="📢 Каналы приветки",
+            callback_data=f"wch:{bot_id}",
         )],
         [InlineKeyboardButton(text="« Назад", callback_data=f"bot:{bot_id}")],
     ])
@@ -57,8 +68,14 @@ def scenario_menu(bot_id: int, steps: list) -> InlineKeyboardMarkup:
     type_emoji = {"roulette": "🎰", "op": "📢", "message": "💬"}
     for s in steps:
         emoji = type_emoji.get(s["step_type"], "·")
+        # ⚠️ — оригинал скопированного поста удалён
+        try:
+            broken = s["copy_broken"]
+        except (KeyError, IndexError):
+            broken = 0
+        warn = " ⚠️ оригинал удалён" if broken else ""
         rows.append([InlineKeyboardButton(
-            text=f"{s['step_order']+1}. {emoji} {s['step_type']}",
+            text=f"{s['step_order']+1}. {emoji} {s['step_type']}{warn}",
             callback_data=f"step:{s['id']}",
         )])
     rows.append([InlineKeyboardButton(text="➕ Добавить шаг", callback_data=f"addstep:{bot_id}")])
@@ -75,15 +92,20 @@ def add_step_type(bot_id: int) -> InlineKeyboardMarkup:
     ])
 
 
-def step_view(step_id: int, bot_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
+def step_view(step_id: int, bot_id: int, step_type: str = "") -> InlineKeyboardMarkup:
+    rows = [
         [
             InlineKeyboardButton(text="⬆️ Вверх", callback_data=f"step_up:{step_id}"),
             InlineKeyboardButton(text="⬇️ Вниз", callback_data=f"step_dn:{step_id}"),
         ],
-        [InlineKeyboardButton(text="🗑 Удалить шаг", callback_data=f"step_del:{step_id}")],
-        [InlineKeyboardButton(text="« К сценарию", callback_data=f"scn:{bot_id}")],
-    ])
+        [InlineKeyboardButton(text="👁 Посмотреть текст", callback_data=f"step_txt:{step_id}")],
+        [InlineKeyboardButton(text="🔗 Ссылки", callback_data=f"step_links:{step_id}")],
+    ]
+    if step_type == "op":
+        rows.append([InlineKeyboardButton(text="👥 Спонсоры", callback_data=f"spons:{step_id}")])
+    rows.append([InlineKeyboardButton(text="🗑 Удалить шаг", callback_data=f"step_del:{step_id}")])
+    rows.append([InlineKeyboardButton(text="« К сценарию", callback_data=f"scn:{bot_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def color_picker(prefix: str) -> InlineKeyboardMarkup:
@@ -116,6 +138,7 @@ def stats_menu(bot_id: int) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="⭐️ Премиум", callback_data=f"st_prem:{bot_id}")],
         [InlineKeyboardButton(text="🪦 Мёртвые", callback_data=f"st_dead:{bot_id}")],
         [InlineKeyboardButton(text="🔗 По реф-ссылкам", callback_data=f"st_refs:{bot_id}")],
+        [InlineKeyboardButton(text="📊 По ссылкам канала", callback_data=f"st_chl:{bot_id}")],
         [InlineKeyboardButton(text="« Назад", callback_data=f"bot:{bot_id}")],
     ])
 

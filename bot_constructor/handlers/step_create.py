@@ -25,6 +25,7 @@ from keyboards.constructor_kb import (
     sponsor_check_kb,
 )
 from states.fsm import StepStates
+from utils.sponsor_check import check_sponsor_access
 
 router = Router(name="step_create")
 
@@ -52,15 +53,54 @@ def _extract_content(message: Message) -> dict[str, Any]:
     elif message.text:
         cfg["text"] = message.html_text
     # Если это пересланное (forward) — сохраняем copy_from
+    # Telegram отдаёт данные о пересылке либо в старом forward_from_chat,
+    # --- Кнопки-ссылки извлекаем ВСЕГДА (переслано сообщение или нет) ---
+    if message.reply_markup and getattr(message.reply_markup, "inline_keyboard", None):
+        orig_btns = []
+        for row in message.reply_markup.inline_keyboard:
+            line = []
+            for b in row:
+                if b.url:
+                    btn = {"text": b.text, "url": b.url}
+                    # Нативный цвет кнопки (Bot API 9.4)
+                    _style = getattr(b, "style", None)
+                    if _style:
+                        btn["style"] = _style
+                    # Премиум-стикер на кнопке
+                    _emoji = getattr(b, "icon_custom_emoji_id", None)
+                    if _emoji:
+                        btn["icon_custom_emoji_id"] = _emoji
+                    line.append(btn)
+                # callback_data-кнопки чужого бота пропускаем — не переносимы
+            if line:
+                orig_btns.append(line)
+        if orig_btns:
+            cfg["_orig_buttons"] = orig_btns
+
+    # --- copy_from только для пересылок из КАНАЛА ---
+    fwd_chat = None
+    fwd_mid = None
     if message.forward_from_chat and message.forward_from_message_id:
-        cfg["copy_from"] = {
-            "chat_id": message.forward_from_chat.id,
-            "message_id": message.forward_from_message_id,
-        }
-        # При forward не сохраняем text/photo — будем копировать сам пост
+        # старый API
+        if getattr(message.forward_from_chat, "type", None) == "channel":
+            fwd_chat = message.forward_from_chat.id
+            fwd_mid = message.forward_from_message_id
+    else:
+        origin = getattr(message, "forward_origin", None)
+        if origin is not None and getattr(origin, "type", None) == "channel":
+            och = getattr(origin, "chat", None)
+            omid = getattr(origin, "message_id", None)
+            if och is not None and omid is not None:
+                fwd_chat = och.id
+                fwd_mid = omid
+    if fwd_chat is not None and fwd_mid is not None:
+        cfg["copy_from"] = {"chat_id": fwd_chat, "message_id": fwd_mid}
+        # при копировании поста из канала контент берём из самого поста
         for k in ("photo_file_id", "sticker_file_id", "animation_file_id",
                   "video_file_id", "document_file_id", "text"):
             cfg.pop(k, None)
+    # Если переслано от пользователя/бота (не канал) — copy_from НЕ ставим,
+    # контент (текст+медиа) уже сохранён выше как обычное сообщение.
     return cfg
 
 
@@ -319,10 +359,32 @@ async def m_op_sp_chan(message: Message, state: FSMContext) -> None:
         return
     data = await state.get_data()
     draft = data["draft"]
-    draft["_current_sponsor"]["channel_id"] = v
+    sp = draft["_current_sponsor"]
+    sp["channel_id"] = v
+    # Проверяем что приветка реально может работать с этим каналом
+    from bots.manager import get_manager
+    bot_id = draft.get("bot_id") or draft.get("greeting_bot_id")
+    if bot_id:
+        bot = get_manager().get_bot_instance(bot_id)
+        if bot is not None:
+            need_invite = bool(sp.get("request_mode"))
+            res = await check_sponsor_access(bot, v, require_invite_users=need_invite)
+            if not res["ok"]:
+                hint = (
+                    "<i>Канал «по заявкам» требует право «Приглашать пользователей через ссылки».</i>"
+                    if need_invite else
+                    "<i>Приветка должна быть админом этого канала.</i>"
+                )
+                await message.answer(
+                    f"⚠️ <b>Не могу подключиться к каналу</b>\n\n"
+                    f"Причина: {res['reason']}\n\n"
+                    f"{hint}\n\n"
+                    "Когда исправишь — пришли ID канала ещё раз."
+                )
+                return
     await state.update_data(draft=draft)
     await state.set_state(StepStates.op_sponsor_link)
-    await message.answer("Пришли <b>ссылку</b> на канал (https://t.me/...).")
+    await message.answer("✅ Доступ есть.\n\nТеперь пришли <b>ссылку</b> на канал (https://t.me/...).")
 
 
 @router.message(StepStates.op_sponsor_link)
@@ -484,7 +546,29 @@ async def m_op_dup_max(message: Message, state: FSMContext) -> None:
         return
     data = await state.get_data()
     draft = data["draft"]
+    draft["duplicate_max"] = v
+    await state.update_data(draft=draft)
+    await state.set_state(StepStates.op_skip_timer)
+    await message.answer(
+        "⏭ <b>Таймер пропуска ОП</b>: сколько секунд ждать после того, "
+        "как дубли закончились, прежде чем пропустить ОП и пойти дальше?\n\n"
+        "Пришли число (0 — переходить сразу)."
+    )
+
+
+@router.message(StepStates.op_skip_timer)
+async def m_op_skip_timer(message: Message, state: FSMContext) -> None:
+    try:
+        v = int(message.text.strip())
+        if v < 0:
+            raise ValueError
+    except (ValueError, AttributeError):
+        await message.answer("Нужно неотрицательное целое (0 или больше).")
+        return
+    data = await state.get_data()
+    draft = data["draft"]
     bot_id = int(data["bot_id"])
+    draft["skip_timer"] = v
 
     cfg = {
         "text": draft.get("text") or "",
@@ -492,6 +576,7 @@ async def m_op_dup_max(message: Message, state: FSMContext) -> None:
         "sponsors": draft.get("sponsors", []),
         "check_button_text": draft.get("check_button_text") or "✅ Проверить",
         "check_button_color": draft.get("check_button_color") or "green",
+        "skip_timer": int(draft.get("skip_timer", 0) or 0),
     }
     await get_db().add_step(
         bot_id, "op", cfg,
@@ -586,6 +671,25 @@ async def cb_msg_btn_color(cb: CallbackQuery, state: FSMContext) -> None:
     await cb.answer()
 
 
+@router.callback_query(StepStates.msg_buttons_layout, F.data.startswith("blay:"))
+async def cb_msg_buttons_layout(cb: CallbackQuery, state: FSMContext) -> None:
+    layout = cb.data.split(":")[1]  # vertical | grid
+    data = await state.get_data()
+    draft = data["draft"]
+    # layout = "1" | "2" | "3" — число кнопок в ряд
+    try:
+        draft["buttons_layout"] = max(1, min(3, int(layout)))
+    except (ValueError, TypeError):
+        draft["buttons_layout"] = 2
+    await state.update_data(draft=draft)
+    await state.set_state(StepStates.msg_wait_mode)
+    await cb.message.edit_text(
+        "Раскладка сохранена.\n\nТеперь выбери режим ожидания:",
+        reply_markup=msg_wait_mode_kb(),
+    )
+    await cb.answer()
+
+
 @router.callback_query(StepStates.msg_add_buttons, F.data == "btn:done")
 async def cb_msg_btn_done(cb: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(StepStates.msg_wait_mode)
@@ -609,6 +713,8 @@ async def cb_msg_wm(cb: CallbackQuery, state: FSMContext) -> None:
         await cb.message.edit_text(
             "⏱ Пришли <b>таймер</b> в секундах — через сколько перейти к следующему шагу."
         )
+        await cb.answer()
+        return
     elif mode == "user_message":
         await state.set_state(StepStates.msg_keyboard_choice)
         await cb.message.edit_text(
@@ -618,12 +724,10 @@ async def cb_msg_wm(cb: CallbackQuery, state: FSMContext) -> None:
             "набирать сообщение вручную).",
             reply_markup=back_to_kb_choice(),
         )
-    else:  # none
-        # сразу переходим к настройкам дублирования
-        await state.set_state(StepStates.msg_duplicate_after)
-        await cb.message.edit_text(
-            "⏱ <b>Время между дублями</b>: пришли число секунд."
-        )
+    else:  # none — без ожидания, дубли не нужны, сохраняем сразу
+        await _finalize_msg_step(cb.message, state)
+        await cb.answer()
+        return
     await cb.answer()
 
 
@@ -648,11 +752,8 @@ async def m_msg_wait_timer(message: Message, state: FSMContext) -> None:
     draft = data["draft"]
     draft["wait_timer"] = v
     await state.update_data(draft=draft)
-    await state.set_state(StepStates.msg_duplicate_after)
-    await message.answer(
-        "⏱ <b>Время между дублями</b>: через сколько секунд писать повторно, "
-        "если юзер не получил это сообщение или не нажал кнопку? Пришли число."
-    )
+    # Таймер сам продвинет сценарий — дубли не нужны, сохраняем шаг сразу.
+    await _finalize_msg_step(message, state)
 
 
 @router.callback_query(StepStates.msg_keyboard_choice, F.data.startswith("kbc:"))
@@ -716,6 +817,39 @@ async def m_msg_dup_inc(message: Message, state: FSMContext) -> None:
     await state.update_data(draft=draft)
     await state.set_state(StepStates.msg_duplicate_max)
     await message.answer("🔁 <b>Макс. число дублей</b>: пришли число.")
+
+
+async def _finalize_msg_step(target, state: FSMContext) -> None:
+    """Сохраняет шаг «Сообщение». target — Message или CallbackQuery.message."""
+    data = await state.get_data()
+    draft = data["draft"]
+    bot_id = int(data["bot_id"])
+    cfg = {
+        "text": draft.get("text") or "",
+        "photo_file_id": draft.get("photo_file_id"),
+        "sticker_file_id": draft.get("sticker_file_id"),
+        "animation_file_id": draft.get("animation_file_id"),
+        "video_file_id": draft.get("video_file_id"),
+        "document_file_id": draft.get("document_file_id"),
+        "copy_from": draft.get("copy_from"),
+        "buttons": draft.get("buttons", []),
+        "buttons_layout": draft.get("buttons_layout") or 2,
+        "wait_mode": draft.get("wait_mode") or "none",
+        "wait_timer": draft.get("wait_timer", 0),
+        "keyboard_text": draft.get("keyboard_text"),
+    }
+    await get_db().add_step(
+        bot_id, "message", cfg,
+        duplicate_after=draft.get("duplicate_after", 60),
+        duplicate_increment=draft.get("duplicate_increment", 0),
+        duplicate_max=draft.get("duplicate_max", 0),
+    )
+    await state.clear()
+    steps = await get_db().list_steps(bot_id)
+    await target.answer(
+        "✅ Шаг <b>Сообщение</b> добавлен!",
+        reply_markup=scenario_menu(bot_id, steps),
+    )
 
 
 @router.message(StepStates.msg_duplicate_max)

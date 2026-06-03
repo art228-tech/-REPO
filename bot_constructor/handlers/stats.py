@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 
 from database import get_db
 from handlers.start import is_admin
@@ -48,6 +48,12 @@ async def _stats_text(bot_id: int, filter_kind: str) -> str:
         f"🪦 Мёртвых: {n_dead} ({n_dead*100//total}%)\n"
         f"⭐️ Премиум: {n_premium} ({n_premium*100//total}%)\n"
         f"🏁 Полностью прошли сценарий: {n_completed} ({n_completed*100//total}%)\n"
+        + (
+            "\n<b>🧭 Воронка:</b>\n"
+            f"  ▶️ Нажали /start: {sum(1 for u in users_f if (u['source'] or 'start')=='start')}\n"
+            f"  ✋ Подали заявку: {sum(1 for u in users_f if (u['source'] or 'start')=='request')}\n"
+            f"  ✅ Вступили в канал: {sum(1 for u in users_f if u['joined_channel'])}\n"
+        )
     )
 
     if steps:
@@ -162,4 +168,108 @@ async def cb_stats_refs(cb: CallbackQuery) -> None:
     if len(text) > 4000:
         text = text[:3900] + "\n\n…(обрезано)"
     await cb.message.edit_text(text, reply_markup=stats_menu(bot_id))
+    await cb.answer()
+
+
+
+@router.callback_query(F.data.startswith("st_chl:"))
+async def cb_stats_channel_links(cb: CallbackQuery) -> None:
+    """Список инвайт-ссылок канала со сводкой по каждой."""
+    if not is_admin(cb.from_user.id):
+        await cb.answer("⛔", show_alert=True)
+        return
+    bot_id = int(cb.data.split(":")[1])
+    db = get_db()
+    links = await db.list_channel_links(bot_id)
+    users = await db.list_users(bot_id)
+    if not links:
+        from keyboards.constructor_kb import stats_menu
+        await cb.message.edit_text(
+            "📊 Ссылок канала ещё нет. Создай их в меню приветки → «Ссылки канала».",
+            reply_markup=stats_menu(bot_id),
+        )
+        await cb.answer()
+        return
+
+    by_link: dict = {}
+    for u in users:
+        clid = u["channel_link_id"]
+        if clid:
+            by_link.setdefault(clid, []).append(u)
+
+    rows = []
+    text = "<b>📊 Статистика по ссылкам канала</b>\n\n"
+    for l in links:
+        ul = by_link.get(l["id"], [])
+        total = len(ul)
+        text += f"<b>{l['name']}</b>\n"
+        text += f"   ✅ Принято заявок: {l['joined_count']}\n"
+        if total > 0:
+            n_prem = sum(1 for u in ul if u["is_premium"])
+            n_done = sum(1 for u in ul if u["completed"])
+            text += f"   👥 Дошло до бота: {total} | ⭐ {n_prem} | 🏁 {n_done}\n"
+        text += "\n"
+        rows.append([InlineKeyboardButton(
+            text=f"🔎 {l['name']}", callback_data=f"st_chlv:{l['id']}")])
+
+    from keyboards.constructor_kb import stats_menu
+    rows.append([InlineKeyboardButton(text="« Назад", callback_data=f"stat:{bot_id}")])
+    await cb.message.edit_text(
+        text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows)
+    )
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("st_chlv:"))
+async def cb_stats_channel_link_detail(cb: CallbackQuery) -> None:
+    """Полная статистика (премиум/ОП/шаги) по одной ссылке канала."""
+    if not is_admin(cb.from_user.id):
+        return
+    link_id = int(cb.data.split(":")[1])
+    db = get_db()
+    link = await db.get_channel_link(link_id)
+    if not link:
+        await cb.answer("Не найдено", show_alert=True)
+        return
+    bot_id = link["bot_id"]
+    users = await db.list_users(bot_id)
+    steps = await db.list_steps(bot_id)
+    ul = [u for u in users if u["channel_link_id"] == link_id]
+    total = len(ul)
+
+    text = f"<b>📊 {link['name']}</b>\n\n"
+    text += f"✅ Принято заявок: <b>{link['joined_count']}</b>\n\n"
+    if total == 0:
+        text += "Пока никто из пришедших по ссылке не дошёл до бота."
+    else:
+        n_alive = sum(1 for u in ul if u["is_alive"])
+        n_prem = sum(1 for u in ul if u["is_premium"])
+        n_done = sum(1 for u in ul if u["completed"])
+        text += (
+            f"👥 Дошло до бота: <b>{total}</b>\n"
+            f"🟢 Живых: {n_alive} ({n_alive*100//total}%)\n"
+            f"🪦 Мёртвых: {total-n_alive} ({(total-n_alive)*100//total}%)\n"
+            f"⭐️ Премиум: {n_prem} ({n_prem*100//total}%)\n"
+            f"🏁 Прошли сценарий: {n_done} ({n_done*100//total}%)\n"
+        )
+        if steps:
+            text += "\n<b>📜 По шагам:</b>\n"
+            type_emoji = {"roulette": "🎰", "op": "📢", "message": "💬"}
+            uids = [u["id"] for u in ul]
+            ph = ",".join("?" * len(uids))
+            for s in steps:
+                cur = await db.conn.execute(
+                    f"SELECT COUNT(DISTINCT user_id) FROM step_completions "
+                    f"WHERE step_id=? AND user_id IN ({ph})",
+                    [s["id"]] + uids,
+                )
+                cnt = (await cur.fetchone())[0]
+                pct = cnt * 100 // total if total else 0
+                e = type_emoji.get(s["step_type"], "·")
+                text += f"{s['step_order']+1}. {e} {s['step_type']}: {cnt}/{total} ({pct}%)\n"
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="« К списку ссылок", callback_data=f"st_chl:{bot_id}")],
+    ])
+    await cb.message.edit_text(text, reply_markup=kb)
     await cb.answer()

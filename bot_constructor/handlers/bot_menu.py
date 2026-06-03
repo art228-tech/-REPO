@@ -41,6 +41,7 @@ async def cb_open_bot(cb: CallbackQuery, state: FSMContext) -> None:
         f"👥 Пользователей: <b>{len(users)}</b>\n"
         f"⏱ Задержка старта: <b>{b['join_delay']} с</b>\n"
         f"🗑 Таймер удаления: <b>{b['delete_timer']} с</b>\n"
+        f"✍️ Вид: <b>{'с имитацией печати' if b['typing_mode'] else 'обычная'}</b>\n"
     )
     await cb.message.edit_text(text, reply_markup=bot_menu(bot_id))
     await cb.answer()
@@ -63,7 +64,7 @@ async def cb_settings(cb: CallbackQuery, state: FSMContext) -> None:
         "прежде чем приветка начнёт писать новому юзеру.\n"
         "• <b>Таймер удаления старых</b> — через сколько секунд "
         "удалить старое сообщение (после перехода к следующему шагу).",
-        reply_markup=settings_menu(bot_id, b["join_delay"], b["delete_timer"]),
+        reply_markup=settings_menu(bot_id, b["join_delay"], b["delete_timer"], b["typing_mode"]),
     )
     await cb.answer()
 
@@ -99,7 +100,7 @@ async def msg_set_jd(message: Message, state: FSMContext) -> None:
     b = await get_db().get_greeting_bot(bot_id)
     await message.answer(
         f"✅ Задержка обновлена: <b>{v} с</b>",
-        reply_markup=settings_menu(bot_id, b["join_delay"], b["delete_timer"]),
+        reply_markup=settings_menu(bot_id, b["join_delay"], b["delete_timer"], b["typing_mode"]),
     )
 
 
@@ -133,7 +134,7 @@ async def msg_set_dt(message: Message, state: FSMContext) -> None:
     b = await get_db().get_greeting_bot(bot_id)
     await message.answer(
         f"✅ Таймер удаления обновлён: <b>{v} с</b>",
-        reply_markup=settings_menu(bot_id, b["join_delay"], b["delete_timer"]),
+        reply_markup=settings_menu(bot_id, b["join_delay"], b["delete_timer"], b["typing_mode"]),
     )
 
 
@@ -167,3 +168,22 @@ async def cb_delbot_yes(cb: CallbackQuery) -> None:
     bots = await get_db().list_greeting_bots()
     await cb.message.edit_text("✅ Приветка удалена.", reply_markup=bots_list(bots))
     await cb.answer()
+
+
+
+@router.callback_query(F.data.startswith("set_tm:"))
+async def cb_toggle_typing_mode(cb: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(cb.from_user.id):
+        await cb.answer("\u26d4", show_alert=True)
+        return
+    bot_id = int(cb.data.split(":")[1])
+    db = get_db()
+    b = await db.get_greeting_bot(bot_id)
+    new_mode = 0 if b["typing_mode"] else 1
+    await db.update_greeting_bot_settings(bot_id, typing_mode=new_mode)
+    b = await db.get_greeting_bot(bot_id)
+    from keyboards.constructor_kb import settings_menu
+    await cb.message.edit_reply_markup(
+        reply_markup=settings_menu(bot_id, b["join_delay"], b["delete_timer"], b["typing_mode"])
+    )
+    await cb.answer("Вид: " + ("с имитацией печати" if new_mode else "обычная"))

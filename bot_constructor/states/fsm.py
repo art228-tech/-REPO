@@ -7,6 +7,7 @@ class AddBotStates(StatesGroup):
 
 
 class StepStates(StatesGroup):
+    step_link_new_url = State()
     # Общие
     select_type = State()
 
@@ -20,6 +21,7 @@ class StepStates(StatesGroup):
     msg_wait_timer = State()              # вводим число секунд
     msg_keyboard_choice = State()         # добавлять ли кнопку клавы
     msg_keyboard_text = State()           # текст кнопки клавы
+    msg_buttons_layout = State()          # раскладка кнопок: 1/2/3 в ряд (патч 14/16)
     msg_duplicate_after = State()
     msg_duplicate_increment = State()
     msg_duplicate_max = State()
@@ -38,6 +40,7 @@ class StepStates(StatesGroup):
     op_duplicate_after = State()
     op_duplicate_increment = State()
     op_duplicate_max = State()
+    op_skip_timer = State()
 
     # Рулетка
     roulette_content = State()
@@ -49,6 +52,8 @@ class StepStates(StatesGroup):
 
 
 class BotSettingsStates(StatesGroup):
+    wch_add_id = State()
+    wch_set_delay = State()
     join_delay = State()
     delete_timer = State()
 

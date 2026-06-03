@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS greeting_bots (
     owner_id        INTEGER NOT NULL,
     join_delay      INTEGER DEFAULT 0,
     delete_timer    INTEGER DEFAULT 10,
+    typing_mode         INTEGER DEFAULT 0,
     is_active       INTEGER DEFAULT 1,
     created_at      INTEGER NOT NULL
 );
@@ -54,6 +55,9 @@ CREATE TABLE IF NOT EXISTS bot_users (
     is_premium          INTEGER DEFAULT 0,
     is_alive            INTEGER DEFAULT 1,             -- 0 если заблокировал
     ref_link_id         INTEGER,
+    source              TEXT DEFAULT 'start',
+    joined_channel      INTEGER DEFAULT 0,
+    channel_link_id     INTEGER,
     current_step_order  INTEGER DEFAULT 0,             -- 0..n; -1 = сценарий начат, n+ = завершён
     completed           INTEGER DEFAULT 0,
     last_message_id     INTEGER,
@@ -106,11 +110,49 @@ CREATE TABLE IF NOT EXISTS admin_state (
     data        TEXT                                  -- JSON
 );
 
+-- Заявки на вступление в каналы (для проверки спонсоров типа «по заявкам»)
+CREATE TABLE IF NOT EXISTS pending_join_requests (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    bot_id      INTEGER NOT NULL,
+    channel_id  INTEGER NOT NULL,
+    user_tg_id  INTEGER NOT NULL,
+    created_at  INTEGER NOT NULL,
+    UNIQUE(bot_id, channel_id, user_tg_id),
+    FOREIGN KEY (bot_id) REFERENCES greeting_bots(id) ON DELETE CASCADE
+);
+
+-- Инвайт-ссылки канала (статистика вступлений)
+CREATE TABLE IF NOT EXISTS channel_links (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    bot_id          INTEGER NOT NULL,
+    channel_id      INTEGER NOT NULL,
+    name            TEXT NOT NULL,
+    invite_link     TEXT NOT NULL,
+    joined_count    INTEGER NOT NULL DEFAULT 0,
+    requested_count INTEGER NOT NULL DEFAULT 0,
+    created_at      INTEGER NOT NULL,
+    FOREIGN KEY (bot_id) REFERENCES greeting_bots(id) ON DELETE CASCADE
+);
+
+-- Отложенный старт сценария (переживает перезапуск бота)
+CREATE TABLE IF NOT EXISTS scheduled_starts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    bot_id      INTEGER NOT NULL,
+    user_id     INTEGER NOT NULL,
+    fire_at     INTEGER NOT NULL,
+    created_at  INTEGER NOT NULL,
+    UNIQUE(bot_id, user_id),
+    FOREIGN KEY (bot_id) REFERENCES greeting_bots(id) ON DELETE CASCADE
+);
+
 -- Индексы
 CREATE INDEX IF NOT EXISTS idx_steps_bot_order ON steps(bot_id, step_order);
 CREATE INDEX IF NOT EXISTS idx_users_bot ON bot_users(bot_id);
 CREATE INDEX IF NOT EXISTS idx_users_step ON bot_users(bot_id, current_step_order);
 CREATE INDEX IF NOT EXISTS idx_completions ON step_completions(step_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_sched ON scheduled_starts(fire_at);
+CREATE INDEX IF NOT EXISTS idx_pjr ON pending_join_requests(bot_id, channel_id, user_tg_id);
+CREATE INDEX IF NOT EXISTS idx_chlinks ON channel_links(bot_id, invite_link);
 """
 
 
@@ -122,6 +164,44 @@ class DB:
     def __init__(self, path: str):
         self.path = path
         self._conn: Optional[aiosqlite.Connection] = None
+
+    async def add_channel_link(self, bot_id, channel_id, name, invite_link):
+        await self.conn.execute(
+            "INSERT INTO channel_links(bot_id,channel_id,name,invite_link,created_at) "
+            "VALUES (?,?,?,?,?)",
+            (bot_id, int(channel_id), name, invite_link, now()),
+        )
+        await self.conn.commit()
+
+    async def list_channel_links(self, bot_id):
+        cur = await self.conn.execute(
+            "SELECT * FROM channel_links WHERE bot_id=? ORDER BY id DESC", (bot_id,)
+        )
+        return await cur.fetchall()
+
+    async def get_channel_link(self, link_id):
+        cur = await self.conn.execute(
+            "SELECT * FROM channel_links WHERE id=?", (link_id,)
+        )
+        return await cur.fetchone()
+
+    async def get_channel_link_by_url(self, invite_link):
+        cur = await self.conn.execute(
+            "SELECT * FROM channel_links WHERE invite_link=?", (invite_link,)
+        )
+        return await cur.fetchone()
+
+    async def delete_channel_link(self, link_id):
+        await self.conn.execute("DELETE FROM channel_links WHERE id=?", (link_id,))
+        await self.conn.commit()
+
+    async def inc_channel_link(self, invite_link, *, joined=0, requested=0):
+        await self.conn.execute(
+            "UPDATE channel_links SET joined_count=joined_count+?, "
+            "requested_count=requested_count+? WHERE invite_link=?",
+            (joined, requested, invite_link),
+        )
+        await self.conn.commit()
 
     async def connect(self) -> None:
         self._conn = await aiosqlite.connect(self.path)
@@ -180,12 +260,16 @@ class DB:
         await self.conn.commit()
 
     async def update_greeting_bot_settings(
-        self, bot_id: int, *, join_delay: int | None = None, delete_timer: int | None = None
+        self, bot_id: int, *, join_delay: int | None = None, delete_timer: int | None = None,
+        typing_mode: int | None = None
     ) -> None:
         sets, params = [], []
         if join_delay is not None:
             sets.append("join_delay = ?")
             params.append(join_delay)
+        if typing_mode is not None:
+            sets.append("typing_mode = ?")
+            params.append(typing_mode)
         if delete_timer is not None:
             sets.append("delete_timer = ?")
             params.append(delete_timer)
@@ -234,6 +318,46 @@ class DB:
     async def get_step(self, step_id: int) -> Optional[aiosqlite.Row]:
         cur = await self.conn.execute("SELECT * FROM steps WHERE id = ?", (step_id,))
         return await cur.fetchone()
+
+    async def mark_copy_broken(self, step_id: int, broken: int = 1):
+        """Помечает шаг как «оригинал копии удалён»."""
+        await self.conn.execute(
+            "UPDATE steps SET copy_broken=? WHERE id=?", (broken, step_id)
+        )
+        await self.conn.commit()
+
+    async def add_welcome_channel(self, bot_id, chat_id, title):
+        await self.conn.execute(
+            "INSERT OR IGNORE INTO welcome_channels(bot_id,chat_id,title,start_delay,created_at) "
+            "VALUES (?,?,?,0,?)", (bot_id, int(chat_id), title, now())
+        )
+        await self.conn.commit()
+
+    async def list_welcome_channels(self, bot_id):
+        cur = await self.conn.execute(
+            "SELECT * FROM welcome_channels WHERE bot_id=? ORDER BY id", (bot_id,)
+        )
+        return await cur.fetchall()
+
+    async def get_welcome_channel(self, wch_id):
+        cur = await self.conn.execute("SELECT * FROM welcome_channels WHERE id=?", (wch_id,))
+        return await cur.fetchone()
+
+    async def get_welcome_channel_by_chat(self, bot_id, chat_id):
+        cur = await self.conn.execute(
+            "SELECT * FROM welcome_channels WHERE bot_id=? AND chat_id=?", (bot_id, int(chat_id))
+        )
+        return await cur.fetchone()
+
+    async def set_welcome_channel_delay(self, wch_id, delay):
+        await self.conn.execute(
+            "UPDATE welcome_channels SET start_delay=? WHERE id=?", (int(delay), wch_id)
+        )
+        await self.conn.commit()
+
+    async def delete_welcome_channel(self, wch_id):
+        await self.conn.execute("DELETE FROM welcome_channels WHERE id=?", (wch_id,))
+        await self.conn.commit()
 
     async def get_step_by_order(self, bot_id: int, order: int) -> Optional[aiosqlite.Row]:
         cur = await self.conn.execute(
@@ -285,6 +409,38 @@ class DB:
 
     # ---------- Users ----------
 
+    async def set_user_channel_link(self, bot_id: int, tg_id: int, channel_link_id: int):
+        """Помечает, по какой инвайт-ссылке канала пришёл юзер (если ещё не помечен)."""
+        await self.conn.execute(
+            "UPDATE bot_users SET channel_link_id=? "
+            "WHERE bot_id=? AND tg_id=? AND channel_link_id IS NULL",
+            (channel_link_id, bot_id, tg_id),
+        )
+        await self.conn.commit()
+
+    async def schedule_start(self, bot_id: int, user_id: int, fire_at: int):
+        """Планирует отложенный старт сценария (или обновляет время)."""
+        await self.conn.execute(
+            "INSERT INTO scheduled_starts(bot_id,user_id,fire_at,created_at) "
+            "VALUES (?,?,?,?) ON CONFLICT(bot_id,user_id) DO UPDATE SET fire_at=excluded.fire_at",
+            (bot_id, user_id, fire_at, now()),
+        )
+        await self.conn.commit()
+
+    async def cancel_scheduled_start(self, bot_id: int, user_id: int):
+        await self.conn.execute(
+            "DELETE FROM scheduled_starts WHERE bot_id=? AND user_id=?",
+            (bot_id, user_id),
+        )
+        await self.conn.commit()
+
+    async def due_scheduled_starts(self, ts: int):
+        """Возвращает старты, которым уже пора (fire_at <= ts)."""
+        cur = await self.conn.execute(
+            "SELECT * FROM scheduled_starts WHERE fire_at <= ? ORDER BY fire_at", (ts,)
+        )
+        return await cur.fetchall()
+
     async def upsert_user(
         self,
         bot_id: int,
@@ -294,6 +450,7 @@ class DB:
         first_name: str | None = None,
         is_premium: bool = False,
         ref_link_id: int | None = None,
+        source: str = "start",
     ) -> aiosqlite.Row:
         cur = await self.conn.execute(
             "SELECT * FROM bot_users WHERE bot_id = ? AND tg_id = ?", (bot_id, tg_id)
@@ -312,15 +469,23 @@ class DB:
             return await cur.fetchone()  # type: ignore
         cur = await self.conn.execute(
             "INSERT INTO bot_users "
-            "(bot_id, tg_id, username, first_name, is_premium, ref_link_id, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (bot_id, tg_id, username, first_name, int(is_premium), ref_link_id, now()),
+            "(bot_id, tg_id, username, first_name, is_premium, ref_link_id, source, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (bot_id, tg_id, username, first_name, int(is_premium), ref_link_id, source, now()),
         )
         await self.conn.commit()
         cur = await self.conn.execute(
             "SELECT * FROM bot_users WHERE id = ?", (cur.lastrowid,)
         )
         return await cur.fetchone()  # type: ignore
+
+    async def mark_joined_channel(self, bot_id: int, tg_id: int):
+        """Помечает, что юзер реально вступил в канал."""
+        await self.conn.execute(
+            "UPDATE bot_users SET joined_channel=1 WHERE bot_id=? AND tg_id=?",
+            (bot_id, tg_id),
+        )
+        await self.conn.commit()
 
     async def get_user(self, user_id: int) -> Optional[aiosqlite.Row]:
         cur = await self.conn.execute("SELECT * FROM bot_users WHERE id = ?", (user_id,))
@@ -367,6 +532,41 @@ class DB:
             (user_id,),
         )
         await self.conn.commit()
+
+    # ---------- Pending join requests (патч 4: спонсоры «по заявкам») ----------
+
+    async def add_pending_join_request(self, bot_id: int, channel_id: int, user_tg_id: int) -> None:
+        """Запоминает что юзер подал заявку в канал. Для спонсоров «по заявкам»."""
+        await self.conn.execute(
+            "INSERT OR IGNORE INTO pending_join_requests(bot_id, channel_id, user_tg_id, created_at) VALUES (?, ?, ?, ?)",
+            (bot_id, int(channel_id), int(user_tg_id), now()),
+        )
+        await self.conn.commit()
+
+    async def has_pending_join_request(self, bot_id: int, channel_id: int, user_tg_id: int) -> bool:
+        cur = await self.conn.execute(
+            "SELECT 1 FROM pending_join_requests WHERE bot_id=? AND channel_id=? AND user_tg_id=? LIMIT 1",
+            (bot_id, int(channel_id), int(user_tg_id)),
+        )
+        return (await cur.fetchone()) is not None
+
+    async def is_request_sponsor_channel(self, bot_id: int, channel_id: int) -> bool:
+        """True, если у этой приветки есть шаг ОП со спонсором request_mode=True и таким channel_id."""
+        import json as _json
+        cur = await self.conn.execute(
+            "SELECT config FROM steps WHERE bot_id=? AND step_type='op'",
+            (bot_id,),
+        )
+        rows = await cur.fetchall()
+        for r in rows:
+            try:
+                cfg = _json.loads(r[0])
+            except Exception:
+                continue
+            for sp in cfg.get("sponsors", []):
+                if sp.get("request_mode") and str(sp.get("channel_id")) == str(channel_id):
+                    return True
+        return False
 
     # ---------- Step completions ----------
 

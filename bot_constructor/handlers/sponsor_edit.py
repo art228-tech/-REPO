@@ -36,14 +36,6 @@ class SponsorEdit(StatesGroup):
     wait_btn_text = State()
     wait_btn_color = State()
     wait_request_mode = State()
-    # для добавления нового
-    new_check = State()
-    new_mode = State()
-    new_chan_id = State()
-    new_link = State()
-    new_title = State()
-    new_btn_text = State()
-    new_btn_color = State()
 
 
 # ===== Утилиты =====
@@ -95,7 +87,7 @@ def _one_kb(step_id: int, idx: int, sp: dict) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📡 chat_id", callback_data=f"spe:{step_id}:{idx}:chan")],
         [InlineKeyboardButton(text=f"⚙️ Режим: {mode}", callback_data=f"spe:{step_id}:{idx}:mode")],
         [InlineKeyboardButton(text="🧪 Тест доступа", callback_data=f"sptest:{step_id}:{idx}")],
-        [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"spdel:{step_id}:{idx}")],
+        [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"sprm:{step_id}:{idx}")],
         [InlineKeyboardButton(text="« К списку", callback_data=f"spons:{step_id}")],
     ])
 
@@ -170,7 +162,7 @@ async def cb_sponsor_move(cb: CallbackQuery, state: FSMContext) -> None:
 
 
 # ===== Удаление (с подтверждением) =====
-@router.callback_query(F.data.startswith("spdel:"))
+@router.callback_query(F.data.startswith("sprm:"))
 async def cb_sponsor_remove(cb: CallbackQuery, state: FSMContext) -> None:
     if not is_admin(cb.from_user.id):
         return
@@ -183,7 +175,7 @@ async def cb_sponsor_remove(cb: CallbackQuery, state: FSMContext) -> None:
     sp = cfg["sponsors"][idx]
     name = sp.get("title") or sp.get("button_text") or str(sp.get("channel_id"))
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"spdy:{step_id}:{idx}")],
+        [InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"sprmy:{step_id}:{idx}")],
         [InlineKeyboardButton(text="« Отмена", callback_data=f"spo:{step_id}:{idx}")],
     ])
     await cb.message.edit_text(
@@ -193,7 +185,7 @@ async def cb_sponsor_remove(cb: CallbackQuery, state: FSMContext) -> None:
     await cb.answer()
 
 
-@router.callback_query(F.data.startswith("spdy:"))
+@router.callback_query(F.data.startswith("sprmy:"))
 async def cb_sponsor_remove_yes(cb: CallbackQuery, state: FSMContext) -> None:
     if not is_admin(cb.from_user.id):
         return
@@ -388,162 +380,3 @@ async def m_chan(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer("✅ Сохранено.\n\n" + _format_sp(sp),
                          reply_markup=_one_kb(step_id, idx, sp))
-
-
-# ===== Добавление нового спонсора =====
-@router.callback_query(F.data.startswith("spnew:"))
-async def cb_sp_new_start(cb: CallbackQuery, state: FSMContext) -> None:
-    if not is_admin(cb.from_user.id):
-        return
-    step_id = int(cb.data.split(":")[1])
-    await state.set_data({"new_sp": {}, "step_id": step_id})
-    await state.set_state(SponsorEdit.new_check)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Да, проверять", callback_data="spnewc:1")],
-        [InlineKeyboardButton(text="🚫 Нет, просто показывать", callback_data="spnewc:0")],
-        [InlineKeyboardButton(text="« Отмена", callback_data=f"spons:{step_id}")],
-    ])
-    await cb.message.edit_text(
-        "<b>Новый спонсор</b>\n\n"
-        "✅ <b>С проверкой</b> — бот проверит подписку юзера.\n"
-        "🚫 <b>Без проверки</b> — спонсор просто показывается в кнопках.",
-        reply_markup=kb,
-    )
-    await cb.answer()
-
-
-@router.callback_query(SponsorEdit.new_check, F.data.startswith("spnewc:"))
-async def cb_sp_new_check(cb: CallbackQuery, state: FSMContext) -> None:
-    is_check = cb.data.split(":")[1] == "1"
-    data = await state.get_data()
-    data["new_sp"]["check"] = is_check
-    await state.set_data(data)
-    if is_check:
-        await state.set_state(SponsorEdit.new_mode)
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📺 Обычный", callback_data="spnewm:no")],
-            [InlineKeyboardButton(text="✋ По заявкам", callback_data="spnewm:yes")],
-        ])
-        await cb.message.edit_text("<b>Тип канала?</b>", reply_markup=kb)
-    else:
-        data["new_sp"]["channel_id"] = 0
-        await state.set_data(data)
-        await state.set_state(SponsorEdit.new_link)
-        await cb.message.edit_text("Пришли <b>ссылку</b> на канал/чат спонсора:")
-    await cb.answer()
-
-
-@router.callback_query(SponsorEdit.new_mode, F.data.startswith("spnewm:"))
-async def cb_sp_new_mode(cb: CallbackQuery, state: FSMContext) -> None:
-    rm = cb.data.split(":")[1] == "yes"
-    data = await state.get_data()
-    data["new_sp"]["request_mode"] = rm
-    await state.set_data(data)
-    await state.set_state(SponsorEdit.new_chan_id)
-    hint = ("✋ Канал «по заявкам» — приветка должна быть админом с правом «Приглашать через ссылки»."
-            if rm else "📺 Обычный — приветке достаточно быть админом канала.")
-    await cb.message.edit_text(f"{hint}\n\nПришли <b>chat_id</b> канала (отрицательное число):")
-    await cb.answer()
-
-
-@router.message(SponsorEdit.new_chan_id)
-async def m_sp_new_chan(message: Message, state: FSMContext) -> None:
-    try:
-        v = int((message.text or "").strip())
-    except ValueError:
-        await message.answer("Нужно целое число.")
-        return
-    data = await state.get_data()
-    sp = data["new_sp"]
-    sp["channel_id"] = v
-
-    # Проверяем доступ
-    db = get_db()
-    step = await db.get_step(data["step_id"])
-    if step:
-        from bots.manager import get_manager
-        bot_instance = get_manager().get_bot_instance(step["bot_id"])
-        if bot_instance is not None:
-            res = await check_sponsor_access(
-                bot_instance, v, require_invite_users=bool(sp.get("request_mode"))
-            )
-            if not res["ok"]:
-                await message.answer(
-                    f"⚠️ Не сохраняю — нет доступа.\n\n{res['reason']}\n\n"
-                    "Исправь права и пришли chat_id ещё раз."
-                )
-                return
-
-    await state.set_data(data)
-    await state.set_state(SponsorEdit.new_link)
-    await message.answer("✅ Доступ есть.\n\nТеперь пришли <b>ссылку</b>:")
-
-
-@router.message(SponsorEdit.new_link)
-async def m_sp_new_link(message: Message, state: FSMContext) -> None:
-    link = (message.text or "").strip()
-    if not (link.startswith("http://") or link.startswith("https://") or link.startswith("tg://")):
-        await message.answer("Нужен URL вида https://t.me/...")
-        return
-    data = await state.get_data()
-    data["new_sp"]["link"] = link
-    await state.set_data(data)
-    await state.set_state(SponsorEdit.new_title)
-    await message.answer("Пришли <b>название</b> спонсора (для админ-панели, юзеры его не увидят):")
-
-
-@router.message(SponsorEdit.new_title)
-async def m_sp_new_title(message: Message, state: FSMContext) -> None:
-    if not message.text:
-        await message.answer("Нужен текст.")
-        return
-    data = await state.get_data()
-    data["new_sp"]["title"] = message.text.strip()
-    await state.set_data(data)
-    await state.set_state(SponsorEdit.new_btn_text)
-    await message.answer("Пришли <b>текст кнопки</b> (можно с премиум-стикером):")
-
-
-@router.message(SponsorEdit.new_btn_text)
-async def m_sp_new_btext(message: Message, state: FSMContext) -> None:
-    if not message.text:
-        await message.answer("Нужен текст.")
-        return
-    html = message.html_text or message.text
-    data = await state.get_data()
-    sp = data["new_sp"]
-    sp["button_text"] = strip_custom_emoji(html) or message.text.strip()
-    cust = extract_first_custom_emoji_id(html)
-    if cust:
-        sp["custom_emoji_id"] = cust
-    await state.set_data(data)
-    await state.set_state(SponsorEdit.new_btn_color)
-    rows = [[InlineKeyboardButton(text=label, callback_data=f"spnewcl:{code}")]
-            for code, label in STYLE_LABELS.items()]
-    await message.answer("Выбери <b>цвет кнопки</b>:",
-                         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
-
-
-@router.callback_query(SponsorEdit.new_btn_color, F.data.startswith("spnewcl:"))
-async def cb_sp_new_color(cb: CallbackQuery, state: FSMContext) -> None:
-    color = cb.data.split(":", 1)[1]
-    data = await state.get_data()
-    sp = data["new_sp"]
-    sp["button_color"] = color
-    step_id = data["step_id"]
-
-    # Сохраняем в шаг
-    step, cfg = await _load_step(step_id)
-    if not step:
-        await cb.answer("Шаг не найден", show_alert=True)
-        await state.clear()
-        return
-    cfg["sponsors"].append(sp)
-    await _save_step_cfg(step_id, cfg)
-    await state.clear()
-
-    await cb.message.edit_text(
-        f"✅ Спонсор <b>{sp.get('title')}</b> добавлен.",
-        reply_markup=_list_kb(step_id, cfg["sponsors"]),
-    )
-    await cb.answer("Готово")

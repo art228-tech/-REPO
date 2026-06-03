@@ -1,7 +1,7 @@
 """Регистрация всех роутеров админ-бота."""
 from aiogram import Dispatcher
 
-from . import start, add_bot, bot_menu, scenario_edit, step_create, stats, broadcast, refs
+from . import start, add_bot, bot_menu, scenario_edit, step_create, stats, broadcast, refs, sponsor_edit, channel_links, welcome_channels
 
 
 def register_all(dp: Dispatcher) -> None:
@@ -13,3 +13,6 @@ def register_all(dp: Dispatcher) -> None:
     dp.include_router(stats.router)
     dp.include_router(broadcast.router)
     dp.include_router(refs.router)
+    dp.include_router(sponsor_edit.router)
+    dp.include_router(channel_links.router)
+    dp.include_router(welcome_channels.router)

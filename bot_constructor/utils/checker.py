@@ -47,10 +47,12 @@ async def check_all_sponsors(
 
 
 async def get_unsubscribed_check_required(
-    bot: Bot, sponsors: list[dict], user_id: int
+    bot: Bot, sponsors: list[dict], user_id: int, *, bot_id: int | None = None
 ) -> list[dict]:
-    """Возвращает список спонсоров, на которые юзер ОБЯЗАН подписаться,
-    но ещё не подписан. Спонсоры без проверки (check=False) не учитываются."""
+    """Возвращает список обязательных спонсоров, которых юзер ещё не «прошёл».
+    Прошёл = подписан, либо (если канал «по заявкам») подал заявку."""
+    from database import get_db
+    db = get_db() if bot_id is not None else None
     res: list[dict] = []
     for sp in sponsors:
         if not sp.get("check"):
@@ -58,7 +60,12 @@ async def get_unsubscribed_check_required(
         cid = sp.get("channel_id")
         if not cid:
             continue
-        ok = await is_subscribed(bot, int(cid), user_id)
-        if not ok:
-            res.append(sp)
+        # Подписан?
+        if await is_subscribed(bot, int(cid), user_id):
+            continue
+        # Канал «по заявкам» и заявка есть?
+        if sp.get("request_mode") and db is not None:
+            if await db.has_pending_join_request(bot_id, int(cid), user_id):
+                continue
+        res.append(sp)
     return res

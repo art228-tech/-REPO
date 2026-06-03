@@ -6,12 +6,17 @@ from typing import Any
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import (
+    LinkPreviewOptions,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     ReplyKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardRemove,
 )
+
+
+class CopyOriginGone(Exception):
+    """Оригинал скопированного поста удалён/недоступен (патч 26)."""
 
 
 # Цвета кнопок в Telegram реализуются через WebApp/Login/SwitchInline и т.п.
@@ -62,6 +67,9 @@ COLOR_LABELS = {
     "gift":    "🎁 Подарок",
 }
 
+# Псевдоним для нативных цветов кнопок (используется в sponsor_edit, патч 6/13)
+STYLE_LABELS = COLOR_LABELS
+
 
 def color_button_text(text: str, color: str = "default") -> str:
     return COLOR_PREFIXES.get(color, "") + text
@@ -86,7 +94,19 @@ def build_inline_keyboard(rows: list[list[dict[str, Any]]]) -> InlineKeyboardMar
                 kwargs["web_app"] = WebAppInfo(url=btn["web_app"])
             else:
                 continue
-            line.append(InlineKeyboardButton(**kwargs))
+            # Нативный цвет (Bot API 9.4) и премиум-стикер.
+            # Передаём через kwargs — если поле не поддерживается, отлавливаем.
+            if btn.get("style"):
+                kwargs["style"] = btn["style"]
+            if btn.get("icon_custom_emoji_id"):
+                kwargs["icon_custom_emoji_id"] = btn["icon_custom_emoji_id"]
+            try:
+                line.append(InlineKeyboardButton(**kwargs))
+            except TypeError:
+                # старый aiogram без style/icon — убираем эти поля
+                kwargs.pop("style", None)
+                kwargs.pop("icon_custom_emoji_id", None)
+                line.append(InlineKeyboardButton(**kwargs))
         if line:
             built.append(line)
     if not built:
@@ -129,12 +149,17 @@ async def send_step_message(
     try:
         # Если указан copy_from (переслать пост из чата) — копируем
         if copy_from and copy_from.get("chat_id") and copy_from.get("message_id"):
-            msg = await bot.copy_message(
-                chat_id=chat_id,
-                from_chat_id=copy_from["chat_id"],
-                message_id=copy_from["message_id"],
-                reply_markup=reply_markup,
-            )
+            try:
+                msg = await bot.copy_message(
+                    chat_id=chat_id,
+                    from_chat_id=copy_from["chat_id"],
+                    message_id=copy_from["message_id"],
+                    reply_markup=reply_markup,
+                )
+            except TelegramBadRequest as _e:
+                if "message to copy not found" in str(_e).lower():
+                    raise CopyOriginGone()
+                raise
             return msg.message_id
 
         if sticker_file_id:
@@ -168,14 +193,18 @@ async def send_step_message(
         # Просто текст; если ещё нужно показать reply keyboard — делаем отдельным сообщением
         if keyboard_markup is not None and reply_markup is not None:
             msg = await bot.send_message(
-                chat_id, text or "...", reply_markup=reply_markup
+                chat_id, text or "...", reply_markup=reply_markup,
+                link_preview_options=LinkPreviewOptions(is_disabled=True),
             )
             # Reply keyboard приходит через отдельное сообщение
             await bot.send_message(chat_id, "⌨️", reply_markup=keyboard_markup)
             return msg.message_id
 
         markup = reply_markup if reply_markup is not None else keyboard_markup
-        msg = await bot.send_message(chat_id, text or "...", reply_markup=markup)
+        msg = await bot.send_message(
+            chat_id, text or "...", reply_markup=markup,
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
+        )
         return msg.message_id
     except TelegramForbiddenError:
         raise  # пробрасываем выше — юзер заблокировал
@@ -218,3 +247,20 @@ def fmt_seconds(s: int) -> str:
     if sec:
         parts.append(f"{sec} с")
     return " ".join(parts)
+
+
+def extract_first_custom_emoji_id(html_text: str):
+    """Достаёт id первого custom-emoji из HTML-текста, или None."""
+    if not html_text:
+        return None
+    import re
+    m = re.search(r'<tg-emoji\s+emoji-id="(\d+)"', html_text)
+    return m.group(1) if m else None
+
+
+def strip_custom_emoji(html_text: str) -> str:
+    """Убирает теги <tg-emoji> из текста, оставляя содержимое."""
+    if not html_text:
+        return ""
+    import re
+    return re.sub(r'<tg-emoji[^>]*>(.*?)</tg-emoji>', r'\1', html_text)

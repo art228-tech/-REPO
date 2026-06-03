@@ -49,6 +49,8 @@ async def main() -> None:
     # 3) Приветки
     await get_manager().start_all()
 
+
+
     # 4) Главный бот-конструктор
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(storage=MemoryStorage())
@@ -56,6 +58,11 @@ async def main() -> None:
 
     log.info("Стартуем главный бот-конструктор…")
     try:
+        # Фоновый мониторинг спонсорских прав
+        from utils.sponsor_monitor import sponsor_monitor_loop
+        from config import ADMIN_IDS as _ADMIN_IDS
+        asyncio.create_task(sponsor_monitor_loop(bot, _ADMIN_IDS))
+
         await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
     finally:
         log.info("Останавливаемся…")

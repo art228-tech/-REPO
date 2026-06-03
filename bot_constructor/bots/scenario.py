@@ -27,6 +27,7 @@ from utils.helpers import (
     reply_keyboard,
     safe_delete_message,
     send_step_message,
+    CopyOriginGone,
 )
 
 log = logging.getLogger("scenario")
@@ -44,18 +45,24 @@ class ScenarioEngine:
 
     # ----------------- ПУБЛИЧНОЕ API -----------------
 
-    async def start_or_restart(self, bot: Bot, bot_record, user) -> None:
-        """Запускает сценарий с самого начала (или перезапускает, если уже идёт)."""
+    async def start_or_restart(self, bot: Bot, bot_record, user,
+                               delay_override=None) -> None:
+        """Запускает сценарий с начала. delay_override — задержка канала
+        (если задана, используется вместо общей join_delay)."""
         db = get_db()
         # Отменяем все активные задачи
         self._cancel_all_for(bot_record["id"], user["id"])
         # Сбрасываем прогресс
         await db.reset_user_progress(user["id"])
 
-        # Учитываем join_delay
-        if bot_record["join_delay"] and bot_record["join_delay"] > 0:
+        # Задержка: канала (delay_override) либо общая join_delay
+        if delay_override is not None:
+            delay = int(delay_override)
+        else:
+            delay = int(bot_record["join_delay"] or 0)
+        if delay > 0:
             await self._schedule_delayed_start(
-                bot, bot_record, user["id"], bot_record["join_delay"]
+                bot, bot_record, user["id"], delay
             )
         else:
             await self._send_step_to_user(bot, bot_record, user["id"], step_order=0)
@@ -96,7 +103,7 @@ class ScenarioEngine:
 
         cfg = json.loads(step["config"])
         sponsors = cfg.get("sponsors", [])
-        not_ok = await get_unsubscribed_check_required(bot, sponsors, user["tg_id"])
+        not_ok = await get_unsubscribed_check_required(bot, sponsors, user["tg_id"], bot_id=bot_record["id"])
         if not_ok:
             return False, "❌ Ты подписался не на все каналы. Подпишись и нажми «Проверить»."
         return True, "✅ Отлично! Все подписки на месте."
@@ -150,6 +157,14 @@ class ScenarioEngine:
         old = self._delay_tasks.pop(key, None)
         if old:
             old.cancel()
+        # Дублируем в БД — переживёт перезапуск бота.
+        import time as _t
+        try:
+            await get_db().schedule_start(
+                bot_record["id"], user_id, int(_t.time()) + int(delay)
+            )
+        except Exception as _e:
+            log.warning("schedule_start db: %s", _e)
         task = asyncio.create_task(self._delayed_start_runner(bot, bot_record, user_id, delay))
         self._delay_tasks[key] = task
 
@@ -158,7 +173,43 @@ class ScenarioEngine:
             await asyncio.sleep(delay)
             await self._send_step_to_user(bot, bot_record, user_id, step_order=0)
         except asyncio.CancelledError:
-            pass
+            return
+        # Старт отработал — убираем запись из БД, чтобы воркер не продублировал.
+        try:
+            await get_db().cancel_scheduled_start(bot_record["id"], user_id)
+        except Exception as _e:
+            log.warning("cancel_scheduled_start: %s", _e)
+
+    async def run_due_starts(self, bot, bot_record) -> None:
+        """Запускает отложенные старты, которым пора (вызывается воркером
+        и при старте бота — восстановление после перезапуска)."""
+        import time as _t
+        db = get_db()
+        try:
+            due = await db.due_scheduled_starts(int(_t.time()))
+        except Exception as e:
+            log.warning("due_scheduled_starts: %s", e)
+            return
+        for row in due:
+            if row["bot_id"] != bot_record["id"]:
+                continue
+            uid = row["user_id"]
+            # снимаем запись ДО отправки — чтобы не задвоить
+            try:
+                await db.cancel_scheduled_start(bot_record["id"], uid)
+            except Exception:
+                pass
+            # если в памяти ещё висит живая задача — не дублируем
+            key = (bot_record["id"], uid)
+            mem = self._delay_tasks.get(key)
+            if mem and not mem.done():
+                continue
+            try:
+                await self._send_step_to_user(bot, bot_record, uid, step_order=0)
+                log.info("[bot %s] восстановлен отложенный старт user=%s",
+                         bot_record["id"], uid)
+            except Exception as e:
+                log.warning("run_due_starts send: %s", e)
 
     async def _send_step_to_user(
         self, bot: Bot, bot_record, user_id: int, *, step_order: int, is_duplicate: bool = False
@@ -181,6 +232,33 @@ class ScenarioEngine:
 
         cfg = json.loads(step["config"])
         step_type = step["step_type"]
+
+        # Режим «имитация печати»: показываем chat action и держим паузу.
+        if bot_record["typing_mode"]:
+            import random as _rnd
+            # тип действия по контенту шага
+            if cfg.get("video_file_id") or cfg.get("animation_file_id"):
+                _action = "record_video"
+            elif cfg.get("sticker_file_id"):
+                _action = "choose_sticker"
+            elif cfg.get("voice_file_id"):
+                _action = "record_voice"
+            else:
+                _action = "typing"
+            _delay = _rnd.uniform(5, 8)
+            try:
+                # chat action живёт 5 сек — шлём, ждём, при нужде повторяем
+                user_chat = user["tg_id"]
+                await bot.send_chat_action(user_chat, _action)
+                _waited = 0.0
+                while _waited < _delay:
+                    _chunk = min(4.0, _delay - _waited)
+                    await asyncio.sleep(_chunk)
+                    _waited += _chunk
+                    if _waited < _delay:
+                        await bot.send_chat_action(user_chat, _action)
+            except Exception as _e:
+                log.warning("send_chat_action: %s", _e)
 
         msg_id: Optional[int] = None
 
@@ -222,12 +300,14 @@ class ScenarioEngine:
                 async def _timer_advance() -> None:
                     try:
                         await asyncio.sleep(timer)
-                        # Записываем прохождение
                         await get_db().record_step_completion(user_id, step["id"])
-                        await self.advance(bot, bot_record, user_id)
                     except asyncio.CancelledError:
-                        pass
-                # Используем dup_tasks слот для этой задачи (она тоже будет отменена при advance)
+                        return
+                    # advance запускаем ОТДЕЛЬНОЙ задачей: advance вызовет
+                    # _cancel_dup, который отменит наш же слот в _dup_tasks.
+                    # Если звать advance напрямую — задача убьёт сама себя
+                    # CancelledError'ом раньше, чем отправит следующий шаг.
+                    asyncio.create_task(self.advance(bot, bot_record, user_id))
                 key = (bot_record["id"], user_id)
                 old = self._dup_tasks.pop(key, None)
                 if old:
@@ -239,6 +319,12 @@ class ScenarioEngine:
         if step_type == "message" and cfg.get("wait_mode") == "user_message":
             kb_text = cfg.get("keyboard_text") or None
             await db.update_user(user_id, awaiting_user_msg=1, awaiting_kb_text=kb_text)
+
+        # Режим «без ожидания»: сообщение показано — сразу идём дальше.
+        # advance отдельной задачей, чтобы не конфликтовать с _cancel_dup.
+        if step_type == "message" and cfg.get("wait_mode") in (None, "", "none"):
+            await get_db().record_step_completion(user_id, step["id"])
+            asyncio.create_task(self.advance(bot, bot_record, user_id))
 
     async def _send_roulette_step(self, bot, bot_record, user, step, cfg) -> Optional[int]:
         text = cfg.get("text") or "🎰 Крути рулетку и забери приз!"
@@ -266,23 +352,35 @@ class ScenarioEngine:
         check_btn_text = cfg.get("check_button_text") or "✅ Проверить"
         check_btn_color = cfg.get("check_button_color") or "green"
 
-        # Спонсоры, которые надо показать (не подписан, или check=False)
+        # Спонсоры, которые надо показать.
+        # - check=False → показываем всегда (это «не обязательные»)
+        # - check=True  → показываем, если юзер не «прошёл» канал
+        #   («прошёл» = подписан ИЛИ, если request_mode, есть заявка)
+        from utils.checker import is_subscribed
+        db = get_db()
         to_show: list[dict] = []
         for sp in sponsors:
             if not sp.get("check"):
                 to_show.append(sp)
-            else:
-                from utils.checker import is_subscribed
-                cid = sp.get("channel_id")
-                if cid and await is_subscribed(bot, int(cid), user["tg_id"]):
-                    continue
+                continue
+            cid = sp.get("channel_id")
+            if not cid:
                 to_show.append(sp)
+                continue
+            if await is_subscribed(bot, int(cid), user["tg_id"]):
+                continue
+            if sp.get("request_mode") and await db.has_pending_join_request(
+                bot_record["id"], int(cid), user["tg_id"]
+            ):
+                continue
+            to_show.append(sp)
 
-        # Если все уже подписаны (или их вообще нет с check) — продвигаем дальше
-        # но только если хотя бы один требовал check
-        has_required = any(s.get("check") for s in sponsors)
-        if has_required and not any(s.get("check") for s in to_show):
-            await get_db().record_step_completion(user["id"], step["id"])
+        # Если показывать нечего — пропускаем шаг (все обязательные «пройдены»,
+        # и необязательных нет).
+        # ВАЖНО: при авто-пропуске НЕ пишем step_completions — юзер ОП
+        # фактически не проходил, иначе % прохождения ОП завышается.
+        # advance вызываем — последующие шаги сценария не теряются.
+        if not to_show:
             await self.advance(bot, bot_record, user["id"])
             return -1  # маркер: ничего не отправляем, перешли дальше
 
@@ -312,6 +410,11 @@ class ScenarioEngine:
             await get_db().mark_user_dead(user["id"])
             return None
 
+    @staticmethod
+    def _dup_allowed_for_message(cfg: dict) -> bool:
+        """Дубли в шаге message имеют смысл только когда ждём ответ юзера."""
+        return cfg.get("wait_mode") == "user_message"
+
     async def _send_message_step(self, bot, bot_record, user, step, cfg) -> Optional[int]:
         text = cfg.get("text")
         photo = cfg.get("photo_file_id")
@@ -321,10 +424,32 @@ class ScenarioEngine:
         document = cfg.get("document_file_id")
         copy_from = cfg.get("copy_from")  # {chat_id, message_id}
 
-        buttons = cfg.get("buttons", [])
+        # Нормализуем buttons: в БД может лежать и плоский список [{..}],
+        # и список рядов [[{..}]]. Приводим к плоскому списку словарей.
+        _raw = cfg.get("buttons", []) or []
+        _flat: list[dict] = []
+        for _item in _raw:
+            if isinstance(_item, dict):
+                _flat.append(_item)
+            elif isinstance(_item, list):
+                for _b in _item:
+                    if isinstance(_b, dict):
+                        _flat.append(_b)
+        # Раскладка: 'vertical' — каждая кнопка в своём ряду, иначе по 2.
+        # buttons_layout: число 1..3. Старые значения vertical/grid тоже ок.
+        _bl = cfg.get("buttons_layout")
+        if _bl == "vertical":
+            _per_row = 1
+        elif _bl == "grid":
+            _per_row = 2
+        else:
+            try:
+                _per_row = max(1, min(3, int(_bl)))
+            except (ValueError, TypeError):
+                _per_row = 2
         rows: list[list[dict]] = []
-        for i in range(0, len(buttons), 2):
-            rows.append(buttons[i : i + 2])
+        for i in range(0, len(_flat), _per_row):
+            rows.append(_flat[i : i + _per_row])
         markup = build_inline_keyboard(rows)
 
         keyboard_markup = None
@@ -348,6 +473,15 @@ class ScenarioEngine:
         except TelegramForbiddenError:
             await get_db().mark_user_dead(user["id"])
             return None
+        except CopyOriginGone:
+            # Оригинал копии удалён — помечаем шаг и пропускаем его,
+            # чтобы один мёртвый пост не вешал весь сценарий.
+            await get_db().mark_copy_broken(step["id"], 1)
+            log.warning("[bot %s] шаг %s: оригинал копии удалён — пропускаем",
+                        bot_record["id"], step["id"])
+            await get_db().record_step_completion(user["id"], step["id"])
+            asyncio.create_task(self.advance(bot, bot_record, user["id"]))
+            return -1
 
     async def _schedule_delete_old(self, bot: Bot, bot_record, user) -> None:
         if not user["last_message_id"] or not user["last_message_chat_id"]:
@@ -405,18 +539,41 @@ class ScenarioEngine:
                     # Дублируем сообщение
                     count += 1
                     await db.update_user(user_id, duplicate_count=count)
-                    # Удаляем старое
-                    if user["last_message_id"]:
-                        await safe_delete_message(
-                            bot, user["last_message_chat_id"], user["last_message_id"]
-                        )
+                    # Запоминаем id старого сообщения ДО отправки дубля
+                    # (отправка перезапишет last_message_id на новое).
+                    _old_chat = user["last_message_chat_id"]
+                    _old_msg = user["last_message_id"]
+                    # Сначала отправляем дубль — чат ни секунды не пустой.
                     await self._send_step_to_user(
                         bot, bot_record, user_id,
                         step_order=user["current_step_order"], is_duplicate=True,
                     )
+                    # Старое удаляем отложенно — через delete_timer секунд.
+                    if _old_msg:
+                        _delay = bot_record["delete_timer"] or 10
+
+                        async def _del_old(c=_old_chat, m=_old_msg, d=_delay):
+                            try:
+                                await asyncio.sleep(d)
+                                await safe_delete_message(bot, c, m)
+                            except asyncio.CancelledError:
+                                pass
+                        asyncio.create_task(_del_old())
                 # Лимит достигнут — пропускаем шаг
                 user = await db.get_user(user_id)
                 if user and user["current_step_order"] == step["step_order"]:
+                    # Для ОП-шага — ждём «таймер пропуска» перед переходом (патч 23).
+                    if step["step_type"] == "op":
+                        try:
+                            _cfg = json.loads(step["config"])
+                            _skip = int(_cfg.get("skip_timer", 0) or 0)
+                        except Exception:
+                            _skip = 0
+                        if _skip > 0:
+                            await asyncio.sleep(_skip)
+                            user = await db.get_user(user_id)
+                            if not user or user["current_step_order"] != step["step_order"]:
+                                return
                     # Запускаем advance отдельной задачей, потому что
                     # advance вызовет _cancel_dup, который отменит нас же.
                     asyncio.create_task(self.advance(bot, bot_record, user_id))

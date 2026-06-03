@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher, F
@@ -56,11 +57,75 @@ def register_greeter_handlers(dp: Dispatcher, bot_record_id: int) -> None:
         engine = get_engine()
         await engine.start_or_restart(message.bot, bot_record, user)
 
+    @dp.chat_member()
+    async def on_chat_member(upd) -> None:
+        """Считает вступления по инвайт-ссылкам канала."""
+        try:
+            db = get_db()
+            bot_record = await _get_bot_record()
+            if not bot_record:
+                return
+            il = getattr(upd, "invite_link", None)
+            if il is None or not getattr(il, "invite_link", None):
+                return
+            old_s = upd.old_chat_member.status if upd.old_chat_member else None
+            new_s = upd.new_chat_member.status if upd.new_chat_member else None
+            # вступил: был left/kicked → стал member
+            if new_s == "member" and old_s in ("left", "kicked", None):
+                await db.inc_channel_link(il.invite_link, joined=1)
+                try:
+                    await db.mark_joined_channel(
+                        bot_record["id"], upd.from_user.id
+                    )
+                except Exception as _e:
+                    log.warning("mark_joined_channel: %s", _e)
+        except Exception as e:
+            log.warning("on_chat_member error: %s", e)
+
+    async def _due_starts_worker() -> None:
+        """Каждые 30 сек проверяет отложенные старты — восстановление
+        после перезапуска бота."""
+        engine = get_engine()
+        while True:
+            try:
+                await asyncio.sleep(30)
+                bot_record = await _get_bot_record()
+                if bot_record:
+                    await engine.run_due_starts(bot, bot_record)
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                log.warning("due_starts_worker: %s", e)
+
+    asyncio.create_task(_due_starts_worker())
+
     @dp.chat_join_request()
     async def on_join_request(req: ChatJoinRequest) -> None:
         db = get_db()
         bot_record = await _get_bot_record()
         if not bot_record:
+            return
+        # ВСЕГДА записываем заявку — потом она учтётся при проверке ОП
+        await db.add_pending_join_request(
+            bot_record["id"], req.chat.id, req.from_user.id
+        )
+        # Если канал помечен как спонсорский «по заявкам» — НЕ запускаем
+        # сценарий приветки. Иначе юзер канала-спонсора получит наш
+        # приветственный сценарий, чего быть не должно.
+        if await db.is_request_sponsor_channel(bot_record["id"], req.chat.id):
+            log.info(
+                "[bot %s] заявка в спонсорский канал %s от %s — только трекинг",
+                bot_record["id"], req.chat.id, req.from_user.id,
+            )
+            return
+        # Приветка работает только с каналами из её списка.
+        # Канал не в списке (или список пуст) — игнорируем заявку.
+        _wch = await db.get_welcome_channel_by_chat(bot_record["id"], req.chat.id)
+        if _wch is None:
+            log.info(
+                "[bot %s] заявка из канала %s — не в списке приветки, игнор",
+                bot_record["id"], req.chat.id,
+            )
             return
         user = await db.upsert_user(
             bot_record["id"],
@@ -68,11 +133,24 @@ def register_greeter_handlers(dp: Dispatcher, bot_record_id: int) -> None:
             username=req.from_user.username,
             first_name=req.from_user.first_name,
             is_premium=bool(getattr(req.from_user, "is_premium", False)),
+            source="request",
         )
-        # По умолчанию заявку не одобряем (это решает админ канала или другие боты)
+        # Если заявка по нашей инвайт-ссылке канала — привяжем юзера к ней
+        _il = getattr(req, "invite_link", None)
+        if _il is not None and getattr(_il, "invite_link", None):
+            try:
+                _cl = await db.get_channel_link_by_url(_il.invite_link)
+                if _cl:
+                    await db.set_user_channel_link(
+                        bot_record["id"], req.from_user.id, _cl["id"]
+                    )
+            except Exception as _e:
+                log.warning("set_user_channel_link: %s", _e)
         engine = get_engine()
         try:
-            await engine.start_or_restart(req.bot, bot_record, user)
+            await engine.start_or_restart(
+                req.bot, bot_record, user, delay_override=_wch["start_delay"]
+            )
         except Exception as e:
             log.exception("join_request scenario error: %s", e)
 

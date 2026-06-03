@@ -22,6 +22,13 @@ log = logging.getLogger("manager")
 
 
 class BotManager:
+    def get_bot_instance(self, bot_id: int):
+        """Возвращает aiogram Bot объект приветки по её id, или None."""
+        entry = self._bots.get(bot_id)
+        if not entry:
+            return None
+        return entry.get("bot")
+
     def __init__(self) -> None:
         # bot_record_id -> (Bot, Dispatcher, Task)
         self._bots: dict[int, tuple[Bot, Dispatcher, asyncio.Task]] = {}
@@ -60,6 +67,7 @@ class BotManager:
                             "callback_query",
                             "chat_join_request",
                             "my_chat_member",
+                            "chat_member",
                         ],
                     )
                 except asyncio.CancelledError:

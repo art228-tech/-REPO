@@ -68,11 +68,13 @@ async def test_basic_scenario_progress():
     db = await setup_db()
     bot_id = await db.add_greeting_bot("1:AAA", 1, "u", "n", 1)
     bot_record = await db.get_greeting_bot(bot_id)
-    await db.add_step(bot_id, "message", {"text":"step 1","wait_mode":"none"},
+    # wait_mode="user_message": шаги ждут реакции и не авто-продвигаются,
+    # чтобы тестировать ручной advance() (после патчей "none" идёт дальше сам).
+    await db.add_step(bot_id, "message", {"text":"step 1","wait_mode":"user_message"},
                       duplicate_after=999, duplicate_max=0)
-    await db.add_step(bot_id, "message", {"text":"step 2","wait_mode":"none"},
+    await db.add_step(bot_id, "message", {"text":"step 2","wait_mode":"user_message"},
                       duplicate_after=999, duplicate_max=0)
-    await db.add_step(bot_id, "message", {"text":"step 3","wait_mode":"none"},
+    await db.add_step(bot_id, "message", {"text":"step 3","wait_mode":"user_message"},
                       duplicate_after=999, duplicate_max=0)
     user = await db.upsert_user(bot_id, 99)
 
@@ -114,7 +116,7 @@ async def test_restart_resets_progress():
     db = await setup_db()
     bot_id = await db.add_greeting_bot("1:AAA", 1, "u", "n", 1)
     bot_record = await db.get_greeting_bot(bot_id)
-    await db.add_step(bot_id, "message", {"text":"hi","wait_mode":"none"},
+    await db.add_step(bot_id, "message", {"text":"hi","wait_mode":"user_message"},
                       duplicate_after=999, duplicate_max=0)
     user = await db.upsert_user(bot_id, 99)
     await db.update_user(user["id"], current_step_order=5, duplicate_count=3, completed=1)
@@ -141,7 +143,7 @@ async def test_timer_advance():
     bot_record = await db.get_greeting_bot(bot_id)
     await db.add_step(bot_id, "message", {"text":"hi","wait_mode":"timer","wait_timer":1},
                       duplicate_after=999, duplicate_max=0)
-    await db.add_step(bot_id, "message", {"text":"end","wait_mode":"none"},
+    await db.add_step(bot_id, "message", {"text":"end","wait_mode":"user_message"},
                       duplicate_after=999, duplicate_max=0)
     user = await db.upsert_user(bot_id, 99)
 
@@ -164,7 +166,7 @@ async def test_message_advance_on_user_msg():
     bot_record = await db.get_greeting_bot(bot_id)
     await db.add_step(bot_id, "message", {"text":"hi","wait_mode":"user_message"},
                       duplicate_after=999, duplicate_max=0)
-    await db.add_step(bot_id, "message", {"text":"end","wait_mode":"none"},
+    await db.add_step(bot_id, "message", {"text":"end","wait_mode":"user_message"},
                       duplicate_after=999, duplicate_max=0)
     user = await db.upsert_user(bot_id, 99)
 
@@ -194,7 +196,7 @@ async def test_message_keyboard_button_match():
         {"text":"hi","wait_mode":"user_message","keyboard_text":"Дальше →"},
         duplicate_after=999, duplicate_max=0,
     )
-    await db.add_step(bot_id, "message", {"text":"end","wait_mode":"none"},
+    await db.add_step(bot_id, "message", {"text":"end","wait_mode":"user_message"},
                       duplicate_after=999, duplicate_max=0)
     user = await db.upsert_user(bot_id, 99)
 
@@ -231,7 +233,7 @@ async def test_op_skip_if_already_subscribed():
         }],
         "check_button_text": "✅", "check_button_color":"green",
     }, duplicate_after=999, duplicate_max=0)
-    await db.add_step(bot_id, "message", {"text":"after op","wait_mode":"none"},
+    await db.add_step(bot_id, "message", {"text":"after op","wait_mode":"user_message"},
                       duplicate_after=999, duplicate_max=0)
     user = await db.upsert_user(bot_id, 99)
 
@@ -300,7 +302,7 @@ async def test_roulette_advance():
     bot_record = await db.get_greeting_bot(bot_id)
     await db.add_step(bot_id, "roulette", {"text":"r","button_text":"go"},
                       duplicate_after=999, duplicate_max=0)
-    await db.add_step(bot_id, "message", {"text":"after r","wait_mode":"none"},
+    await db.add_step(bot_id, "message", {"text":"after r","wait_mode":"user_message"},
                       duplicate_after=999, duplicate_max=0)
 
     engine = ScenarioEngine()
@@ -364,7 +366,7 @@ async def test_duplicate_mechanism():
         {"text":"hi","wait_mode":"user_message"},
         duplicate_after=1, duplicate_increment=0, duplicate_max=2,
     )
-    await db.add_step(bot_id, "message", {"text":"end","wait_mode":"none"},
+    await db.add_step(bot_id, "message", {"text":"end","wait_mode":"user_message"},
                       duplicate_after=999, duplicate_max=0)
     user = await db.upsert_user(bot_id, 99)
 
