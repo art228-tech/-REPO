@@ -1,4 +1,4 @@
-"""Handlers available to every user."""
+"""Обработчики, доступные всем пользователям."""
 
 from __future__ import annotations
 
@@ -13,15 +13,15 @@ from bot.storage import UserStorage
 router = Router(name="common")
 
 HELP_TEXT = (
-    "Available commands:\n"
-    "/start — register and see the welcome message\n"
-    "/help — show this help message\n"
-    "/id — show your Telegram id\n"
+    "Доступные команды:\n"
+    "/start — регистрация и приветствие\n"
+    "/help — показать это сообщение\n"
+    "/id — показать ваш Telegram ID\n"
 )
 
 
 async def _remember(message: Message, storage: UserStorage) -> None:
-    """Persist the sender so admins can broadcast to them later."""
+    """Сохраняем отправителя, чтобы админ позже мог сделать рассылку."""
     user = message.from_user
     if user is None:
         return
@@ -35,10 +35,10 @@ async def _remember(message: Message, storage: UserStorage) -> None:
 @router.message(CommandStart())
 async def cmd_start(message: Message, storage: UserStorage, config: Config) -> None:
     await _remember(message, storage)
-    name = message.from_user.full_name if message.from_user else "there"
-    greeting = f"Hello, {hbold(name)}! 👋\n\n{HELP_TEXT}"
+    name = message.from_user.full_name if message.from_user else "друг"
+    greeting = f"Привет, {hbold(name)}! 👋\n\n{HELP_TEXT}"
     if config.is_admin(message.from_user.id if message.from_user else None):
-        greeting += "\nYou are an admin. Use /admin to open the admin panel."
+        greeting += "\nВы администратор. Откройте админ-панель командой /admin."
     await message.answer(greeting)
 
 
@@ -53,6 +53,6 @@ async def cmd_id(message: Message, storage: UserStorage) -> None:
     await _remember(message, storage)
     user = message.from_user
     if user is None:
-        await message.answer("Could not determine your id.")
+        await message.answer("Не удалось определить ваш ID.")
         return
-    await message.answer(f"Your Telegram id is: {hbold(str(user.id))}")
+    await message.answer(f"Ваш Telegram ID: {hbold(str(user.id))}")

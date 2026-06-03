@@ -1,7 +1,7 @@
-"""Admin-only handlers: admin panel, stats and broadcast.
+"""Обработчики только для администраторов: панель, статистика, рассылка.
 
-This router is filtered to admins in :func:`bot.handlers.build_router`, so the
-handlers here can assume the sender is an admin.
+Этот роутер ограничен админами в :func:`bot.handlers.build_router`, поэтому
+обработчики ниже могут считать, что отправитель — администратор.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 router = Router(name="admin")
 
-# Telegram allows roughly 30 messages per second to different users.
+# Telegram допускает примерно 30 сообщений в секунду разным пользователям.
 _BROADCAST_CHUNK = 25
 _BROADCAST_PAUSE = 1.0
 
@@ -34,13 +34,13 @@ class AdminStates(StatesGroup):
 
 @router.message(Command("admin"))
 async def cmd_admin(message: Message) -> None:
-    await message.answer("Admin panel:", reply_markup=admin_panel())
+    await message.answer("Админ-панель:", reply_markup=admin_panel())
 
 
 @router.callback_query(F.data == "admin:stats")
 async def cb_stats(call: CallbackQuery, storage: UserStorage) -> None:
     total = await storage.count_users()
-    await call.message.answer(f"Known users: {total}")
+    await call.message.answer(f"Известных пользователей: {total}")
     await call.answer()
 
 
@@ -55,7 +55,7 @@ async def cb_close(call: CallbackQuery) -> None:
 async def cb_broadcast(call: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(AdminStates.waiting_for_broadcast)
     await call.message.answer(
-        "Send me the message to broadcast to all users.",
+        "Отправьте сообщение для рассылки всем пользователям.",
         reply_markup=cancel_keyboard(),
     )
     await call.answer()
@@ -64,7 +64,7 @@ async def cb_broadcast(call: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == "admin:cancel")
 async def cb_cancel(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await call.message.answer("Cancelled.")
+    await call.message.answer("Отменено.")
     await call.answer()
 
 
@@ -72,7 +72,7 @@ async def cb_cancel(call: CallbackQuery, state: FSMContext) -> None:
 async def cmd_broadcast(message: Message, state: FSMContext) -> None:
     await state.set_state(AdminStates.waiting_for_broadcast)
     await message.answer(
-        "Send me the message to broadcast to all users.",
+        "Отправьте сообщение для рассылки всем пользователям.",
         reply_markup=cancel_keyboard(),
     )
 
@@ -85,10 +85,10 @@ async def do_broadcast(
 
     user_ids = await storage.all_user_ids()
     if not user_ids:
-        await message.answer("There are no users to broadcast to yet.")
+        await message.answer("Пока нет пользователей для рассылки.")
         return
 
-    status = await message.answer(f"Broadcasting to {len(user_ids)} users…")
+    status = await message.answer(f"Рассылка для {len(user_ids)} пользователей…")
 
     sent = 0
     failed = 0
@@ -106,9 +106,9 @@ async def do_broadcast(
                     failed += 1
             except TelegramAPIError as exc:
                 failed += 1
-                logger.warning("Failed to deliver broadcast to %s: %s", user_id, exc)
+                logger.warning("Не удалось доставить рассылку %s: %s", user_id, exc)
         await asyncio.sleep(_BROADCAST_PAUSE)
 
     await status.edit_text(
-        f"Broadcast finished. Delivered: {sent}, failed: {failed}."
+        f"Рассылка завершена. Доставлено: {sent}, не доставлено: {failed}."
     )

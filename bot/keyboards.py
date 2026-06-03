@@ -1,4 +1,4 @@
-"""Inline keyboards used by the bot."""
+"""Инлайн-клавиатуры, используемые ботом."""
 
 from __future__ import annotations
 
@@ -7,16 +7,16 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
 def admin_panel() -> InlineKeyboardMarkup:
-    """Inline keyboard for the admin panel."""
+    """Инлайн-клавиатура админ-панели."""
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="Statistics", callback_data="admin:stats"))
-    builder.row(InlineKeyboardButton(text="Broadcast", callback_data="admin:broadcast"))
-    builder.row(InlineKeyboardButton(text="Close", callback_data="admin:close"))
+    builder.row(InlineKeyboardButton(text="Статистика", callback_data="admin:stats"))
+    builder.row(InlineKeyboardButton(text="Рассылка", callback_data="admin:broadcast"))
+    builder.row(InlineKeyboardButton(text="Закрыть", callback_data="admin:close"))
     return builder.as_markup()
 
 
 def cancel_keyboard() -> InlineKeyboardMarkup:
-    """Single 'Cancel' button used during multi-step flows."""
+    """Одна кнопка «Отмена» для пошаговых сценариев."""
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="Cancel", callback_data="admin:cancel"))
+    builder.row(InlineKeyboardButton(text="Отмена", callback_data="admin:cancel"))
     return builder.as_markup()
