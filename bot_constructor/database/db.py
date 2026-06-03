@@ -568,6 +568,16 @@ class DB:
                     return True
         return False
 
+    async def cleanup_old_pending(self, days: int = 30) -> int:
+        """Удаляет заявки старше N дней. Возвращает число удалённых (патч 15)."""
+        cutoff = now() - int(days) * 86400
+        cur = await self.conn.execute(
+            "DELETE FROM pending_join_requests WHERE created_at < ?",
+            (cutoff,),
+        )
+        await self.conn.commit()
+        return cur.rowcount or 0
+
     # ---------- Step completions ----------
 
     async def record_step_completion(self, user_id: int, step_id: int) -> None:
