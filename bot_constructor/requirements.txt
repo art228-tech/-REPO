@@ -2,3 +2,4 @@ aiogram==3.13.1
 aiosqlite==0.20.0
 aiohttp==3.10.10
 python-dotenv==1.0.1
+telethon==1.36.0  # MTProto: точный детект заморозки/удаления ботов (нужны TG_API_ID/TG_API_HASH)
