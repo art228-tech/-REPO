@@ -278,15 +278,170 @@ async def cb_plink_pick(cb: CallbackQuery, state: FSMContext) -> None:
     if idx >= len(urls) or not step_id:
         await cb.answer("Сессия устарела, открой ссылки заново", show_alert=True)
         return
-    old = urls[idx]
-    await state.update_data(_link_old=old)
+    url = urls[idx]
+    step = await get_db().get_step(step_id)
+    cfg = json.loads(step["config"]) if step else {}
+    backups = (cfg.get("link_backups") or {}).get(url, [])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Заменить ссылку", callback_data=f"plrep:{idx}")],
+        [InlineKeyboardButton(text=f"🛟 Запасные ссылки ({len(backups)})", callback_data=f"plbk:{idx}")],
+        [InlineKeyboardButton(text="« Назад", callback_data=f"step_links:{step_id}")],
+    ])
+    await cb.message.edit_text(
+        f"🔗 <code>{url}</code>\n\n"
+        "• <b>Заменить</b> — вручную поменять ссылку везде в шаге.\n"
+        "• <b>Запасные</b> — если бот по этой ссылке удалят, бот сам подставит "
+        "рабочую запасную и пришлёт уведомление.",
+        reply_markup=kb,
+    )
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("plrep:"))
+async def cb_plink_replace(cb: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(cb.from_user.id):
+        return
+    idx = int(cb.data.split(":")[1])
+    data = await state.get_data()
+    urls = data.get("_link_urls", [])
+    if idx >= len(urls):
+        await cb.answer("Сессия устарела", show_alert=True)
+        return
+    await state.update_data(_link_old=urls[idx])
     await state.set_state(StepStates.step_link_new_url)
     await cb.message.edit_text(
-        f"Старая ссылка: <code>{old}</code>\n\n"
-        "Пришли <b>новую ссылку</b> (http://... или https://... или tg://...). "
+        f"Старая ссылка: <code>{urls[idx]}</code>\n\n"
+        "Пришли <b>новую ссылку</b> (http://... / https://... / tg://...). "
         "Заменю везде в этом шаге."
     )
     await cb.answer()
+
+
+def _backups_menu(idx: int, url: str, backups: list, step_id: int) -> InlineKeyboardMarkup:
+    rows = []
+    for j, b in enumerate(backups):
+        short = b if len(b) <= 45 else b[:42] + "..."
+        rows.append([
+            InlineKeyboardButton(text=f"{j+1}. {short}", callback_data="noop"),
+            InlineKeyboardButton(text="🗑", callback_data=f"plbkd:{idx}:{j}"),
+        ])
+    rows.append([InlineKeyboardButton(text="➕ Добавить запасную", callback_data=f"plbka:{idx}")])
+    rows.append([InlineKeyboardButton(text="« Назад", callback_data=f"plink:{idx}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.callback_query(F.data.startswith("plbk:"))
+async def cb_plink_backups(cb: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(cb.from_user.id):
+        return
+    idx = int(cb.data.split(":")[1])
+    data = await state.get_data()
+    urls = data.get("_link_urls", [])
+    step_id = data.get("_link_step_id")
+    if idx >= len(urls) or not step_id:
+        await cb.answer("Сессия устарела", show_alert=True)
+        return
+    url = urls[idx]
+    step = await get_db().get_step(step_id)
+    cfg = json.loads(step["config"]) if step else {}
+    backups = (cfg.get("link_backups") or {}).get(url, [])
+    await cb.message.edit_text(
+        f"🛟 <b>Запасные для</b>\n<code>{url}</code>\n\n"
+        + ("Список запасных (по порядку). Если основная ссылка умрёт — "
+           "бот подставит первую рабочую запасную.\n"
+           if backups else "Пока запасных нет. Добавь хотя бы одну.\n"),
+        reply_markup=_backups_menu(idx, url, backups, step_id),
+    )
+    await cb.answer()
+
+
+@router.callback_query(F.data == "noop")
+async def cb_noop(cb: CallbackQuery) -> None:
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("plbka:"))
+async def cb_plink_backup_add(cb: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(cb.from_user.id):
+        return
+    idx = int(cb.data.split(":")[1])
+    data = await state.get_data()
+    urls = data.get("_link_urls", [])
+    if idx >= len(urls):
+        await cb.answer("Сессия устарела", show_alert=True)
+        return
+    await state.update_data(_bk_idx=idx, _bk_url=urls[idx])
+    await state.set_state(StepStates.step_backup_url)
+    await cb.message.edit_text(
+        "Пришли <b>запасную ссылку</b> (http://... / https://... / tg://...).\n"
+        "Лучше всего — ссылку на другого бота-дубль."
+    )
+    await cb.answer()
+
+
+@router.message(StepStates.step_backup_url)
+async def m_plink_backup_add(message: Message, state: FSMContext) -> None:
+    if not is_admin(message.from_user.id):
+        return
+    new = (message.text or "").strip()
+    if not (new.startswith("http://") or new.startswith("https://") or new.startswith("tg://")):
+        await message.answer("Нужна корректная ссылка (http/https/tg).")
+        return
+    data = await state.get_data()
+    step_id = data.get("_link_step_id")
+    url = data.get("_bk_url")
+    idx = data.get("_bk_idx", 0)
+    step = await get_db().get_step(step_id) if step_id else None
+    if not step or not url:
+        await message.answer("Сессия устарела.")
+        await state.clear()
+        return
+    cfg = json.loads(step["config"])
+    lb = cfg.get("link_backups") or {}
+    arr = lb.get(url, [])
+    if new not in arr and new != url:
+        arr.append(new)
+    lb[url] = arr
+    cfg["link_backups"] = lb
+    await get_db().update_step(step_id, config=json.dumps(cfg, ensure_ascii=False))
+    await state.set_state(None)
+    await message.answer(
+        f"✅ Запасная добавлена ({len(arr)} шт.) для\n<code>{url}</code>",
+        reply_markup=_backups_menu(idx, url, arr, step_id),
+    )
+
+
+@router.callback_query(F.data.startswith("plbkd:"))
+async def cb_plink_backup_del(cb: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(cb.from_user.id):
+        return
+    _, sidx, sj = cb.data.split(":")
+    idx, j = int(sidx), int(sj)
+    data = await state.get_data()
+    urls = data.get("_link_urls", [])
+    step_id = data.get("_link_step_id")
+    if idx >= len(urls) or not step_id:
+        await cb.answer("Сессия устарела", show_alert=True)
+        return
+    url = urls[idx]
+    step = await get_db().get_step(step_id)
+    cfg = json.loads(step["config"]) if step else {}
+    lb = cfg.get("link_backups") or {}
+    arr = lb.get(url, [])
+    if 0 <= j < len(arr):
+        arr.pop(j)
+    if arr:
+        lb[url] = arr
+    else:
+        lb.pop(url, None)
+    cfg["link_backups"] = lb
+    await get_db().update_step(step_id, config=json.dumps(cfg, ensure_ascii=False))
+    await cb.message.edit_text(
+        f"🛟 <b>Запасные для</b>\n<code>{url}</code>\n\n"
+        + ("Список запасных (по порядку).\n" if arr else "Запасных нет.\n"),
+        reply_markup=_backups_menu(idx, url, arr, step_id),
+    )
+    await cb.answer("Удалено")
 
 
 @router.message(StepStates.step_link_new_url)

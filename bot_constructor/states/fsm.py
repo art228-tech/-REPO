@@ -8,6 +8,7 @@ class AddBotStates(StatesGroup):
 
 class StepStates(StatesGroup):
     step_link_new_url = State()
+    step_backup_url = State()             # ввод запасной ссылки
     # Общие
     select_type = State()
 

@@ -64,6 +64,10 @@ async def main() -> None:
         from config import ADMIN_IDS as _ADMIN_IDS
         asyncio.create_task(sponsor_monitor_loop(bot, _ADMIN_IDS))
 
+        # Сторож ссылок: проверяет «живость» ссылок и подставляет запасные
+        from utils.link_guard import link_guard_loop
+        asyncio.create_task(link_guard_loop(bot, _ADMIN_IDS))
+
         # Перезаливка фото шагов на диск (file_id конструктора не работает у
         # приветок). Один раз при старте + периодически, чтобы подхватывать
         # фото вновь созданных шагов.
