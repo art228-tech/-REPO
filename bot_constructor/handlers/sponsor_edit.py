@@ -79,17 +79,22 @@ def _list_kb(step_id: int, sponsors: list[dict]) -> InlineKeyboardMarkup:
 
 def _one_kb(step_id: int, idx: int, sp: dict) -> InlineKeyboardMarkup:
     mode = "✋ По заявкам" if sp.get("request_mode") else "📺 Обычный"
-    return InlineKeyboardMarkup(inline_keyboard=[
+    check_lbl = "✅ Проверять подписку" if sp.get("check") else "💤 Только показывать"
+    rows = [
         [InlineKeyboardButton(text="✏️ Название", callback_data=f"spe:{step_id}:{idx}:title")],
         [InlineKeyboardButton(text="✏️ Текст кнопки", callback_data=f"spe:{step_id}:{idx}:btext")],
         [InlineKeyboardButton(text="🎨 Цвет кнопки", callback_data=f"spe:{step_id}:{idx}:bcolor")],
         [InlineKeyboardButton(text="🔗 Ссылка", callback_data=f"spe:{step_id}:{idx}:link")],
-        [InlineKeyboardButton(text="📡 chat_id", callback_data=f"spe:{step_id}:{idx}:chan")],
-        [InlineKeyboardButton(text=f"⚙️ Режим: {mode}", callback_data=f"spe:{step_id}:{idx}:mode")],
-        [InlineKeyboardButton(text="🧪 Тест доступа", callback_data=f"sptest:{step_id}:{idx}")],
-        [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"sprm:{step_id}:{idx}")],
-        [InlineKeyboardButton(text="« К списку", callback_data=f"spons:{step_id}")],
-    ])
+        [InlineKeyboardButton(text=f"{check_lbl}", callback_data=f"spe:{step_id}:{idx}:check")],
+    ]
+    # Поля проверки нужны только когда проверка включена
+    if sp.get("check"):
+        rows.append([InlineKeyboardButton(text="📡 chat_id", callback_data=f"spe:{step_id}:{idx}:chan")])
+        rows.append([InlineKeyboardButton(text=f"⚙️ Режим: {mode}", callback_data=f"spe:{step_id}:{idx}:mode")])
+        rows.append([InlineKeyboardButton(text="🧪 Тест доступа", callback_data=f"sptest:{step_id}:{idx}")])
+    rows.append([InlineKeyboardButton(text="🗑 Удалить", callback_data=f"sprm:{step_id}:{idx}")])
+    rows.append([InlineKeyboardButton(text="« К списку", callback_data=f"spons:{step_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _format_sp(sp: dict) -> str:
@@ -310,6 +315,13 @@ async def cb_sponsor_edit(cb: CallbackQuery, state: FSMContext) -> None:
         await _save_step_cfg(step_id, cfg)
         await cb.message.edit_text(_format_sp(sp), reply_markup=_one_kb(step_id, idx, sp))
         await cb.answer("Режим переключён")
+        return
+    elif field == "check":
+        sp = cfg["sponsors"][idx]
+        sp["check"] = not bool(sp.get("check"))
+        await _save_step_cfg(step_id, cfg)
+        await cb.message.edit_text(_format_sp(sp), reply_markup=_one_kb(step_id, idx, sp))
+        await cb.answer("Проверка: " + ("включена" if sp["check"] else "выключена"))
         return
     await cb.answer()
 
