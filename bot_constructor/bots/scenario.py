@@ -33,6 +33,15 @@ from utils.helpers import (
 log = logging.getLogger("scenario")
 
 
+def _dm_chat(user) -> int:
+    """Чат для отправки в ЛС: user_chat_id из заявки (если есть), иначе tg_id."""
+    try:
+        mc = user["msg_chat_id"] if "msg_chat_id" in user.keys() else None
+    except Exception:
+        mc = None
+    return int(mc) if mc else user["tg_id"]
+
+
 class ScenarioEngine:
     """Один экземпляр на процесс. Хранит активные asyncio-задачи."""
 
@@ -262,7 +271,7 @@ class ScenarioEngine:
             _delay = _rnd.uniform(5, 8)
             try:
                 # chat action живёт 5 сек — шлём, ждём, при нужде повторяем
-                user_chat = user["tg_id"]
+                user_chat = _dm_chat(user)
                 await bot.send_chat_action(user_chat, _action)
                 _waited = 0.0
                 while _waited < _delay:
@@ -353,10 +362,13 @@ class ScenarioEngine:
         markup = build_inline_keyboard(rows)
         try:
             return await send_step_message(
-                bot, user["tg_id"], text=text, photo_file_id=photo,
+                bot, _dm_chat(user), text=text, photo_file_id=photo,
                 photo_path=cfg.get("photo_path"), reply_markup=markup
             )
-        except TelegramForbiddenError:
+        except TelegramForbiddenError as _fe:
+            log.warning("[bot %s] DEAD on %s step %s chat=%s: %s",
+                        bot_record["id"], step.get("step_type"), step.get("step_order"),
+                        _dm_chat(user), _fe)
             await get_db().mark_user_dead(user["id"])
             return None
 
@@ -421,10 +433,13 @@ class ScenarioEngine:
         markup = build_inline_keyboard(rows)
         try:
             return await send_step_message(
-                bot, user["tg_id"], text=text, photo_file_id=photo,
+                bot, _dm_chat(user), text=text, photo_file_id=photo,
                 photo_path=cfg.get("photo_path"), reply_markup=markup
             )
-        except TelegramForbiddenError:
+        except TelegramForbiddenError as _fe:
+            log.warning("[bot %s] DEAD on %s step %s chat=%s: %s",
+                        bot_record["id"], step.get("step_type"), step.get("step_order"),
+                        _dm_chat(user), _fe)
             await get_db().mark_user_dead(user["id"])
             return None
 
@@ -477,7 +492,7 @@ class ScenarioEngine:
         try:
             return await send_step_message(
                 bot,
-                user["tg_id"],
+                _dm_chat(user),
                 text=text,
                 photo_file_id=photo,
                 photo_path=cfg.get("photo_path"),
@@ -489,7 +504,10 @@ class ScenarioEngine:
                 reply_markup=markup,
                 keyboard_markup=keyboard_markup,
             )
-        except TelegramForbiddenError:
+        except TelegramForbiddenError as _fe:
+            log.warning("[bot %s] DEAD on msg step %s chat=%s join_chat=%s: %s",
+                        bot_record["id"], step.get("step_order"), user["tg_id"],
+                        user["join_chat_id"] if "join_chat_id" in user.keys() else None, _fe)
             await get_db().mark_user_dead(user["id"])
             return None
         except CopyOriginGone:

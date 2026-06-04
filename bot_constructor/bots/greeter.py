@@ -107,6 +107,10 @@ def register_greeter_handlers(dp: Dispatcher, bot_record_id: int) -> None:
         bot_record = await _get_bot_record()
         if not bot_record:
             return
+        # ДИАГНОСТИКА: сравниваем from_user.id и user_chat_id (для ЛС-доступа)
+        log.info("[bot %s] join_request: from_id=%s user_chat_id=%s chat=%s",
+                 bot_record["id"], req.from_user.id,
+                 getattr(req, "user_chat_id", None), req.chat.id)
         # ВСЕГДА записываем заявку — потом она учтётся при проверке ОП
         await db.add_pending_join_request(
             bot_record["id"], req.chat.id, req.from_user.id
@@ -143,6 +147,11 @@ def register_greeter_handlers(dp: Dispatcher, bot_record_id: int) -> None:
         # поэтому авто-приём в канал ломает доставку сценария.
         try:
             await db.set_user_join_chat(user["id"], req.chat.id)
+            # user_chat_id — спец-идентификатор приватного чата из заявки.
+            # Именно через него Telegram разрешает боту писать юзеру.
+            _uc = getattr(req, "user_chat_id", None)
+            if _uc:
+                await db.set_user_msg_chat(user["id"], _uc)
         except Exception as _e:
             log.warning("set_user_join_chat: %s", _e)
         # Если заявка по нашей инвайт-ссылке канала — привяжем юзера к ней
