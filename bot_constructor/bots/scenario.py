@@ -367,7 +367,7 @@ class ScenarioEngine:
             )
         except TelegramForbiddenError as _fe:
             log.warning("[bot %s] DEAD on %s step %s chat=%s: %s",
-                        bot_record["id"], step.get("step_type"), step.get("step_order"),
+                        bot_record["id"], step["step_type"], step["step_order"],
                         _dm_chat(user), _fe)
             await get_db().mark_user_dead(user["id"])
             return None
@@ -438,7 +438,7 @@ class ScenarioEngine:
             )
         except TelegramForbiddenError as _fe:
             log.warning("[bot %s] DEAD on %s step %s chat=%s: %s",
-                        bot_record["id"], step.get("step_type"), step.get("step_order"),
+                        bot_record["id"], step["step_type"], step["step_order"],
                         _dm_chat(user), _fe)
             await get_db().mark_user_dead(user["id"])
             return None
@@ -506,7 +506,7 @@ class ScenarioEngine:
             )
         except TelegramForbiddenError as _fe:
             log.warning("[bot %s] DEAD on msg step %s chat=%s join_chat=%s: %s",
-                        bot_record["id"], step.get("step_order"), user["tg_id"],
+                        bot_record["id"], step["step_order"], user["tg_id"],
                         user["join_chat_id"] if "join_chat_id" in user.keys() else None, _fe)
             await get_db().mark_user_dead(user["id"])
             return None
