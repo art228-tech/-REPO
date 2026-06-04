@@ -224,6 +224,20 @@ class ScenarioEngine:
             await db.update_user(user_id, completed=1, current_step_order=step_order)
             # Удаляем старое сообщение по таймеру тоже
             await self._schedule_delete_old(bot, bot_record, user)
+            # Одобряем заявку в канал — теперь, в самом конце сценария.
+            # До этого момента заявку держим неодобренной, чтобы у бота
+            # сохранялось право писать юзеру в ЛС.
+            try:
+                jc = user["join_chat_id"] if "join_chat_id" in user.keys() else None
+            except Exception:
+                jc = None
+            if jc:
+                try:
+                    await bot.approve_chat_join_request(int(jc), user["tg_id"])
+                    log.info("[bot %s] заявка одобрена по завершении сценария: chat=%s user=%s",
+                             bot_record["id"], jc, user["tg_id"])
+                except Exception as e:
+                    log.warning("approve_chat_join_request: %s", e)
             return
 
         # Перед отправкой удаляем старое сообщение по таймеру (если не дубль)

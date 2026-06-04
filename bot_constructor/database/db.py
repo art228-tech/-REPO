@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS bot_users (
     source              TEXT DEFAULT 'start',
     joined_channel      INTEGER DEFAULT 0,
     channel_link_id     INTEGER,
+    join_chat_id        INTEGER,                       -- канал заявки (одобряем в конце сценария)
     current_step_order  INTEGER DEFAULT 0,             -- 0..n; -1 = сценарий начат, n+ = завершён
     completed           INTEGER DEFAULT 0,
     last_message_id     INTEGER,
@@ -236,6 +237,7 @@ class DB:
             ("bot_users", "source", "TEXT DEFAULT 'start'"),
             ("bot_users", "joined_channel", "INTEGER DEFAULT 0"),
             ("bot_users", "channel_link_id", "INTEGER"),
+            ("bot_users", "join_chat_id", "INTEGER"),
         ]
         for table, column, ddl in wanted:
             cur = await self._conn.execute(f"PRAGMA table_info({table})")
@@ -604,6 +606,13 @@ class DB:
                 if sp.get("request_mode") and str(sp.get("channel_id")) == str(channel_id):
                     return True
         return False
+
+    async def set_user_join_chat(self, user_id: int, chat_id: int) -> None:
+        """Запоминает канал, в который юзер подал заявку (одобрим в конце сценария)."""
+        await self.conn.execute(
+            "UPDATE bot_users SET join_chat_id=? WHERE id=?", (int(chat_id), user_id)
+        )
+        await self.conn.commit()
 
     async def cleanup_old_pending(self, days: int = 30) -> int:
         """Удаляет заявки старше N дней. Возвращает число удалённых (патч 15)."""

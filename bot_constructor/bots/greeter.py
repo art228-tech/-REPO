@@ -137,6 +137,14 @@ def register_greeter_handlers(dp: Dispatcher, bot_record_id: int) -> None:
             is_premium=bool(getattr(req.from_user, "is_premium", False)),
             source="request",
         )
+        # Запоминаем канал заявки — одобрим его в КОНЦЕ сценария.
+        # Пока заявка не одобрена, у бота есть право писать юзеру в ЛС;
+        # после одобрения Telegram это право забирает (PEER_ID_INVALID),
+        # поэтому авто-приём в канал ломает доставку сценария.
+        try:
+            await db.set_user_join_chat(user["id"], req.chat.id)
+        except Exception as _e:
+            log.warning("set_user_join_chat: %s", _e)
         # Если заявка по нашей инвайт-ссылке канала — привяжем юзера к ней
         _il = getattr(req, "invite_link", None)
         if _il is not None and getattr(_il, "invite_link", None):
