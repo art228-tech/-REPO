@@ -1,6 +1,8 @@
 """Хелперы: цвета кнопок, рендер сообщений, парсинг."""
 from __future__ import annotations
 
+import logging
+import os
 from typing import Any
 
 from aiogram import Bot
@@ -12,7 +14,10 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardRemove,
+    FSInputFile,
 )
+
+log = logging.getLogger("helpers")
 
 
 class CopyOriginGone(Exception):
@@ -141,6 +146,7 @@ async def send_step_message(
     copy_from: dict | None = None,  # {chat_id, message_id}
     reply_markup: Any = None,
     keyboard_markup: Any = None,  # ReplyKeyboardMarkup
+    photo_path: str | None = None,  # локальный файл фото (file_id не переносится между ботами)
 ) -> int | None:
     """
     Отправляет сообщение в зависимости от типа контента.
@@ -184,6 +190,14 @@ async def send_step_message(
             )
             return msg.message_id
 
+        if photo_path and os.path.exists(photo_path):
+            # file_id, полученный конструктором, нельзя переслать через приветку
+            # (file_id привязан к боту). Поэтому шлём фото как локальный файл.
+            msg = await bot.send_photo(
+                chat_id, FSInputFile(photo_path), caption=text or "", reply_markup=reply_markup
+            )
+            return msg.message_id
+
         if photo_file_id:
             msg = await bot.send_photo(
                 chat_id, photo_file_id, caption=text or "", reply_markup=reply_markup
@@ -209,8 +223,46 @@ async def send_step_message(
     except TelegramForbiddenError:
         raise  # пробрасываем выше — юзер заблокировал
     except Exception as e:
-        print(f"[send_step_message] error: {e}")
+        log.warning("send_step_message error (chat %s): %s", chat_id, e)
         return None
+
+
+async def rehost_step_photos(bot: Bot, media_dir: str) -> int:
+    """Скачивает фото шагов (photo_file_id конструктора) на диск и проставляет
+    cfg['photo_path']. file_id привязан к боту-конструктору и не работает у
+    приветок — поэтому фото надо отправлять как локальный файл (FSInputFile)."""
+    import json
+    from database import get_db
+
+    os.makedirs(media_dir, exist_ok=True)
+    db = get_db()
+    cur = await db.conn.execute("SELECT id, config FROM steps")
+    rows = await cur.fetchall()
+    fixed = 0
+    for r in rows:
+        sid, cfg_raw = r[0], r[1]
+        try:
+            cfg = json.loads(cfg_raw)
+        except Exception:
+            continue
+        fid = cfg.get("photo_file_id")
+        if not fid:
+            continue
+        path = cfg.get("photo_path")
+        if path and os.path.exists(path):
+            continue
+        dest = os.path.join(media_dir, f"step_{sid}.jpg")
+        try:
+            await bot.download(fid, destination=dest)
+        except Exception as e:
+            log.warning("rehost_step_photos: шаг %s — %s", sid, e)
+            continue
+        cfg["photo_path"] = dest
+        await db.update_step(sid, config=json.dumps(cfg, ensure_ascii=False))
+        fixed += 1
+    if fixed:
+        log.info("rehost_step_photos: перезалито фото шагов: %s", fixed)
+    return fixed
 
 
 def reply_keyboard(text: str) -> ReplyKeyboardMarkup:

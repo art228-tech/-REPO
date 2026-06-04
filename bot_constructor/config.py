@@ -18,6 +18,10 @@ ADMIN_IDS: list[int] = _int_list(os.getenv("ADMIN_IDS", ""))
 # База данных
 DB_PATH: str = os.getenv("DB_PATH", str(BASE_DIR / "data.db"))
 
+# Папка для медиа (фото шагов скачиваются сюда конструктором, чтобы приветки
+# могли отправлять их как файл — file_id не переносится между ботами).
+MEDIA_DIR: str = os.getenv("MEDIA_DIR", str(BASE_DIR / "media"))
+
 # Веб-приложение (рулетка)
 WEBAPP_URL: str = os.getenv("WEBAPP_URL", "").rstrip("/")
 WEBAPP_HOST: str = os.getenv("WEBAPP_HOST", "0.0.0.0")

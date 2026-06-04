@@ -339,7 +339,8 @@ class ScenarioEngine:
         markup = build_inline_keyboard(rows)
         try:
             return await send_step_message(
-                bot, user["tg_id"], text=text, photo_file_id=photo, reply_markup=markup
+                bot, user["tg_id"], text=text, photo_file_id=photo,
+                photo_path=cfg.get("photo_path"), reply_markup=markup
             )
         except TelegramForbiddenError:
             await get_db().mark_user_dead(user["id"])
@@ -404,7 +405,8 @@ class ScenarioEngine:
         markup = build_inline_keyboard(rows)
         try:
             return await send_step_message(
-                bot, user["tg_id"], text=text, photo_file_id=photo, reply_markup=markup
+                bot, user["tg_id"], text=text, photo_file_id=photo,
+                photo_path=cfg.get("photo_path"), reply_markup=markup
             )
         except TelegramForbiddenError:
             await get_db().mark_user_dead(user["id"])
@@ -462,6 +464,7 @@ class ScenarioEngine:
                 user["tg_id"],
                 text=text,
                 photo_file_id=photo,
+                photo_path=cfg.get("photo_path"),
                 sticker_file_id=sticker,
                 animation_file_id=animation,
                 video_file_id=video,
