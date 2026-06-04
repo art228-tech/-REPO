@@ -36,8 +36,10 @@ class StepStates(StatesGroup):
     op_sponsor_title = State()
     op_sponsor_button_text = State()
     op_sponsor_button_color = State()
+    op_sponsor_button_emoji = State()     # премиум-эмодзи на кнопку спонсора
     op_check_btn_text = State()
     op_check_btn_color = State()
+    op_check_btn_emoji = State()          # премиум-эмодзи на кнопку «Проверить»
     op_duplicate_after = State()
     op_duplicate_increment = State()
     op_duplicate_max = State()

@@ -392,6 +392,7 @@ class ScenarioEngine:
                 "text": sp.get("button_text") or sp.get("title") or "Подписаться",
                 "url": sp.get("link"),
                 "color": sp.get("button_color") or "default",
+                "icon_custom_emoji_id": sp.get("icon_custom_emoji_id"),
             })
         rows: list[list[dict]] = []
         for i in range(0, len(sponsor_buttons), 2):
@@ -401,6 +402,7 @@ class ScenarioEngine:
             "text": check_btn_text,
             "callback_data": f"op_check:{step['id']}",
             "color": check_btn_color,
+            "icon_custom_emoji_id": cfg.get("check_button_custom_emoji_id"),
         }])
         markup = build_inline_keyboard(rows)
         try:

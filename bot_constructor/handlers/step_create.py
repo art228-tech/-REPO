@@ -432,23 +432,58 @@ async def m_op_sp_btn_text(message: Message, state: FSMContext) -> None:
     )
 
 
+async def _finish_op_sponsor(target, state: FSMContext) -> None:
+    data = await state.get_data()
+    draft = data["draft"]
+    sp = draft.pop("_current_sponsor", None)
+    if sp:
+        draft.setdefault("sponsors", []).append(sp)
+    await state.update_data(draft=draft)
+    await state.set_state(StepStates.op_add_sponsor)
+    text = (
+        f"✅ Спонсор добавлен.\n"
+        f"Всего спонсоров: <b>{len(draft.get('sponsors', []))}</b>\n\n"
+        f"Добавить ещё или закончить?"
+    )
+    msg = target.message if hasattr(target, "message") else target
+    try:
+        await msg.edit_text(text, reply_markup=add_sponsor_now_kb())
+    except Exception:
+        await msg.answer(text, reply_markup=add_sponsor_now_kb())
+
+
 @router.callback_query(StepStates.op_sponsor_button_color, F.data.startswith("spclr:"))
 async def cb_op_sp_color(cb: CallbackQuery, state: FSMContext) -> None:
     color = cb.data.split(":")[1]
     data = await state.get_data()
     draft = data["draft"]
-    sp = draft.pop("_current_sponsor")
-    sp["button_color"] = color
-    draft.setdefault("sponsors", []).append(sp)
+    draft.setdefault("_current_sponsor", {})["button_color"] = color
     await state.update_data(draft=draft)
-    await state.set_state(StepStates.op_add_sponsor)
-    await cb.message.edit_text(
-        f"✅ Спонсор добавлен.\n"
-        f"Всего спонсоров: <b>{len(draft['sponsors'])}</b>\n\n"
-        f"Добавить ещё или закончить?",
-        reply_markup=add_sponsor_now_kb(),
-    )
+    await state.set_state(StepStates.op_sponsor_button_emoji)
+    await cb.message.edit_text(_PREMIUM_PROMPT, reply_markup=_skip_emoji_kb("spemoji:skip"))
     await cb.answer()
+
+
+@router.callback_query(StepStates.op_sponsor_button_emoji, F.data == "spemoji:skip")
+async def cb_op_sp_emoji_skip(cb: CallbackQuery, state: FSMContext) -> None:
+    await _finish_op_sponsor(cb, state)
+    await cb.answer()
+
+
+@router.message(StepStates.op_sponsor_button_emoji)
+async def m_op_sp_emoji(message: Message, state: FSMContext) -> None:
+    emoji_id = _extract_custom_emoji_id(message)
+    if not emoji_id:
+        await message.answer(
+            "Не нашёл премиум-эмодзи. Пришли его или нажми «Пропустить».",
+            reply_markup=_skip_emoji_kb("spemoji:skip"),
+        )
+        return
+    data = await state.get_data()
+    draft = data["draft"]
+    draft.setdefault("_current_sponsor", {})["icon_custom_emoji_id"] = emoji_id
+    await state.update_data(draft=draft)
+    await _finish_op_sponsor(message, state)
 
 
 @router.callback_query(StepStates.op_add_sponsor, F.data == "sp:done")
@@ -484,6 +519,19 @@ async def m_op_check_text(message: Message, state: FSMContext) -> None:
     )
 
 
+async def _after_check_btn(target, state: FSMContext) -> None:
+    await state.set_state(StepStates.op_duplicate_after)
+    text = (
+        "⏱ <b>Время между дублями</b>: через сколько секунд писать "
+        "повторно, если юзер не пройдёт ОП?\nПришли число."
+    )
+    msg = target.message if hasattr(target, "message") else target
+    try:
+        await msg.edit_text(text)
+    except Exception:
+        await msg.answer(text)
+
+
 @router.callback_query(StepStates.op_check_btn_color, F.data.startswith("opclr:"))
 async def cb_op_check_color(cb: CallbackQuery, state: FSMContext) -> None:
     color = cb.data.split(":")[1]
@@ -491,12 +539,31 @@ async def cb_op_check_color(cb: CallbackQuery, state: FSMContext) -> None:
     draft = data["draft"]
     draft["check_button_color"] = color
     await state.update_data(draft=draft)
-    await state.set_state(StepStates.op_duplicate_after)
-    await cb.message.edit_text(
-        "⏱ <b>Время между дублями</b>: через сколько секунд писать "
-        "повторно, если юзер не пройдёт ОП?\nПришли число."
-    )
+    await state.set_state(StepStates.op_check_btn_emoji)
+    await cb.message.edit_text(_PREMIUM_PROMPT, reply_markup=_skip_emoji_kb("opemoji:skip"))
     await cb.answer()
+
+
+@router.callback_query(StepStates.op_check_btn_emoji, F.data == "opemoji:skip")
+async def cb_op_check_emoji_skip(cb: CallbackQuery, state: FSMContext) -> None:
+    await _after_check_btn(cb, state)
+    await cb.answer()
+
+
+@router.message(StepStates.op_check_btn_emoji)
+async def m_op_check_emoji(message: Message, state: FSMContext) -> None:
+    emoji_id = _extract_custom_emoji_id(message)
+    if not emoji_id:
+        await message.answer(
+            "Не нашёл премиум-эмодзи. Пришли его или нажми «Пропустить».",
+            reply_markup=_skip_emoji_kb("opemoji:skip"),
+        )
+        return
+    data = await state.get_data()
+    draft = data["draft"]
+    draft["check_button_custom_emoji_id"] = emoji_id
+    await state.update_data(draft=draft)
+    await _after_check_btn(message, state)
 
 
 @router.message(StepStates.op_duplicate_after)
@@ -576,6 +643,7 @@ async def m_op_skip_timer(message: Message, state: FSMContext) -> None:
         "sponsors": draft.get("sponsors", []),
         "check_button_text": draft.get("check_button_text") or "✅ Проверить",
         "check_button_color": draft.get("check_button_color") or "green",
+        "check_button_custom_emoji_id": draft.get("check_button_custom_emoji_id"),
         "skip_timer": int(draft.get("skip_timer", 0) or 0),
     }
     await get_db().add_step(
@@ -653,11 +721,26 @@ async def m_msg_btn_url(message: Message, state: FSMContext) -> None:
     )
 
 
-def _skip_emoji_kb():
+def _skip_emoji_kb(cb: str = "mbemoji:skip"):
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="⏭ Пропустить", callback_data="mbemoji:skip"),
+        InlineKeyboardButton(text="⏭ Пропустить", callback_data=cb),
     ]])
+
+
+def _extract_custom_emoji_id(message: Message):
+    """custom_emoji_id первого премиум-эмодзи в сообщении, либо None."""
+    for e in (message.entities or []):
+        if getattr(e, "type", None) == "custom_emoji":
+            return e.custom_emoji_id
+    return None
+
+
+_PREMIUM_PROMPT = (
+    "💎 Хочешь <b>премиум-эмодзи на кнопку</b>?\n\n"
+    "Пришли сообщение, где есть нужный премиум-эмодзи (одним эмодзи), "
+    "или нажми «Пропустить»."
+)
 
 
 async def _finish_msg_button(target, state: FSMContext) -> None:
@@ -705,12 +788,7 @@ async def cb_msg_btn_emoji_skip(cb: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(StepStates.msg_add_button_emoji)
 async def m_msg_btn_emoji(message: Message, state: FSMContext) -> None:
-    # Достаём custom_emoji_id из премиум-эмодзи в сообщении.
-    emoji_id = None
-    for e in (message.entities or []):
-        if getattr(e, "type", None) == "custom_emoji":
-            emoji_id = e.custom_emoji_id
-            break
+    emoji_id = _extract_custom_emoji_id(message)
     if not emoji_id:
         await message.answer(
             "Не нашёл премиум-эмодзи в сообщении. Пришли сообщение, состоящее из "
