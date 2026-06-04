@@ -122,6 +122,37 @@ async def cb_sponsors_list(cb: CallbackQuery, state: FSMContext) -> None:
     await cb.answer()
 
 
+# ===== Добавить нового спонсора в существующий шаг =====
+@router.callback_query(F.data.startswith("spnew:"))
+async def cb_sponsor_new(cb: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(cb.from_user.id):
+        await cb.answer("⛔", show_alert=True)
+        return
+    step_id = int(cb.data.split(":")[1])
+    step, cfg = await _load_step(step_id)
+    if not step:
+        await cb.answer("Шаг не найден", show_alert=True)
+        return
+    sp = {
+        "title": "Новый спонсор",
+        "button_text": "Подписаться",
+        "button_color": "default",
+        "link": "",
+        "channel_id": 0,
+        "check": True,
+        "request_mode": False,
+    }
+    cfg["sponsors"].append(sp)
+    idx = len(cfg["sponsors"]) - 1
+    await _save_step_cfg(step_id, cfg)
+    await cb.message.edit_text(
+        "✅ Спонсор добавлен. Заполни поля (как минимум «🔗 Ссылка», а для "
+        "проверки подписки — «📡 chat_id»):\n\n" + _format_sp(sp),
+        reply_markup=_one_kb(step_id, idx, sp),
+    )
+    await cb.answer()
+
+
 # ===== Открыть карточку одного спонсора =====
 @router.callback_query(F.data.startswith("spo:"))
 async def cb_sponsor_open(cb: CallbackQuery, state: FSMContext) -> None:
