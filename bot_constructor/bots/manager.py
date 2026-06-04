@@ -27,7 +27,7 @@ class BotManager:
         entry = self._bots.get(bot_id)
         if not entry:
             return None
-        return entry.get("bot")
+        return entry[0]  # (bot, dp, task)
 
     def __init__(self) -> None:
         # bot_record_id -> (Bot, Dispatcher, Task)

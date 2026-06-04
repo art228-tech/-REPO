@@ -85,12 +85,14 @@ def register_greeter_handlers(dp: Dispatcher, bot_record_id: int) -> None:
     async def _due_starts_worker() -> None:
         """Каждые 30 сек проверяет отложенные старты — восстановление
         после перезапуска бота."""
+        from bots.manager import get_manager
         engine = get_engine()
         while True:
             try:
                 await asyncio.sleep(30)
                 bot_record = await _get_bot_record()
-                if bot_record:
+                bot = get_manager().get_bot_instance(bot_record_id)
+                if bot_record and bot is not None:
                     await engine.run_due_starts(bot, bot_record)
             except asyncio.CancelledError:
                 return
