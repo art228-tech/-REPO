@@ -17,6 +17,7 @@ class StepStates(StatesGroup):
     msg_add_button_text = State()
     msg_add_button_url = State()
     msg_add_button_color = State()
+    msg_add_button_emoji = State()        # премиум-эмодзи на кнопку (необязательно)
     msg_wait_mode = State()               # таймер / любое сообщение / без ожидания
     msg_wait_timer = State()              # вводим число секунд
     msg_keyboard_choice = State()         # добавлять ли кнопку клавы
