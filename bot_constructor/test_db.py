@@ -127,7 +127,10 @@ def test_helpers():
     ])
     assert kb is not None
     assert len(kb.inline_keyboard) == 2
-    assert kb.inline_keyboard[1][0].text == "🔴 B"
+    # Цвет — нативный (поле style), текст без эмодзи-префиксов.
+    _b = kb.inline_keyboard[1][0]
+    assert _b.text == "B", _b.text
+    assert _b.model_dump(exclude_none=True).get("style") == "danger"
 
     # пустая
     assert build_inline_keyboard([]) is None

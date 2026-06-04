@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from utils.helpers import COLOR_LABELS
+from utils.helpers import STYLE_LABELS
 
 
 def main_menu() -> InlineKeyboardMarkup:
@@ -110,7 +110,7 @@ def step_view(step_id: int, bot_id: int, step_type: str = "") -> InlineKeyboardM
 
 def color_picker(prefix: str) -> InlineKeyboardMarkup:
     rows = []
-    pairs = list(COLOR_LABELS.items())
+    pairs = list(STYLE_LABELS.items())
     for i in range(0, len(pairs), 2):
         line = []
         for code, label in pairs[i : i + 2]:

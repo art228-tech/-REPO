@@ -72,8 +72,33 @@ COLOR_LABELS = {
     "gift":    "🎁 Подарок",
 }
 
-# Псевдоним для нативных цветов кнопок (используется в sponsor_edit, патч 6/13)
-STYLE_LABELS = COLOR_LABELS
+# Нативные цвета кнопок (Bot API): ровно 4 варианта. Передаются в поле `style`
+# конструктора InlineKeyboardButton (aiogram 3.7+ сериализует его в запрос).
+STYLE_LABELS = {
+    "default": "⚪ Обычная",
+    "primary": "🔵 Синяя",
+    "success": "🟢 Зелёная",
+    "danger":  "🔴 Красная",
+}
+
+# Перевод старых/произвольных кодов цвета в нативный style ("" = без цвета).
+_LEGACY_TO_STYLE = {
+    "default": "", "": "",
+    "primary": "primary", "blue": "primary",
+    "success": "success", "green": "success",
+    "danger": "danger", "red": "danger",
+    # старые алиасы и эмодзи-цвета → ближайший нативный
+    "destructive": "danger", "secondary": "",
+    "yellow": "", "purple": "primary", "orange": "danger",
+    "white": "", "black": "", "fire": "danger", "star": "primary",
+    "heart": "danger", "rocket": "primary", "lock": "", "key": "primary",
+    "check": "success", "cross": "danger", "gift": "success",
+}
+
+
+def style_for(color: str | None) -> str:
+    """Нативный style ('primary'|'success'|'danger'|'') для кода цвета."""
+    return _LEGACY_TO_STYLE.get((color or "default"), "")
 
 
 def color_button_text(text: str, color: str = "default") -> str:
@@ -88,8 +113,8 @@ def build_inline_keyboard(rows: list[list[dict[str, Any]]]) -> InlineKeyboardMar
     for row in rows:
         line: list[InlineKeyboardButton] = []
         for btn in row:
-            text = color_button_text(btn.get("text", "Кнопка"), btn.get("color", "default"))
-            kwargs: dict[str, Any] = {"text": text}
+            # Текст кнопки — как есть (никаких эмодзи-префиксов). Цвет — нативный.
+            kwargs: dict[str, Any] = {"text": btn.get("text", "Кнопка")}
             if btn.get("url"):
                 kwargs["url"] = btn["url"]
             elif btn.get("callback_data"):
@@ -99,16 +124,17 @@ def build_inline_keyboard(rows: list[list[dict[str, Any]]]) -> InlineKeyboardMar
                 kwargs["web_app"] = WebAppInfo(url=btn["web_app"])
             else:
                 continue
-            # Нативный цвет (Bot API 9.4) и премиум-стикер.
-            # Передаём через kwargs — если поле не поддерживается, отлавливаем.
-            if btn.get("style"):
-                kwargs["style"] = btn["style"]
+            # Нативный цвет кнопки: из явного style либо из кода color.
+            _style = btn.get("style") or style_for(btn.get("color"))
+            if _style:
+                kwargs["style"] = _style
+            # Премиум-эмодзи на кнопке (custom emoji id).
             if btn.get("icon_custom_emoji_id"):
                 kwargs["icon_custom_emoji_id"] = btn["icon_custom_emoji_id"]
             try:
                 line.append(InlineKeyboardButton(**kwargs))
-            except TypeError:
-                # старый aiogram без style/icon — убираем эти поля
+            except (TypeError, ValueError):
+                # очень старый aiogram без style/icon — убираем эти поля
                 kwargs.pop("style", None)
                 kwargs.pop("icon_custom_emoji_id", None)
                 line.append(InlineKeyboardButton(**kwargs))
