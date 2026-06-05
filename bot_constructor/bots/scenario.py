@@ -70,11 +70,31 @@ class ScenarioEngine:
         else:
             delay = int(bot_record["join_delay"] or 0)
         if delay > 0:
+            # «Прогрев» личка: окно на отправку «холодному» юзеру (по заявке)
+            # короткое и закрывается после приёма заявки. Поэтому СРАЗУ шлём
+            # техническое сообщение и удаляем — это закрепляет приватный чат,
+            # и отложенный (через delay) сценарий потом доставится спокойно,
+            # даже после приёма заявки.
+            await self._warmup_dm(bot, user)
             await self._schedule_delayed_start(
                 bot, bot_record, user["id"], delay
             )
         else:
             await self._send_step_to_user(bot, bot_record, user["id"], step_order=0)
+
+    async def _warmup_dm(self, bot: Bot, user) -> None:
+        """Закрепляет приватный чат: отправляет и сразу удаляет техническое
+        сообщение, пока окно доступа из заявки ещё открыто."""
+        chat = _dm_chat(user)
+        try:
+            m = await bot.send_message(chat, "\u23f3", disable_notification=True)
+            try:
+                await bot.delete_message(chat, m.message_id)
+            except Exception:
+                pass
+            log.info("[warmup] личка закреплена для chat=%s", chat)
+        except Exception as e:
+            log.warning("[warmup] не удалось закрепить личку chat=%s: %s", chat, e)
 
     async def advance(self, bot: Bot, bot_record, user_id: int) -> None:
         """Продвигает пользователя на следующий шаг."""
