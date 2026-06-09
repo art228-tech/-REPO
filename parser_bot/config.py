@@ -24,16 +24,24 @@ def _int(name: str, default: int) -> int:
         return default
 
 
+def _str(name: str, default: str) -> str:
+    """Возвращает default, если переменная не задана ИЛИ пустая."""
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip()
+
+
 @dataclass
 class Config:
     # Бот управления
-    bot_token: str = os.getenv("BOT_TOKEN", "8543204345:AAE_h5gLkubItmyiF0lX31LlYBb8OWFgQhk")
+    bot_token: str = _str("BOT_TOKEN", "8543204345:AAE_h5gLkubItmyiF0lX31LlYBb8OWFgQhk")
     admin_id: int = _int("ADMIN_ID", 8266999073)
 
     # Telegram API (для входа в аккаунт через Telethon).
     # По умолчанию — личные ключи (проверены, рабочие). Можно переопределить в .env.
     api_id: int = _int("API_ID", 33641898)
-    api_hash: str = os.getenv("API_HASH", "64869358174f0ce375d887edc013cec6")
+    api_hash: str = _str("API_HASH", "64869358174f0ce375d887edc013cec6")
 
     # Параметры парсинга (значения по умолчанию; можно менять из бота — см. settings)
     min_members: int = _int("MIN_MEMBERS", 1000)
@@ -43,7 +51,7 @@ class Config:
     # Сколько последних сообщений берём для оценки активности (сообщений/сутки)
     activity_sample: int = _int("ACTIVITY_SAMPLE", 60)
 
-    db_path: Path = field(default_factory=lambda: Path(os.getenv("DB_PATH", "data/parser.db")))
+    db_path: Path = field(default_factory=lambda: Path(_str("DB_PATH", "data/parser.db")))
 
     # Ключевые слова для эвристического детекта.
     captcha_keywords: tuple[str, ...] = (
