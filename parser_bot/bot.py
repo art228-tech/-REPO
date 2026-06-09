@@ -332,4 +332,17 @@ def build_dispatcher(cfg: Config, db: Database, userbot: UserBot, crawler: Crawl
         )
         await call.answer()
 
+    # ---------- фолбэк: чтобы бот всегда отвечал ----------
+    @router.message()
+    async def fallback(message: Message, state: FSMContext):
+        if not is_admin(message.from_user.id):
+            await message.answer(
+                "⛔ Доступ только для администратора.\n"
+                f"Ваш Telegram id: <code>{message.from_user.id}</code>\n"
+                f"(в настройках разрешён id: <code>{cfg.admin_id}</code>)"
+            )
+            return
+        await state.clear()
+        await message.answer("Не понял команду. Открываю меню:", reply_markup=main_menu())
+
     return dp

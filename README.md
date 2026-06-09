@@ -49,6 +49,36 @@ cp .env.example .env
 python -m parser_bot
 ```
 
+## Важно: бот отвечает только пока запущен процесс
+
+Telegram-бот реагирует на сообщения только когда `python -m parser_bot` реально
+работает. Если бот «не отвечает на /start» — значит процесс не запущен. Запустите
+его и держите запущенным (на сервере — через systemd/tmux/screen).
+
+### Автозапуск через systemd (на сервере)
+
+```ini
+# /etc/systemd/system/parser-bot.service
+[Unit]
+Description=Telegram chat parser bot
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/parser-bot
+ExecStart=/usr/bin/python3 -m parser_bot
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now parser-bot
+sudo journalctl -u parser-bot -f   # смотреть логи
+```
+
 ## Настройки (`.env`)
 
 | Переменная       | Назначение                                              |

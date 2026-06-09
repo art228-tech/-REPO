@@ -46,6 +46,8 @@ async def main() -> None:
 
     log.info("Бот запускается...")
     try:
+        # на всякий случай снимаем вебхук (иначе polling не получает апдейты)
+        await bot.delete_webhook(drop_pending_updates=False)
         await dp.start_polling(bot)
     finally:
         await crawler.stop()
