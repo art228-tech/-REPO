@@ -60,6 +60,7 @@ class BotSettingsStates(StatesGroup):
     wch_set_delay = State()
     join_delay = State()
     delete_timer = State()
+    change_token = State()           # смена токена приветки
 
 
 class RefStates(StatesGroup):

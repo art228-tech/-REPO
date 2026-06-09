@@ -34,6 +34,7 @@ def bot_menu(bot_id: int) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📣 Рассылка", callback_data=f"bc:{bot_id}")],
         [InlineKeyboardButton(text="🔗 Реф-ссылки", callback_data=f"refs:{bot_id}")],
         [InlineKeyboardButton(text="📊 Ссылки канала", callback_data=f"chlinks:{bot_id}")],
+        [InlineKeyboardButton(text="🔄 Сменить токен", callback_data=f"retoken:{bot_id}")],
         [InlineKeyboardButton(text="🗑 Удалить приветку", callback_data=f"delbot:{bot_id}")],
         [InlineKeyboardButton(text="« К списку", callback_data="mybots")],
     ])

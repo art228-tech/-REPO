@@ -5,7 +5,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from bots.manager import get_manager
+from bots.manager import get_manager, validate_token
 from database import get_db
 from handlers.start import is_admin
 from keyboards.constructor_kb import (
@@ -16,6 +16,7 @@ from keyboards.constructor_kb import (
     yes_no,
 )
 from states.fsm import BotSettingsStates
+from utils.helpers import parse_token
 
 router = Router(name="bot_menu")
 
@@ -187,3 +188,80 @@ async def cb_toggle_typing_mode(cb: CallbackQuery, state: FSMContext) -> None:
         reply_markup=settings_menu(bot_id, b["join_delay"], b["delete_timer"], b["typing_mode"])
     )
     await cb.answer("Вид: " + ("с имитацией печати" if new_mode else "обычная"))
+
+
+# ---------------- Смена токена приветки ----------------
+
+@router.callback_query(F.data.startswith("retoken:"))
+async def cb_retoken(cb: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(cb.from_user.id):
+        await cb.answer("⛔", show_alert=True)
+        return
+    bot_id = int(cb.data.split(":")[1])
+    b = await get_db().get_greeting_bot(bot_id)
+    if not b:
+        await cb.answer("Не найдено", show_alert=True)
+        return
+    await state.set_state(BotSettingsStates.change_token)
+    await state.update_data(retoken_bot_id=bot_id)
+    await cb.message.edit_text(
+        f"🔄 <b>Смена токена приветки</b> @{b['username']}\n\n"
+        "Пришли <b>новый токен</b> (от @BotFather) в формате "
+        "<code>123456:AAAA...</code>.\n\n"
+        "Весь сценарий, настройки, каналы и реф-ссылки <b>сохранятся</b> и "
+        "перенесутся на нового бота. Старый бот просто отвяжется.",
+        reply_markup=back_to(f"bot:{bot_id}", "❌ Отмена"),
+    )
+    await cb.answer()
+
+
+@router.message(BotSettingsStates.change_token)
+async def msg_change_token(message: Message, state: FSMContext) -> None:
+    if not is_admin(message.from_user.id):
+        return
+    token = parse_token(message.text or "")
+    if not token:
+        await message.answer("❌ Это не похоже на токен. Пришли <code>123456:AAAA...</code> или /start для выхода.")
+        return
+    info = await validate_token(token)
+    if not info:
+        await message.answer("❌ Токен невалиден — Telegram его отверг. Пришли другой или /start.")
+        return
+    data = await state.get_data()
+    bot_id = data.get("retoken_bot_id")
+    if not bot_id:
+        await message.answer("Сессия устарела, открой приветку заново.")
+        await state.clear()
+        return
+    db = get_db()
+    # Нельзя занять токен/идентификатор другой приветки
+    existing = await db.get_greeting_bot_by_tg_id(info["tg_id"])
+    if existing and existing["id"] != bot_id:
+        await message.answer(
+            f"⚠️ Этот бот уже добавлен как отдельная приветка (@{existing['username']}). "
+            "Сначала удали её или возьми другой токен."
+        )
+        return
+    # Останавливаем старый поллинг, меняем токен в БД, запускаем новый
+    try:
+        await get_manager().stop_bot(bot_id)
+    except Exception:
+        pass
+    await db.update_bot_token(bot_id, token, info["tg_id"], info["username"], info["name"])
+    await state.clear()
+    try:
+        await get_manager().start_bot(bot_id, token)
+    except Exception as e:
+        await message.answer(
+            f"⚠️ Токен сменён в БД, но запустить нового бота не вышло: {e}\n"
+            "Проверь токен и права."
+        )
+        return
+    b = await db.get_greeting_bot(bot_id)
+    await message.answer(
+        f"✅ Токен сменён. Теперь приветка работает на <b>@{b['username']}</b>.\n"
+        "Сценарий и все настройки на месте.\n\n"
+        "⚠️ Не забудь сделать <b>нового</b> бота админом нужных каналов "
+        "(и каналов-спонсоров, если есть ОП).",
+        reply_markup=bot_menu(bot_id),
+    )

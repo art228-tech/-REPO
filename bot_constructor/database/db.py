@@ -609,6 +609,16 @@ class DB:
                     return True
         return False
 
+    async def update_bot_token(self, bot_id: int, token: str, tg_id: int,
+                               username: str, name: str) -> None:
+        """Меняет токен приветки (и её tg_id/username/name). Сценарий, настройки,
+        каналы и реф-ссылки привязаны к bot_id и остаются на месте."""
+        await self.conn.execute(
+            "UPDATE greeting_bots SET token=?, tg_id=?, username=?, name=? WHERE id=?",
+            (token, int(tg_id), username, name, bot_id),
+        )
+        await self.conn.commit()
+
     async def set_user_msg_chat(self, user_id: int, chat_id: int) -> None:
         """Сохраняет user_chat_id из заявки — спец-чат для отправки в ЛС."""
         await self.conn.execute(
