@@ -33,8 +33,18 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# заполнить API_ID / API_HASH (с https://my.telegram.org)
+# API_ID / API_HASH можно НЕ заполнять — по умолчанию используются публичные
+# ключи Telegram Desktop. Но с ними выше риск ограничений аккаунта,
+# поэтому для надёжной работы лучше получить свои на https://my.telegram.org
 ```
+
+### Про API_ID / API_HASH
+
+Для входа в **аккаунт** Telethon всегда требует `api_id`/`api_hash` (часть протокола,
+строка сессии их в себе не хранит). Чтобы можно было запуститься без регистрации,
+в `config.py` зашиты публичные ключи Telegram Desktop (`api_id=2040`). Они рабочие,
+но «общие» — с ними чаще прилетают ограничения/баны. Для серьёзного использования
+впишите свои ключи в `.env`.
 
 ## Запуск
 

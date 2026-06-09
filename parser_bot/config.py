@@ -30,9 +30,13 @@ class Config:
     bot_token: str = os.getenv("BOT_TOKEN", "8543204345:AAE_h5gLkubItmyiF0lX31LlYBb8OWFgQhk")
     admin_id: int = _int("ADMIN_ID", 8266999073)
 
-    # Telegram API (для входа в аккаунт через Telethon)
-    api_id: int = _int("API_ID", 0)
-    api_hash: str = os.getenv("API_HASH", "")
+    # Telegram API (для входа в аккаунт через Telethon).
+    # По умолчанию — публичные ключи Telegram Desktop, чтобы можно было
+    # запуститься без регистрации своих. Это рабочий, но "общий" api_id:
+    # с ним выше риск ограничений/банов аккаунта. Для серьёзной работы
+    # получите свои на https://my.telegram.org и впишите в .env.
+    api_id: int = _int("API_ID", 2040)
+    api_hash: str = os.getenv("API_HASH", "b18441a1ff607e10a989891a5462e627")
 
     # Параметры парсинга
     min_members: int = _int("MIN_MEMBERS", 1000)
@@ -65,6 +69,11 @@ class Config:
             problems.append(
                 "API_ID/API_HASH не заданы — вход в аккаунт через Telethon работать не будет. "
                 "Получите их на https://my.telegram.org"
+            )
+        elif self.api_id == 2040:
+            problems.append(
+                "Используются публичные api_id/api_hash (Telegram Desktop). Работает, "
+                "но повышает риск ограничений аккаунта — лучше указать свои в .env."
             )
         return problems
 
