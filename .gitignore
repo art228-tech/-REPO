@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# App data / secrets
+.env
+*.session
+*.session-journal
+data/
+*.db
+*.sqlite3
+*.log
