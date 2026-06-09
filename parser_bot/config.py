@@ -35,10 +35,13 @@ class Config:
     api_id: int = _int("API_ID", 33641898)
     api_hash: str = os.getenv("API_HASH", "64869358174f0ce375d887edc013cec6")
 
-    # Параметры парсинга
+    # Параметры парсинга (значения по умолчанию; можно менять из бота — см. settings)
     min_members: int = _int("MIN_MEMBERS", 1000)
+    min_messages_per_day: int = _int("MIN_MESSAGES_PER_DAY", 50)
     check_interval: int = _int("CHECK_INTERVAL", 25)
     probe_wait: int = _int("PROBE_WAIT", 12)
+    # Сколько последних сообщений берём для оценки активности (сообщений/сутки)
+    activity_sample: int = _int("ACTIVITY_SAMPLE", 60)
 
     db_path: Path = field(default_factory=lambda: Path(os.getenv("DB_PATH", "data/parser.db")))
 

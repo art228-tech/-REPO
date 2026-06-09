@@ -28,9 +28,11 @@ PAGE_SIZE = 20
 VISIBLE_STATUSES = [
     "unrestricted",
     "captcha",
+    "not_chat",
     "op_checked",
     "op_unchecked",
     "small",
+    "low_activity",
     "queue",
     "error",
 ]
@@ -45,6 +47,11 @@ class LoginStates(StatesGroup):
 
 class SeedStates(StatesGroup):
     waiting = State()
+
+
+class SettingsStates(StatesGroup):
+    members = State()
+    msgs = State()
 
 
 def main_menu() -> InlineKeyboardMarkup:
@@ -65,6 +72,7 @@ def main_menu() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🗂 Базы", callback_data="bases"),
                 InlineKeyboardButton(text="ℹ️ Статус", callback_data="status"),
             ],
+            [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings")],
         ]
     )
 
@@ -100,9 +108,17 @@ def build_dispatcher(cfg: Config, db: Database, userbot: UserBot, crawler: Crawl
         authorized = await userbot.is_authorized()
         acc = await userbot.account_name() if authorized else "—"
         running = crawler.running
+        min_m = await crawler.min_members()
+        min_msg = await crawler.min_msgs_per_day()
+        avg = await db.avg_msgs_per_day("unrestricted")
         lines = [
             f"👤 Аккаунт: <b>{html.escape(acc)}</b>",
             f"⚙️ Парсинг: <b>{'идёт (' + (crawler.mode or '') + ')' if running else 'остановлен'}</b>",
+            "",
+            "<b>Критерии «без ограничений»:</b>",
+            f"• мин. участников: <b>{min_m}</b>",
+            f"• мин. сообщений/сутки: <b>{min_msg}</b>",
+            f"• среднее сообщений/сутки в базе: <b>{avg:.1f}</b>",
             "",
             "<b>Базы:</b>",
         ]
@@ -257,6 +273,73 @@ def build_dispatcher(cfg: Config, db: Database, userbot: UserBot, crawler: Crawl
         await call.message.answer(msg, reply_markup=main_menu())
         await call.answer()
 
+    # ---------- настройки ----------
+    @router.callback_query(F.data == "settings")
+    async def cb_settings(call: CallbackQuery):
+        if not is_admin(call.from_user.id):
+            return
+        min_m = await crawler.min_members()
+        min_msg = await crawler.min_msgs_per_day()
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=f"👥 Мин. участников: {min_m}",
+                                  callback_data="set_members")],
+            [InlineKeyboardButton(text=f"💬 Мин. сообщений/сутки: {min_msg}",
+                                  callback_data="set_msgs")],
+            [InlineKeyboardButton(text="⬅️ Меню", callback_data="menu")],
+        ])
+        await call.message.answer(
+            "⚙️ <b>Настройки фильтра «без ограничений»</b>\n"
+            "Нажмите, чтобы изменить значение.",
+            reply_markup=kb,
+        )
+        await call.answer()
+
+    @router.callback_query(F.data == "set_members")
+    async def cb_set_members(call: CallbackQuery, state: FSMContext):
+        if not is_admin(call.from_user.id):
+            return
+        await state.set_state(SettingsStates.members)
+        await call.message.answer("Пришлите минимальное число участников (целое число).")
+        await call.answer()
+
+    @router.message(SettingsStates.members)
+    async def on_set_members(message: Message, state: FSMContext):
+        if not is_admin(message.from_user.id):
+            return
+        await state.clear()
+        try:
+            val = int(message.text.strip())
+            if val < 0:
+                raise ValueError
+        except ValueError:
+            await message.answer("Нужно целое неотрицательное число.", reply_markup=main_menu())
+            return
+        await db.set_setting("min_members", val)
+        await message.answer(f"✅ Мин. участников = <b>{val}</b>", reply_markup=main_menu())
+
+    @router.callback_query(F.data == "set_msgs")
+    async def cb_set_msgs(call: CallbackQuery, state: FSMContext):
+        if not is_admin(call.from_user.id):
+            return
+        await state.set_state(SettingsStates.msgs)
+        await call.message.answer("Пришлите минимальное число сообщений в сутки (целое число).")
+        await call.answer()
+
+    @router.message(SettingsStates.msgs)
+    async def on_set_msgs(message: Message, state: FSMContext):
+        if not is_admin(message.from_user.id):
+            return
+        await state.clear()
+        try:
+            val = int(message.text.strip())
+            if val < 0:
+                raise ValueError
+        except ValueError:
+            await message.answer("Нужно целое неотрицательное число.", reply_markup=main_menu())
+            return
+        await db.set_setting("min_messages_per_day", val)
+        await message.answer(f"✅ Мин. сообщений/сутки = <b>{val}</b>", reply_markup=main_menu())
+
     # ---------- базы ----------
     def bases_menu() -> InlineKeyboardMarkup:
         rows = [
@@ -305,14 +388,21 @@ def build_dispatcher(cfg: Config, db: Database, userbot: UserBot, crawler: Crawl
             await call.answer()
             return
         lines = [f"<b>{title}</b> — всего {total}\n"]
+        show_msgs = status in ("unrestricted", "low_activity", "small")
         for i, r in enumerate(rows, start=offset + 1):
             name = html.escape(r["title"] or r["ident"])
             link = r["link"] or ""
             members = r["members"] or 0
+            extra = f" — {members} уч."
+            if show_msgs:
+                try:
+                    extra += f", {float(r['msgs_per_day'] or 0):.0f} сб/сут"
+                except (KeyError, IndexError, TypeError):
+                    pass
             if link:
-                lines.append(f"{i}. <a href=\"{html.escape(link)}\">{name}</a> — {members} уч.")
+                lines.append(f"{i}. <a href=\"{html.escape(link)}\">{name}</a>{extra}")
             else:
-                lines.append(f"{i}. {name} — {members} уч.")
+                lines.append(f"{i}. {name}{extra}")
 
         nav: list[InlineKeyboardButton] = []
         if offset > 0:

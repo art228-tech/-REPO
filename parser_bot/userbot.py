@@ -36,13 +36,25 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class ProbeResult:
-    # 'clean' | 'captcha' | 'op' | 'error'
+    # 'clean' | 'captcha' | 'op' | 'not_chat' | 'error'
     status: str
     members: int = 0
     title: str = ""
     chat_id: Optional[int] = None
     reason: str = ""
+    msgs_per_day: float = 0.0
     op_refs: list[ChatRef] = field(default_factory=list)
+
+
+@dataclass
+class Resolved:
+    entity: object = None          # telethon entity, если доступен/мы уже в чате
+    writable: bool = False         # это группа/супергруппа, куда можно писать
+    title: str = ""
+    members: int = 0
+    kind: str = "unknown"          # megagroup|group|broadcast|bot|user|unknown
+    joinable: bool = True
+    error: Optional[str] = None
 
 
 class LoginError(Exception):
@@ -151,33 +163,107 @@ class UserBot:
         self.client = None
 
     # ---------- ПРОВЕРКА ЧАТА ----------
-    async def _resolve_and_join(self, ref: ChatRef):
-        """Возвращает entity чата, при необходимости вступая в него."""
+    @staticmethod
+    def _entity_writable(entity) -> tuple[bool, str]:
+        """Только группы/супергруппы считаем 'чатом, куда можно писать'."""
+        if isinstance(entity, tl.Chat):
+            # базовая группа (но не удалённая/мигрировавшая)
+            if getattr(entity, "deactivated", False):
+                return False, "unknown"
+            return True, "group"
+        if isinstance(entity, tl.Channel):
+            if getattr(entity, "megagroup", False) or getattr(entity, "gigagroup", False):
+                return True, "megagroup"
+            return False, "broadcast"  # вещательный канал — не чат
+        if isinstance(entity, tl.User):
+            return False, "bot" if getattr(entity, "bot", False) else "user"
+        return False, "unknown"
+
+    async def _resolve(self, ref: ChatRef) -> Resolved:
+        """Определяет тип объекта (чат/канал/бот/юзер) БЕЗ вступления, где можно."""
         client = self.client
         assert client is not None
         if ref.kind == "invite":
             inv_hash = ref.ident.split(":", 1)[1]
             try:
+                info = await client(CheckChatInviteRequest(inv_hash))
+            except (InviteHashExpiredError, InviteHashInvalidError) as e:
+                return Resolved(error=f"инвайт недействителен: {e}")
+            except Exception as e:  # noqa: BLE001
+                return Resolved(error=f"не удалось проверить инвайт: {e}")
+            chat = getattr(info, "chat", None)
+            if chat is not None:  # ChatInviteAlready / ChatInvitePeek — мы уже в чате
+                writable, kind = self._entity_writable(chat)
+                return Resolved(
+                    entity=chat, writable=writable, kind=kind,
+                    title=getattr(chat, "title", "") or "",
+                    members=int(getattr(chat, "participants_count", 0) or 0),
+                )
+            # ChatInvite — ещё не вступили
+            title = getattr(info, "title", "") or ""
+            members = int(getattr(info, "participants_count", 0) or 0)
+            is_broadcast = getattr(info, "broadcast", False)
+            is_megagroup = getattr(info, "megagroup", False)
+            request_needed = getattr(info, "request_needed", False)
+            if is_broadcast and not is_megagroup:
+                return Resolved(writable=False, kind="broadcast", title=title, members=members)
+            if request_needed:
+                return Resolved(writable=True, kind="megagroup", title=title,
+                                members=members, joinable=False,
+                                error="нужна заявка на вступление")
+            return Resolved(writable=True, kind="megagroup" if is_megagroup else "group",
+                            title=title, members=members)
+        # публичный username
+        username = ref.ident.lstrip("@")
+        try:
+            entity = await client.get_entity(username)
+        except (UsernameInvalidError, UsernameNotOccupiedError, ValueError) as e:
+            return Resolved(error=f"юзернейм не найден: {e}")
+        except Exception as e:  # noqa: BLE001
+            return Resolved(error=f"не удалось получить объект: {e}")
+        writable, kind = self._entity_writable(entity)
+        title = getattr(entity, "title", "") or getattr(entity, "username", "") or ""
+        return Resolved(
+            entity=entity, writable=writable, kind=kind, title=title,
+            members=int(getattr(entity, "participants_count", 0) or 0),
+        )
+
+    async def _ensure_joined(self, ref: ChatRef, res: Resolved):
+        """Вступает в чат, если ещё не вступили. Возвращает entity."""
+        client = self.client
+        assert client is not None
+        if ref.kind == "invite" and res.entity is None:
+            inv_hash = ref.ident.split(":", 1)[1]
+            try:
                 updates = await client(ImportChatInviteRequest(inv_hash))
-                chat = updates.chats[0]
-                return chat
+                return updates.chats[0]
             except UserAlreadyParticipantError:
                 info = await client(CheckChatInviteRequest(inv_hash))
                 return getattr(info, "chat", None)
-            except (InviteHashExpiredError, InviteHashInvalidError) as e:
-                raise LoginError(f"Инвайт недействителен: {e}")
-        else:
-            username = ref.ident.lstrip("@")
-            try:
-                entity = await client.get_entity(username)
-            except (UsernameInvalidError, UsernameNotOccupiedError, ValueError) as e:
-                raise LoginError(f"Юзернейм не найден: {e}")
-            # вступаем, чтобы иметь возможность писать и считать участников
+        entity = res.entity
+        if isinstance(entity, tl.Channel):
             try:
                 await client(JoinChannelRequest(entity))
-            except Exception:  # noqa: BLE001 — уже участник / не канал и т.п.
+            except Exception:  # noqa: BLE001 — уже участник и т.п.
                 pass
-            return entity
+        return entity
+
+    async def _messages_per_day(self, entity, msgs=None) -> float:
+        """Оценка активности: сообщений в сутки по последним сообщениям."""
+        client = self.client
+        assert client is not None
+        if msgs is None:
+            try:
+                msgs = await client.get_messages(entity, limit=self.cfg.activity_sample)
+            except Exception:  # noqa: BLE001
+                return 0.0
+        dates = [m.date for m in msgs if getattr(m, "date", None)]
+        if len(dates) < 2:
+            return float(len(dates))
+        span = (max(dates) - min(dates)).total_seconds()
+        if span <= 0:
+            return float(len(dates))
+        return round((len(dates) - 1) / (span / 86400.0), 1)
 
     async def _members_count(self, entity) -> int:
         client = self.client
@@ -230,25 +316,45 @@ class UserBot:
             if not client or not await client.is_user_authorized():
                 return ProbeResult(status="error", reason="нет авторизованного аккаунта")
 
+            # 1) Определяем тип объекта. Всё, что не группа/супергруппа — мусор.
             try:
-                entity = await self._resolve_and_join(ref)
-            except LoginError as e:
-                return ProbeResult(status="error", reason=str(e))
+                res = await self._resolve(ref)
             except FloodWaitError as e:
                 return ProbeResult(status="error", reason=f"FloodWait {e.seconds}s при входе")
-            except (ChannelPrivateError,) as e:
-                return ProbeResult(status="error", reason=f"приватный/недоступный чат: {e}")
+            except ChannelPrivateError as e:
+                return ProbeResult(status="error", reason=f"приватный/недоступный: {e}")
             except Exception as e:  # noqa: BLE001
-                return ProbeResult(status="error", reason=f"вход не удался: {e}")
+                return ProbeResult(status="error", reason=f"resolve не удался: {e}")
+
+            if res.error and not res.writable:
+                return ProbeResult(status="error", title=res.title, members=res.members,
+                                   reason=res.error)
+            if not res.writable:
+                return ProbeResult(
+                    status="not_chat", title=res.title, members=res.members,
+                    reason=f"не чат (тип: {res.kind}) — в мусор",
+                )
+            if not res.joinable:
+                return ProbeResult(status="error", title=res.title, members=res.members,
+                                   reason=res.error or "нельзя вступить")
+
+            # 2) Это писабельный чат — вступаем.
+            try:
+                entity = await self._ensure_joined(ref, res)
+            except FloodWaitError as e:
+                return ProbeResult(status="error", title=res.title, members=res.members,
+                                   reason=f"FloodWait {e.seconds}s при вступлении")
+            except Exception as e:  # noqa: BLE001
+                return ProbeResult(status="error", title=res.title, members=res.members,
+                                   reason=f"вступление не удалось: {e}")
 
             if entity is None:
                 return ProbeResult(status="error", reason="не удалось получить чат")
 
-            title = getattr(entity, "title", "") or ""
+            title = getattr(entity, "title", "") or res.title
             chat_id = getattr(entity, "id", None)
-            members = await self._members_count(entity)
+            members = await self._members_count(entity) or res.members
 
-            me = await client.get_me()
             try:
                 sent = await client.send_message(entity, ".")
             except (ChatWriteForbiddenError, ChatAdminRequiredError) as e:
@@ -270,7 +376,9 @@ class UserBot:
             links: list[str] = []
             our_msg_alive = False
             try:
-                recent = await client.get_messages(entity, limit=20)
+                recent = await client.get_messages(
+                    entity, limit=max(20, self.cfg.activity_sample)
+                )
             except Exception:  # noqa: BLE001
                 recent = []
 
@@ -301,11 +409,17 @@ class UserBot:
                 except Exception:  # noqa: BLE001
                     pass
 
+            # активность (сообщений/сутки) — считаем по выборке без нашей точки
+            msgs_per_day = await self._messages_per_day(
+                entity, [m for m in recent if m.id != sent.id]
+            )
+
             return ProbeResult(
                 status=status,
                 members=members,
                 title=title,
                 chat_id=chat_id,
                 reason=reason,
+                msgs_per_day=msgs_per_day,
                 op_refs=op_refs,
             )

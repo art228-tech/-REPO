@@ -28,6 +28,8 @@ STATUS_TITLES = {
     "captcha": "Плохая база (капча)",
     "unrestricted": "Без ограничений",
     "small": "Мало участников (<лимита)",
+    "low_activity": "Мало сообщений (<лимита)",
+    "not_chat": "Мусор (не чат)",
     "error": "Ошибки доступа",
 }
 
@@ -51,6 +53,7 @@ class Database:
                 title       TEXT,
                 chat_id     INTEGER,
                 members     INTEGER DEFAULT 0,
+                msgs_per_day REAL DEFAULT 0,
                 status      TEXT NOT NULL DEFAULT 'queue',
                 source      TEXT,
                 reason      TEXT,
@@ -62,7 +65,25 @@ class Database:
         await self._db.execute(
             "CREATE INDEX IF NOT EXISTS idx_chats_status ON chats(status)"
         )
+        await self._db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT
+            )
+            """
+        )
+        await self._migrate()
         await self._db.commit()
+
+    async def _migrate(self) -> None:
+        """Доустанавливаем недостающие колонки для старых БД."""
+        cur = await self._db.execute("PRAGMA table_info(chats)")
+        cols = {row["name"] for row in await cur.fetchall()}
+        if "msgs_per_day" not in cols:
+            await self._db.execute(
+                "ALTER TABLE chats ADD COLUMN msgs_per_day REAL DEFAULT 0"
+            )
 
     async def close(self) -> None:
         if self._db is not None:
@@ -120,6 +141,7 @@ class Database:
         title: Optional[str] = None,
         chat_id: Optional[int] = None,
         members: Optional[int] = None,
+        msgs_per_day: Optional[float] = None,
         reason: Optional[str] = None,
     ) -> None:
         now = int(time.time())
@@ -134,6 +156,9 @@ class Database:
         if members is not None:
             fields.append("members = ?")
             values.append(members)
+        if msgs_per_day is not None:
+            fields.append("msgs_per_day = ?")
+            values.append(msgs_per_day)
         if reason is not None:
             fields.append("reason = ?")
             values.append(reason)
@@ -165,6 +190,38 @@ class Database:
             "SELECT status, COUNT(*) AS c FROM chats GROUP BY status"
         )
         return {row["status"]: row["c"] for row in await cur.fetchall()}
+
+    # ---------- настройки (key/value) ----------
+    async def get_setting(self, key: str) -> Optional[str]:
+        cur = await self.db.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        row = await cur.fetchone()
+        return row["value"] if row else None
+
+    async def get_int_setting(self, key: str, default: int) -> int:
+        raw = await self.get_setting(key)
+        if raw is None:
+            return default
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return default
+
+    async def set_setting(self, key: str, value) -> None:
+        await self.db.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, str(value)),
+        )
+        await self.db.commit()
+
+    # ---------- статистика ----------
+    async def avg_msgs_per_day(self, status: str = "unrestricted") -> float:
+        cur = await self.db.execute(
+            "SELECT AVG(msgs_per_day) AS a FROM chats WHERE status = ? AND msgs_per_day > 0",
+            (status,),
+        )
+        row = await cur.fetchone()
+        return float(row["a"]) if row and row["a"] is not None else 0.0
 
     async def pending_count(self) -> int:
         placeholders = ",".join("?" for _ in PENDING_STATUSES)

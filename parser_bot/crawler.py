@@ -28,6 +28,14 @@ class Crawler:
     def running(self) -> bool:
         return self._task is not None and not self._task.done()
 
+    async def min_members(self) -> int:
+        return await self.db.get_int_setting("min_members", self.cfg.min_members)
+
+    async def min_msgs_per_day(self) -> int:
+        return await self.db.get_int_setting(
+            "min_messages_per_day", self.cfg.min_messages_per_day
+        )
+
     # ---------- управление ----------
     async def add_seed(self, raw: str) -> bool:
         ref = normalize(raw)
@@ -153,6 +161,14 @@ class Crawler:
             )
             return "captcha"
 
+        if result.status == "not_chat":
+            # в ОП могут стоять каналы/боты/юзеры — всё кроме чатов в мусор
+            await self.db.update_status(
+                ident, "not_chat", title=result.title, chat_id=result.chat_id,
+                members=result.members, reason=result.reason,
+            )
+            return "not_chat"
+
         if result.status == "op":
             # сам чат -> ОП проверенные, его список ОП -> в очередь как op_unchecked
             await self.db.update_status(
@@ -168,16 +184,26 @@ class Crawler:
                     )
             return "op_checked"
 
-        # status == 'clean'
-        if result.members >= self.cfg.min_members:
+        # status == 'clean' — проверяем участников и активность
+        min_m = await self.min_members()
+        min_msg = await self.min_msgs_per_day()
+        if result.members < min_m:
             await self.db.update_status(
-                ident, "unrestricted", title=result.title, chat_id=result.chat_id,
-                members=result.members, reason=result.reason,
+                ident, "small", title=result.title, chat_id=result.chat_id,
+                members=result.members, msgs_per_day=result.msgs_per_day,
+                reason=f"участников {result.members} < {min_m}",
             )
-            return "unrestricted"
+            return "small"
+        if result.msgs_per_day < min_msg:
+            await self.db.update_status(
+                ident, "low_activity", title=result.title, chat_id=result.chat_id,
+                members=result.members, msgs_per_day=result.msgs_per_day,
+                reason=f"сообщений/сутки {result.msgs_per_day} < {min_msg}",
+            )
+            return "low_activity"
         await self.db.update_status(
-            ident, "small", title=result.title, chat_id=result.chat_id,
-            members=result.members,
-            reason=f"без ограничений, но участников {result.members} < {self.cfg.min_members}",
+            ident, "unrestricted", title=result.title, chat_id=result.chat_id,
+            members=result.members, msgs_per_day=result.msgs_per_day,
+            reason=result.reason,
         )
-        return "small"
+        return "unrestricted"
