@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Данные пользователя (никогда не коммитим твои материалы и результаты)
+assets/**
+!assets/.gitkeep
+!assets/README.md
+output/**
+!output/.gitkeep
+logs/**
+!logs/.gitkeep
+state/**
+!state/.gitkeep
+
+# Конфиг с личными данными
+config.yaml
+
+# ОС
+.DS_Store
+Thumbs.db
+
+# Playwright
+/ms-playwright/

@@ -1,0 +1,116 @@
+# ============================================================
+#  AutoShorts — пример конфига.
+#  Скопируй в config.yaml и правь под себя.
+#  config.yaml в git не попадает (личные данные).
+# ============================================================
+
+project:
+  name: "my-shorts"
+  output_dir: "output"      # готовые видео
+  logs_dir: "logs"          # логи (для разбора багов)
+  state_dir: "state"        # чекпоинты прогресса (crash-safe resume)
+
+video:
+  width: 1080
+  height: 1920
+  fps: 60
+  # Основной фон-блок: «чуть вертикальнее квадрата» (ширина:высота).
+  content_aspect: [5, 6]
+  # Сила размытия фоновой копии (доп-фон на весь экран).
+  background_blur: 40
+
+# ------------------------------------------------------------
+#  ОЗВУЧКА (отдельный процесс от монтажа)
+# ------------------------------------------------------------
+voice:
+  # dolphin        — вход в ТВОЙ аккаунт ElevenLabs через Dolphin Anty
+  # elevenlabs_api — официальный API (нужен ELEVENLABS_API_KEY)
+  provider: "dolphin"
+
+  # Модель TTS. multilingual_v2 — качество; flash_v2_5 — до 40k символов.
+  model: "eleven_multilingual_v2"
+
+  # Куда складывать готовые mp3.
+  output_dir: "assets/voiceovers"
+
+  # Сколько голосов создать из промптов за один проход (ты просил 3).
+  voices_per_run: 3
+
+  # Сколько символов максимум в одном запросе TTS (режем длинный текст сами).
+  # multilingual_v2=10000, flash/turbo v2.5=40000.
+  tts_char_limit: 10000
+
+  # Описание голоса (Voice Design) обязано быть 20..1000 символов.
+  # Слишком длинный/короткий промпт софт НЕ роняет, а чинит и пишет в лог.
+  voice_desc_min: 20
+  voice_desc_max: 1000
+
+  dolphin:
+    # Local API Dolphin Anty (по умолчанию слушает localhost:3001).
+    local_api: "http://localhost:3001/v1.0"
+    # Токен Dolphin Remote API (если включён). Иначе оставь пустым.
+    api_token_env: "DOLPHIN_API_TOKEN"
+    # Префикс имени профиля, который софт создаёт и потом сам удаляет.
+    profile_prefix: "autoshorts"
+    # Данные аккаунта ElevenLabs вводятся в интерфейсе, а не тут.
+
+  elevenlabs_api:
+    api_key_env: "ELEVENLABS_API_KEY"
+    ttv_model: "eleven_multilingual_ttv_v2"   # Voice Design
+
+# ------------------------------------------------------------
+#  ПАПКИ С МАТЕРИАЛАМИ И РЕЖИМЫ
+#  mode: cycle   — использовал всё в папке и идёт по кругу заново
+#  mode: consume — использовал материал и удалил из папки
+# ------------------------------------------------------------
+folders:
+  voice_prompts:
+    path: "assets/prompts/voices"     # текстовые промпты для голосов
+    mode: "cycle"
+  scripts:
+    path: "assets/prompts/scripts"    # тексты для озвучки
+    mode: "consume"
+  backgrounds:
+    path: "assets/backgrounds"        # фоны-футажи
+    mode: "cycle"
+  emojis:
+    path: "assets/emojis"             # эмодзи (png)
+    mode: "cycle"
+  sounds:
+    path: "assets/sounds"             # swoosh и др. (3 звука)
+    mode: "cycle"
+  qr:
+    path: "assets/qr"                 # qr-коды
+    mode: "cycle"
+  music:
+    path: "assets/music"              # фоновая музыка (опционально)
+    mode: "cycle"
+
+# ------------------------------------------------------------
+#  МОНТАЖ
+# ------------------------------------------------------------
+montage:
+  # capcut — собрать проект CapCut и авто-экспорт (Windows)
+  # ffmpeg — полностью headless-рендер (кроссплатформенно, для тестов)
+  renderer: "capcut"
+
+  # Сколько секунд фона берём на одно видео; следующее видео берёт
+  # следующий отрезок того же фона (учёт «использованных» секунд).
+  background_segment_sec: 10
+
+  capcut:
+    # Windows-путь к папке черновиков CapCut (подставится автоматически,
+    # можно переопределить). Обычно:
+    # C:\Users\<user>\AppData\Local\CapCut\User Data\Projects\com.lveditor.draft
+    drafts_dir: ""
+    version: "8.7.0"
+    ui_language: "ru"
+    # Ждать завершения экспорта не дольше (сек).
+    export_timeout: 600
+
+# ------------------------------------------------------------
+#  ЛОГИ
+# ------------------------------------------------------------
+logging:
+  level: "INFO"           # DEBUG для детального разбора багов
+  keep_files: 20          # сколько файлов логов хранить
