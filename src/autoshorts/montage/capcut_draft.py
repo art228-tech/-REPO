@@ -80,8 +80,8 @@ def _segment(material_id: str, start_us: int, dur_us: int,
 
 
 def build_draft(cfg: Config, out_path: Path, bg: Path, bg_start: float,
-                bg_len: float, audio: Path, words, music, swoosh, emoji, qr,
-                qr_cfg: dict, duration: float) -> Path:
+                bg_len: float, audio: Path, words, music, swoosh, emoji,
+                emoji_anim, qr, qr_cfg: dict, duration: float) -> Path:
     """Собрать папку черновика CapCut и вернуть путь к ней."""
     drafts_dir = _default_drafts_dir(cfg)
     name = out_path.stem or f"autoshorts-{int(time.time())}"
@@ -126,13 +126,15 @@ def build_draft(cfg: Config, out_path: Path, bg: Path, bg_start: float,
     if text_segments:
         tracks.append({"id": _uid(), "type": "text", "segments": text_segments})
 
-    # эмодзи (на переходе в начале)
+    # эмодзи (1 шт., на переходе в начале, случайная комбо-анимация)
     if emoji:
         emat = _sticker_material(Path(emoji))
         materials["images"].append(emat)
-        tracks.append({"id": _uid(), "type": "sticker",
-                       "segments": [_segment(emat["id"], int(0.2 * US),
-                                             int(1.2 * US))]})
+        emo_seg = _segment(emat["id"], int(0.2 * US), int(1.2 * US))
+        # Имя пресета анимации (zoom1/zoom2/bounce1/bounce2). Реальный ID пресета
+        # CapCut подставим после разбора эталонного проекта на твоём ноуте.
+        emo_seg["animation_preset"] = emoji_anim
+        tracks.append({"id": _uid(), "type": "sticker", "segments": [emo_seg]})
 
     # QR в конце
     if qr:

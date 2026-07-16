@@ -8,6 +8,7 @@ CapCut (Windows). Число видео ограничивается `cycles`. �
 from __future__ import annotations
 
 import json
+import random
 from pathlib import Path
 
 import yaml
@@ -137,27 +138,29 @@ def _build_one(cfg, template, vo_json, pools, slicer, style, qr_cfg,
 
     out_path = out_dir / f"video_{index:04d}.mp4"
 
+    # 1 эмодзи на видео, анимация выбирается случайно из списка шаблона.
+    emoji_anim = random.choice(emoji_anims) if emoji_anims else "zoom1"
+
     if renderer == "ffmpeg":
         return _render_ffmpeg(cfg, out_path, bg, bg_start, bg_len, audio,
-                              ass_path, music, swoosh, emoji, emoji_anims, qr,
+                              ass_path, music, swoosh, emoji, emoji_anim, qr,
                               qr_cfg, duration)
     # capcut
     from .capcut_draft import build_draft
     from .capcut_export import export_draft
     draft = build_draft(cfg, out_path, bg, bg_start, bg_len, audio, words,
-                        music, swoosh, emoji, qr, qr_cfg, duration)
+                        music, swoosh, emoji, emoji_anim, qr, qr_cfg, duration)
     return export_draft(cfg, draft, out_path)
 
 
 def _render_ffmpeg(cfg, out_path, bg, bg_start, bg_len, audio, ass_path, music,
-                   swoosh, emoji, emoji_anims, qr, qr_cfg, duration):
+                   swoosh, emoji, emoji_anim, qr, qr_cfg, duration):
     from .ffmpeg_render import EmojiHit, QrOverlay, VideoSpec, render_video
 
     emojis = []
     if emoji is not None:
-        anim = emoji_anims[0] if emoji_anims else "zoom1"
         emojis.append(EmojiHit(path=str(emoji), start=0.2, duration=1.2,
-                               anim=anim))
+                               anim=emoji_anim))
     qr_overlay = None
     if qr is not None:
         total = float(qr_cfg.get("total_sec", 1.2))
