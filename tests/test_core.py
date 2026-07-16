@@ -99,6 +99,14 @@ def test_build_ass_has_dialogue_and_highlight():
     assert "\\c&H00" in ass          # подсветка ключевого слова
 
 
+def test_content_size_aspect():
+    from autoshorts.montage.ffmpeg_render import _content_size
+    w, h = _content_size(1080, (5, 6))
+    assert w == 1080
+    assert h == 1296          # 1080*6/5
+    assert h % 2 == 0         # чётная высота для libx264
+
+
 def test_parse_script_words_marks_highlight():
     text = "это [[топ]] видео"
     timings = [
