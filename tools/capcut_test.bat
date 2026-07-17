@@ -75,6 +75,8 @@ def edit_all_timeline_files(folder, new_id):
     for p in folder.iterdir():
         if not p.is_file() or p.stat().st_size > 8_000_000:
             continue
+        if ".bak" in p.name.lower():
+            continue
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
         except Exception:

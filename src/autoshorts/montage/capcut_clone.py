@@ -156,21 +156,55 @@ def probe_size_duration(path: Path) -> dict:
     return out
 
 
-def build_clone(cfg: Config, out_path: Path, a: CloneAssets,
-                words_per_cue: int = 2) -> Path:
-    draft = _load_reference()
+def _apply_substitutions(draft: dict, cfg: Config, a: CloneAssets,
+                         words_per_cue: int) -> None:
+    """Подставить все ассеты в загруженный draft-словарь (общий шаг)."""
     dur_us = int(a.duration * US)
     draft["duration"] = dur_us
-
-    # обновим версию платформы (без аппаратных id — они уже вычищены)
     for key in ("last_modified_platform", "platform"):
         p = draft.get(key) or {}
-        p["app_version"] = (cfg.montage.get("capcut", {}) or {}).get("version", "8.7.0")
-
+        if isinstance(p, dict):
+            p["app_version"] = (cfg.montage.get("capcut", {}) or {}).get("version", "8.7.0")
     _replace_backgrounds(draft, a, dur_us)
     _replace_overlays(draft, a, dur_us)
     _replace_subtitles(draft, a, words_per_cue)
     _replace_audio(draft, a, dur_us)
+
+
+def _resolve_reference_dir(cfg: Config) -> Path | None:
+    """Папка проекта-эталона: из конфига или авто-выбор самого свежего
+    непустого проекта в папке черновиков CapCut."""
+    ref_dir = (cfg.montage.get("capcut", {}) or {}).get("reference_project_dir")
+    if ref_dir and Path(ref_dir).is_dir():
+        return Path(ref_dir)
+    from .capcut_draft import _default_drafts_dir
+    pdir = _default_drafts_dir(cfg)
+    if not pdir.exists():
+        return None
+    best, best_mtime = None, -1.0
+    for sub in pdir.iterdir():
+        if not sub.is_dir() or sub.name.startswith("autoshorts") or \
+           sub.name.startswith("video_"):
+            continue
+        dc = sub / "draft_content.json"
+        t2 = sub / "template-2.tmp"
+        has = (dc.exists() and dc.stat().st_size > 10000) or t2.exists()
+        if not has:
+            continue
+        mt = max([f.stat().st_mtime for f in (dc, t2) if f.exists()] or [0])
+        if mt > best_mtime:
+            best, best_mtime = sub, mt
+    return best
+
+
+def build_clone(cfg: Config, out_path: Path, a: CloneAssets,
+                words_per_cue: int = 2) -> Path:
+    # Клонируем локальный проект-эталон целиком (надёжно) — из конфига/авто.
+    if _resolve_reference_dir(cfg) is not None:
+        return build_clone_local(cfg, out_path, a, words_per_cue)
+
+    draft = _load_reference()
+    _apply_substitutions(draft, cfg, a, words_per_cue)
 
     # запись в папку черновиков CapCut
     from .capcut_draft import _default_drafts_dir
@@ -186,6 +220,118 @@ def build_clone(cfg: Config, out_path: Path, a: CloneAssets,
                     "tm_draft_modified": int(time.time() * 1000)},
                    ensure_ascii=False), encoding="utf-8")
     log.info("CapCut-черновик (клон эталона) собран: %s", draft_dir)
+    return draft_dir
+
+
+def _find_entry_list(obj):
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(v, list) and v and isinstance(v[0], dict) and \
+               any("fold_path" in kk.lower() for kk in v[0]):
+                return obj, k
+        for v in obj.values():
+            r = _find_entry_list(v)
+            if r:
+                return r
+    return None
+
+
+def _register_in_index(pdir: Path, out: Path, new_id: str) -> bool:
+    """Зарегистрировать проект в root_meta_info.json (CapCut читает индекс,
+    а не сканирует папку). Клонируем существующую запись, бэкапим .bak."""
+    reg = pdir / "root_meta_info.json"
+    if not reg.exists():
+        log.warning("root_meta_info.json не найден — проект может не появиться.")
+        return False
+    try:
+        root = json.loads(reg.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        log.error("root_meta_info.json нечитаем: %s", exc)
+        return False
+    found = _find_entry_list(root)
+    if not found:
+        log.warning("не нашёл список проектов в индексе.")
+        return False
+    cont, key = found
+    entries = cont[key]
+    ne = copy.deepcopy(entries[0])
+    now = int(time.time() * 1000)
+    for kk in list(ne.keys()):
+        low = kk.lower()
+        if "fold_path" in low:
+            ne[kk] = str(out)
+        elif low.endswith("_id") or low in ("draft_id", "id"):
+            ne[kk] = new_id
+        elif "name" in low:
+            ne[kk] = out.name
+        elif "create" in low or "modif" in low or low.startswith("tm_"):
+            ne[kk] = now
+    reg.with_suffix(".json.bak").write_text(
+        json.dumps(root, ensure_ascii=False), encoding="utf-8")
+    entries.append(ne)
+    reg.write_text(json.dumps(root, ensure_ascii=False), encoding="utf-8")
+    log.info("проект зарегистрирован в root_meta_info.json (бэкап .bak сделан)")
+    return True
+
+
+def build_clone_local(cfg: Config, out_path: Path, a: CloneAssets,
+                      words_per_cue: int = 2) -> Path:
+    """Надёжная сборка: копируем ЛОКАЛЬНУЮ папку проекта-эталона целиком (со
+    всеми служебными файлами CapCut 8.7), подставляем ассеты во все файлы
+    таймлайна, ставим единый id и регистрируем в индексе."""
+    import shutil
+
+    ref_dir = _resolve_reference_dir(cfg)
+    if ref_dir is None or not ref_dir.is_dir():
+        raise FileNotFoundError(
+            "Не найден проект-эталон CapCut. Укажи montage.capcut."
+            "reference_project_dir в config.yaml.")
+    log.info("Проект-эталон: %s", ref_dir)
+
+    from .capcut_draft import _default_drafts_dir
+    pdir = _default_drafts_dir(cfg)
+    name = out_path.stem or f"autoshorts-{int(time.time())}"
+    draft_dir = pdir / name
+    if draft_dir.exists():
+        shutil.rmtree(draft_dir, ignore_errors=True)
+    shutil.copytree(ref_dir, draft_dir)
+
+    new_id = _uid()
+    edited = []
+    # правим субтитры/ассеты во ВСЕХ файлах проекта, похожих на таймлайн.
+    # ВАЖНО: не трогаем бэкапы (.bak) — их правка ломала открытие проекта.
+    for p in sorted(draft_dir.iterdir()):
+        if not p.is_file() or p.stat().st_size > 20_000_000:
+            continue
+        if ".bak" in p.name.lower():
+            continue
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(data, dict) or "tracks" not in data:
+            continue
+        _apply_substitutions(data, cfg, a, words_per_cue)
+        data["name"] = name
+        if "id" in data:
+            data["id"] = new_id
+        p.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        edited.append(p.name)
+    log.info("отредактированы файлы таймлайна: %s", ", ".join(edited) or "НЕТ (!)")
+
+    # sidecar draft_meta_info.json
+    meta_path = draft_dir / "draft_meta_info.json"
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    except Exception:  # noqa: BLE001
+        meta = {}
+    meta.update({"draft_name": name, "draft_fold_path": str(draft_dir),
+                 "draft_id": new_id, "tm_draft_modified": int(time.time() * 1000)})
+    meta.setdefault("tm_draft_create", int(time.time() * 1000))
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+
+    _register_in_index(pdir, draft_dir, new_id)
+    log.info("CapCut-проект собран (клон локального эталона): %s", draft_dir)
     return draft_dir
 
 
