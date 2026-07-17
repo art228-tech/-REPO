@@ -1,0 +1,6813 @@
+{
+ "id": "FA135BA0-245A-4563-B9A5-A728F1C5B877",
+ "version": 360000,
+ "new_version": "171.0.0",
+ "name": "",
+ "duration": 12100000,
+ "create_time": 0,
+ "update_time": 0,
+ "fps": 30.0,
+ "is_drop_frame_timecode": false,
+ "color_space": 0,
+ "config": {
+  "video_mute": false,
+  "record_audio_last_index": 1,
+  "extract_audio_last_index": 1,
+  "original_sound_last_index": 1,
+  "subtitle_recognition_id": "",
+  "subtitle_taskinfo": [
+   {
+    "id": "6a59d5c51e9d1601fd0fa7c0_8_0",
+    "type": 10,
+    "language": "ru-RU",
+    "content": "",
+    "remove_invalid_task_id": "",
+    "ai_accurate_recognize_enable": false,
+    "supplies_commit_id": "",
+    "is_local_asr": false
+   }
+  ],
+  "lyrics_recognition_id": "",
+  "lyrics_taskinfo": [],
+  "subtitle_sync": true,
+  "lyrics_sync": true,
+  "voice_change_sync": false,
+  "sticker_max_index": 1,
+  "adjust_max_index": 1,
+  "material_save_mode": 0,
+  "export_range": null,
+  "maintrack_adsorb": true,
+  "combination_max_index": 1,
+  "attachment_info": [],
+  "zoom_info_params": null,
+  "system_font_list": [],
+  "multi_language_mode": "none",
+  "multi_language_main": "none",
+  "multi_language_current": "none",
+  "multi_language_list": [],
+  "subtitle_keywords_config": {
+   "styles": "{\"styles\":[{\"fill\":{\"alpha\":1.0,\"content\":{\"render_type\":\"solid\",\"solid\":{\"alpha\":1,\"color\":[1.0,0.6,0.9]}},\"enable\":true},\"range\":[0,1],\"size\":12.0}],\"text\":\"A\"}",
+   "font_size_ratio": 1.0,
+   "subtitle_template_original_font_size": 12.0,
+   "subtitle_template_keywords_original_font_size": 12.0,
+   "subtitle_template_font_size": 0.0,
+   "is_change_font_size": false
+  },
+  "use_float_render": false
+ },
+ "canvas_config": {
+  "ratio": "9:16",
+  "width": 1080,
+  "height": 1920,
+  "background": null
+ },
+ "tracks": [
+  {
+   "id": "A7B2086D-9BEB-4f0e-8819-F95435A7D869",
+   "type": "video",
+   "segments": [
+    {
+     "id": "78CAE57F-6814-4c5c-BE38-FA8786B2E03F",
+     "source_timerange": {
+      "start": 0,
+      "duration": 2166666
+     },
+     "target_timerange": {
+      "start": 0,
+      "duration": 2166666
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": {
+      "scale": {
+       "x": 4.21269828501069,
+       "y": 4.21269828501069
+      },
+      "rotation": 0.0,
+      "transform": {
+       "x": 0.0,
+       "y": 0.0
+      },
+      "flip": {
+       "vertical": false,
+       "horizontal": false
+      },
+      "alpha": 1.0
+     },
+     "uniform_scale": {
+      "on": true,
+      "value": 1.0
+     },
+     "material_id": "C1CA3D68-D405-473c-8EA5-A6CF82C8313B",
+     "extra_material_refs": [
+      "D85E3495-6E2F-4265-8CF5-F78492529547",
+      "22A16120-DBE0-4dc1-8B90-E913482E0F4C",
+      "7BDB0326-1707-4e0a-B642-1D10EF18490D",
+      "DE2C2A06-282B-4483-A2BC-59DC594721C3",
+      "1459EF73-DC71-4855-ACFB-F2F1E2BD4C62",
+      "6DF84007-51B2-4683-85BF-E006867FF8A3",
+      "DF00EB19-2CA3-46b4-8927-3CF81D27DCE6",
+      "8B226AB3-979E-47d1-8B6B-F2FB82483069"
+     ],
+     "render_index": 0,
+     "keyframe_refs": [],
+     "enable_lut": true,
+     "enable_adjust": true,
+     "enable_hsl": true,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 0,
+     "hdr_settings": {
+      "mode": 1,
+      "intensity": 1.0,
+      "nits": 1000
+     },
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": true,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    },
+    {
+     "id": "B5E7A355-8D17-4370-85DD-0D3A094769A3",
+     "source_timerange": {
+      "start": 5633333,
+      "duration": 9933333
+     },
+     "target_timerange": {
+      "start": 2166666,
+      "duration": 9933334
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": {
+      "scale": {
+       "x": 4.170040861780551,
+       "y": 4.170040861780551
+      },
+      "rotation": 0.0,
+      "transform": {
+       "x": 0.0,
+       "y": 0.0
+      },
+      "flip": {
+       "vertical": false,
+       "horizontal": false
+      },
+      "alpha": 1.0
+     },
+     "uniform_scale": {
+      "on": true,
+      "value": 1.0
+     },
+     "material_id": "17EA0E36-97DC-4408-8EFD-FA61CF04DC9D",
+     "extra_material_refs": [
+      "FD4E141C-14EE-4adc-865E-56B4D45FC5AC",
+      "58691392-94DB-4966-93DA-6CC58D5F25BC",
+      "5FE6228B-F4B7-4054-918F-73D88EC7DA9A",
+      "B0EDA2DD-1EE2-4283-9946-5DE2FB490872",
+      "30D73B98-138F-44c9-98CD-A2AFCA8F210A",
+      "E1F903D5-A0C8-4d61-88E7-BF1045FCAC85",
+      "ACF09E0A-034C-4bcf-8862-FF948ED4281D",
+      "0463B71C-4355-4801-8B2E-A0D60BA8DD99",
+      "2D8743D6-CB68-4f64-B31D-FCFED7CA8381"
+     ],
+     "render_index": 0,
+     "keyframe_refs": [],
+     "enable_lut": true,
+     "enable_adjust": true,
+     "enable_hsl": true,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 0,
+     "hdr_settings": {
+      "mode": 1,
+      "intensity": 1.0,
+      "nits": 1000
+     },
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": true,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    }
+   ],
+   "flag": 0,
+   "attribute": 0,
+   "name": "",
+   "is_default_name": true
+  },
+  {
+   "id": "5F4DBA00-27DB-4516-8E1E-BF2B061C1483",
+   "type": "video",
+   "segments": [
+    {
+     "id": "07ABB43D-5ADF-4747-A733-EBA1BD11BAE8",
+     "source_timerange": {
+      "start": 0,
+      "duration": 2166666
+     },
+     "target_timerange": {
+      "start": 0,
+      "duration": 2166666
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": {
+      "scale": {
+       "x": 2.327275983436096,
+       "y": 2.327275983436096
+      },
+      "rotation": 0.0,
+      "transform": {
+       "x": 0.0,
+       "y": 0.0
+      },
+      "flip": {
+       "vertical": false,
+       "horizontal": false
+      },
+      "alpha": 1.0
+     },
+     "uniform_scale": {
+      "on": true,
+      "value": 1.0
+     },
+     "material_id": "2E6DE092-4D47-4134-8B89-65C789B7CBF8",
+     "extra_material_refs": [
+      "7C233767-CB3C-4a4f-AEA9-19698C9F88EC",
+      "B014DDCD-E01A-403f-BEBA-D4E5686DB95B",
+      "993114AD-1616-4e91-9FA0-4D38B21D7DCF",
+      "3D1DFC59-74F6-4eaf-A3A3-D43E3CD94304",
+      "3AC688BA-F581-4534-A4C9-9C6B0E0B90CF",
+      "E62D3FED-E14C-4442-AC3C-8CEE6FCEEF0E",
+      "EC6E9506-EA7A-4610-B838-90E2E1A6446A"
+     ],
+     "render_index": 1,
+     "keyframe_refs": [],
+     "enable_lut": true,
+     "enable_adjust": true,
+     "enable_hsl": true,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 1,
+     "hdr_settings": {
+      "mode": 1,
+      "intensity": 1.0,
+      "nits": 1000
+     },
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": true,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    },
+    {
+     "id": "FA66BF6C-6BE1-4a39-B3D9-5A76C783FF6F",
+     "source_timerange": {
+      "start": 5633333,
+      "duration": 9933333
+     },
+     "target_timerange": {
+      "start": 2166666,
+      "duration": 9933334
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": {
+      "scale": {
+       "x": 2.327275983436096,
+       "y": 2.327275983436096
+      },
+      "rotation": 0.0,
+      "transform": {
+       "x": 0.0,
+       "y": 0.0
+      },
+      "flip": {
+       "vertical": false,
+       "horizontal": false
+      },
+      "alpha": 1.0
+     },
+     "uniform_scale": {
+      "on": true,
+      "value": 1.0
+     },
+     "material_id": "A9927F58-EAFD-4bf2-8E18-A19164AA5AA2",
+     "extra_material_refs": [
+      "70365A72-2DEB-4000-B8BE-893F597D941F",
+      "315E6FD6-7069-4804-AECA-8793E3110067",
+      "7EA9157D-31CD-4148-8ACF-7905277189C4",
+      "BD892282-9D90-49e1-B1CA-8AE4393C6698",
+      "782E208A-F477-49bb-B5B8-F0B261FB506E",
+      "E4B3E20A-ACAF-42cd-A646-101061DF1124",
+      "12680E81-18B5-4562-BF2A-77E2EDA0E7BE",
+      "704B3C3A-0800-499b-B901-8B6C25AA38E3"
+     ],
+     "render_index": 1,
+     "keyframe_refs": [],
+     "enable_lut": true,
+     "enable_adjust": true,
+     "enable_hsl": true,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 1,
+     "hdr_settings": {
+      "mode": 1,
+      "intensity": 1.0,
+      "nits": 1000
+     },
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": true,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    }
+   ],
+   "flag": 2,
+   "attribute": 0,
+   "name": "",
+   "is_default_name": true
+  },
+  {
+   "id": "C692BFDF-3DD2-4e89-81BD-4F95CD2D73E7",
+   "type": "video",
+   "segments": [
+    {
+     "id": "91D17854-4184-4bcc-8823-3E0292B276A5",
+     "source_timerange": {
+      "start": 0,
+      "duration": 2970332
+     },
+     "target_timerange": {
+      "start": 5333333,
+      "duration": 2233333
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.33,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": {
+      "scale": {
+       "x": 0.7972317460317424,
+       "y": 0.7972317460317424
+      },
+      "rotation": 0.0,
+      "transform": {
+       "x": 0.0,
+       "y": 0.234375
+      },
+      "flip": {
+       "vertical": false,
+       "horizontal": false
+      },
+      "alpha": 1.0
+     },
+     "uniform_scale": {
+      "on": true,
+      "value": 1.0
+     },
+     "material_id": "7B10205D-C31A-4c08-BD2D-D7C3D45F661A",
+     "extra_material_refs": [
+      "F9C74BA6-B356-4f3a-A375-2A9BC57A56C6",
+      "076FE475-7942-4436-AB63-C3156A3DBBE8",
+      "7EAEF566-3C2D-4629-9F3D-B4B833D76419",
+      "E9B9ABC9-E959-4204-9CB1-C5438597201D",
+      "788BBC28-DCBC-4ec9-A289-B26A0BE7973B",
+      "493A8C39-0547-4a1d-97F2-95A10E28C197",
+      "96A227BB-7BFF-43c3-AD5B-7C989D1ECADB",
+      "65C5EF1B-57E3-4edf-AA0E-13E279DCC803"
+     ],
+     "render_index": 2,
+     "keyframe_refs": [],
+     "enable_lut": true,
+     "enable_adjust": true,
+     "enable_hsl": false,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 2,
+     "hdr_settings": {
+      "mode": 1,
+      "intensity": 1.0,
+      "nits": 1000
+     },
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": false,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    },
+    {
+     "id": "136BA2E1-25A6-46f6-A154-F8F3F45F256F",
+     "source_timerange": {
+      "start": 0,
+      "duration": 900000
+     },
+     "target_timerange": {
+      "start": 11100000,
+      "duration": 900000
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": {
+      "scale": {
+       "x": 0.5423591080574726,
+       "y": 0.5423591080574726
+      },
+      "rotation": 0.0,
+      "transform": {
+       "x": 0.0,
+       "y": 0.24088541666666663
+      },
+      "flip": {
+       "vertical": false,
+       "horizontal": false
+      },
+      "alpha": 1.0
+     },
+     "uniform_scale": {
+      "on": true,
+      "value": 1.0
+     },
+     "material_id": "842D259D-C169-486e-8811-6F3640E26B7C",
+     "extra_material_refs": [
+      "62519794-4A39-4080-BA49-19301C960831",
+      "8EF608F6-0221-4145-9887-3A8BEBC2B67F",
+      "206491FA-449A-4e48-8D85-2D96C2D3AF1E",
+      "F6EFB8EF-CE6E-4a2b-8518-B5B7129C65B4",
+      "591A0207-4B69-4bc8-9D14-D0D750B83BB4",
+      "BC5FB75B-6B2D-431f-BEBB-1833D8A22959",
+      "885E744F-D274-45eb-A430-E2C30C9A66CC",
+      "32C3CF4F-069F-4e99-A8F4-3254B79E0CDF",
+      "9A5B6BED-8093-40a0-B786-613DE63DFF69"
+     ],
+     "render_index": 2,
+     "keyframe_refs": [],
+     "enable_lut": true,
+     "enable_adjust": true,
+     "enable_hsl": true,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 2,
+     "hdr_settings": {
+      "mode": 1,
+      "intensity": 1.0,
+      "nits": 1000
+     },
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [
+      {
+       "id": "51CE7F24-73E4-468c-8E02-6CA484086640",
+       "material_id": "",
+       "property_type": "KFTypeScaleX",
+       "keyframe_list": [
+        {
+         "id": "3AB42E4E-0BF7-47f8-96A7-7DBFCACCBED2",
+         "curveType": "Line",
+         "time_offset": 0,
+         "left_control": {
+          "x": 0.0,
+          "y": 0.0
+         },
+         "right_control": {
+          "x": 0.0,
+          "y": 0.0
+         },
+         "values": [
+          0.4449368858352484
+         ],
+         "string_value": "",
+         "graphID": ""
+        },
+        {
+         "id": "8FD5C0FF-5BCF-4a74-8100-BDBE80AD70B6",
+         "curveType": "Line",
+         "time_offset": 900000,
+         "left_control": {
+          "x": 0.0,
+          "y": 0.0
+         },
+         "right_control": {
+          "x": 0.0,
+          "y": 0.0
+         },
+         "values": [
+          0.5423591080574726
+         ],
+         "string_value": "",
+         "graphID": ""
+        }
+       ]
+      }
+     ],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": true,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    }
+   ],
+   "flag": 2,
+   "attribute": 0,
+   "name": "",
+   "is_default_name": true
+  },
+  {
+   "id": "5CDCFE0D-A38D-4325-8108-D35902B03476",
+   "type": "text",
+   "segments": [
+    {
+     "id": "051FBE2A-F594-48b8-93AE-EF669B70EA83",
+     "source_timerange": null,
+     "target_timerange": {
+      "start": 0,
+      "duration": 2233333
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": {
+      "scale": {
+       "x": 1.14,
+       "y": 1.14
+      },
+      "rotation": 0.0,
+      "transform": {
+       "x": 0.0,
+       "y": -0.4753645833333333
+      },
+      "flip": {
+       "vertical": false,
+       "horizontal": false
+      },
+      "alpha": 1.0
+     },
+     "uniform_scale": {
+      "on": true,
+      "value": 1.0
+     },
+     "material_id": "3B4F9BD6-4509-4342-BEE7-6ECCC70CCA78",
+     "extra_material_refs": [
+      "D0466AC5-A2E8-4471-AECB-EABEEDE070EA"
+     ],
+     "render_index": 14000,
+     "keyframe_refs": [],
+     "enable_lut": false,
+     "enable_adjust": false,
+     "enable_hsl": false,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 3,
+     "hdr_settings": null,
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": false,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    },
+    {
+     "id": "0AC9D71F-F0AE-4edf-B506-F2637010FD05",
+     "source_timerange": null,
+     "target_timerange": {
+      "start": 2400000,
+      "duration": 2400000
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": {
+      "scale": {
+       "x": 1.14,
+       "y": 1.14
+      },
+      "rotation": 0.0,
+      "transform": {
+       "x": 0.0,
+       "y": -0.4753645833333333
+      },
+      "flip": {
+       "vertical": false,
+       "horizontal": false
+      },
+      "alpha": 1.0
+     },
+     "uniform_scale": {
+      "on": true,
+      "value": 1.0
+     },
+     "material_id": "9EC2CC79-D080-4961-8C6E-138EC8969343",
+     "extra_material_refs": [
+      "0D26B1EE-0883-4c2a-AA74-0C64773352BB"
+     ],
+     "render_index": 14001,
+     "keyframe_refs": [],
+     "enable_lut": false,
+     "enable_adjust": false,
+     "enable_hsl": false,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 3,
+     "hdr_settings": null,
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": false,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    },
+    {
+     "id": "1D544842-3B9B-4ead-B4CE-5E834AEE9372",
+     "source_timerange": null,
+     "target_timerange": {
+      "start": 4833333,
+      "duration": 2466667
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": {
+      "scale": {
+       "x": 1.14,
+       "y": 1.14
+      },
+      "rotation": 0.0,
+      "transform": {
+       "x": 0.0,
+       "y": -0.4753645833333333
+      },
+      "flip": {
+       "vertical": false,
+       "horizontal": false
+      },
+      "alpha": 1.0
+     },
+     "uniform_scale": {
+      "on": true,
+      "value": 1.0
+     },
+     "material_id": "8A256C9C-FA69-4fbf-96B6-4773700908F6",
+     "extra_material_refs": [
+      "5A972942-00E7-400b-91AD-056C48EE3C37"
+     ],
+     "render_index": 14002,
+     "keyframe_refs": [],
+     "enable_lut": false,
+     "enable_adjust": false,
+     "enable_hsl": false,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 3,
+     "hdr_settings": null,
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": false,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    },
+    {
+     "id": "75A430BF-89F1-481f-A0D6-AD97612D0618",
+     "source_timerange": null,
+     "target_timerange": {
+      "start": 7600000,
+      "duration": 2600000
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": {
+      "scale": {
+       "x": 1.14,
+       "y": 1.14
+      },
+      "rotation": 0.0,
+      "transform": {
+       "x": 0.0,
+       "y": -0.4753645833333333
+      },
+      "flip": {
+       "vertical": false,
+       "horizontal": false
+      },
+      "alpha": 1.0
+     },
+     "uniform_scale": {
+      "on": true,
+      "value": 1.0
+     },
+     "material_id": "95A31D86-C8E4-493a-95F2-7471E7F94A89",
+     "extra_material_refs": [
+      "E966062B-2926-4eb6-8E4F-60C2058F3620"
+     ],
+     "render_index": 14003,
+     "keyframe_refs": [],
+     "enable_lut": false,
+     "enable_adjust": false,
+     "enable_hsl": false,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 3,
+     "hdr_settings": null,
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": false,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    },
+    {
+     "id": "E732A5A0-0676-4c30-AD9B-1CAE6C814277",
+     "source_timerange": null,
+     "target_timerange": {
+      "start": 10333333,
+      "duration": 1433333
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": {
+      "scale": {
+       "x": 1.14,
+       "y": 1.14
+      },
+      "rotation": 0.0,
+      "transform": {
+       "x": 0.0,
+       "y": -0.4753645833333333
+      },
+      "flip": {
+       "vertical": false,
+       "horizontal": false
+      },
+      "alpha": 1.0
+     },
+     "uniform_scale": {
+      "on": true,
+      "value": 1.0
+     },
+     "material_id": "06BDE471-7C30-42de-9266-54ECCFB31C95",
+     "extra_material_refs": [
+      "80FB3E5F-8B8B-4690-8BB5-A3A8D37C7C8C"
+     ],
+     "render_index": 14004,
+     "keyframe_refs": [],
+     "enable_lut": false,
+     "enable_adjust": false,
+     "enable_hsl": false,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 3,
+     "hdr_settings": null,
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": false,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    }
+   ],
+   "flag": 1,
+   "attribute": 0,
+   "name": "",
+   "is_default_name": true
+  },
+  {
+   "id": "F3EB70C4-5291-47cf-8D7B-10CDE5D31E7F",
+   "type": "audio",
+   "segments": [
+    {
+     "id": "F87C6AA8-E6DF-4293-AAF7-31C345C30255",
+     "source_timerange": {
+      "start": 0,
+      "duration": 12000000
+     },
+     "target_timerange": {
+      "start": 0,
+      "duration": 12000000
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": null,
+     "uniform_scale": null,
+     "material_id": "C5EE59B4-E8F2-4e43-905B-F9CC0E122E2B",
+     "extra_material_refs": [
+      "0BD9FDC8-9F4C-40ac-B4BB-63C1B7B7B547",
+      "65DB4E4B-9050-4254-A47C-2F268932435A",
+      "09350ADA-371F-4d8b-BE79-B7051F79C793",
+      "B50FFF0E-548B-436b-8999-F201A9D77B9D",
+      "7E0C895F-3A55-40d4-8D08-676DF41A25F4"
+     ],
+     "render_index": 0,
+     "keyframe_refs": [],
+     "enable_lut": false,
+     "enable_adjust": false,
+     "enable_hsl": false,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 4,
+     "hdr_settings": null,
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": false,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    }
+   ],
+   "flag": 0,
+   "attribute": 0,
+   "name": "",
+   "is_default_name": true
+  },
+  {
+   "id": "FC637125-5E89-4747-A0FE-06AADF973A8D",
+   "type": "audio",
+   "segments": [
+    {
+     "id": "9BC7EBB2-9534-49ce-97AD-B50494A802A7",
+     "source_timerange": {
+      "start": 0,
+      "duration": 433333
+     },
+     "target_timerange": {
+      "start": 2066666,
+      "duration": 433334
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 0.12524999678134918,
+     "last_nonzero_volume": 1.0,
+     "clip": null,
+     "uniform_scale": null,
+     "material_id": "00A9CDAA-ECE9-403d-8D56-9D25DE521F8C",
+     "extra_material_refs": [
+      "F3467D98-314D-4f91-8ECF-4AADA38612E1",
+      "A399CB10-9565-47e4-9478-111AA236A795",
+      "FE2E4A73-612E-4582-85E7-6C570335055F",
+      "CE963EE1-430D-44a5-8B6B-BC9463DB7685",
+      "918EEAA5-B657-4707-A4D2-761A36778843",
+      "27F6810E-D306-40e3-848D-946CDF1B4AE3"
+     ],
+     "render_index": 0,
+     "keyframe_refs": [],
+     "enable_lut": false,
+     "enable_adjust": false,
+     "enable_hsl": false,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 5,
+     "hdr_settings": null,
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": false,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    },
+    {
+     "id": "A01E4A9F-A08F-427c-9F18-EB57200B5828",
+     "source_timerange": {
+      "start": 0,
+      "duration": 1966666
+     },
+     "target_timerange": {
+      "start": 5333333,
+      "duration": 1966667
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 1.0,
+     "last_nonzero_volume": 1.0,
+     "clip": null,
+     "uniform_scale": null,
+     "material_id": "537BC2A3-2E9C-49df-936F-6F6AAB89ECC9",
+     "extra_material_refs": [
+      "EA123834-DBCF-49d3-B78F-4E2277943A7C",
+      "7E7DBFFE-02C1-423f-8911-951704D0BCCF",
+      "4597C492-E3A0-4c29-B831-D0A49CAE9F58",
+      "AAD1879A-C2AE-473f-B6C1-8C6919138937",
+      "DA64942A-ACF1-44a6-820C-EF8EFF116FF7"
+     ],
+     "render_index": 0,
+     "keyframe_refs": [],
+     "enable_lut": false,
+     "enable_adjust": false,
+     "enable_hsl": false,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 5,
+     "hdr_settings": null,
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": false,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    },
+    {
+     "id": "30EEDB30-EB01-4684-B69A-535FEEADCEE9",
+     "source_timerange": {
+      "start": 0,
+      "duration": 1574000
+     },
+     "target_timerange": {
+      "start": 11133333,
+      "duration": 966667
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.63,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 0.2468203455209732,
+     "last_nonzero_volume": 1.0,
+     "clip": null,
+     "uniform_scale": null,
+     "material_id": "5D637A37-F7D5-4e39-BFB4-BED0BA8120FB",
+     "extra_material_refs": [
+      "93C48191-BC18-4a78-89AC-2299FBAAD2FD",
+      "493FE07C-5227-4dd7-AF0A-F8BBDD9677BC",
+      "C7185B06-E43C-4c91-944A-515B49AF5D37",
+      "A4247C64-D540-4065-9684-5FC7F4FFDDCC",
+      "236D3FA5-A323-4588-9E84-A7C0C5CD0FE4"
+     ],
+     "render_index": 0,
+     "keyframe_refs": [],
+     "enable_lut": false,
+     "enable_adjust": false,
+     "enable_hsl": false,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 5,
+     "hdr_settings": null,
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": false,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    }
+   ],
+   "flag": 0,
+   "attribute": 0,
+   "name": "",
+   "is_default_name": true
+  },
+  {
+   "id": "2274905A-4E1C-49b6-B0A9-6A00DA85612A",
+   "type": "audio",
+   "segments": [
+    {
+     "id": "1A47F85F-BA8C-4737-9946-66562F4671A4",
+     "source_timerange": {
+      "start": 3333333,
+      "duration": 12000000
+     },
+     "target_timerange": {
+      "start": 0,
+      "duration": 12000000
+     },
+     "render_timerange": {
+      "start": 0,
+      "duration": 0
+     },
+     "desc": "",
+     "state": 0,
+     "speed": 1.0,
+     "is_loop": false,
+     "is_tone_modify": false,
+     "reverse": false,
+     "intensifies_audio": false,
+     "cartoon": false,
+     "volume": 0.04913925379514694,
+     "last_nonzero_volume": 1.0,
+     "clip": null,
+     "uniform_scale": null,
+     "material_id": "E0784781-0DDE-43e5-A72B-256F89B41A2E",
+     "extra_material_refs": [
+      "2CEAED43-52EF-4937-BF1C-7A839CD88E1F",
+      "28C2FCD0-7155-4ccc-B45D-94E165C3C552",
+      "055E17E0-4A7F-429d-B076-5AA5CA4BB7B4",
+      "F8FA2FE6-BD20-48b2-BC7A-39BA3F307AA0",
+      "E67EC4D4-DEFE-4064-AD46-5965D60D7B5A"
+     ],
+     "render_index": 0,
+     "keyframe_refs": [],
+     "enable_lut": false,
+     "enable_adjust": false,
+     "enable_hsl": false,
+     "visible": true,
+     "group_id": "",
+     "enable_color_curves": true,
+     "enable_hsl_curves": true,
+     "track_render_index": 6,
+     "hdr_settings": null,
+     "enable_color_wheels": true,
+     "track_attribute": 0,
+     "is_placeholder": false,
+     "template_id": "",
+     "enable_smart_color_adjust": false,
+     "template_scene": "default",
+     "common_keyframes": [],
+     "caption_info": null,
+     "responsive_layout": {
+      "enable": false,
+      "target_follow": "",
+      "size_layout": 0,
+      "horizontal_pos_layout": 0,
+      "vertical_pos_layout": 0
+     },
+     "enable_color_match_adjust": false,
+     "enable_color_correct_adjust": false,
+     "enable_adjust_mask": false,
+     "raw_segment_id": "",
+     "lyric_keyframes": null,
+     "enable_video_mask": true,
+     "digital_human_template_group_id": "",
+     "color_correct_alg_result": "",
+     "source": "segmentsourcenormal",
+     "enable_mask_stroke": false,
+     "enable_mask_shadow": false,
+     "enable_color_adjust_pro": false
+    }
+   ],
+   "flag": 0,
+   "attribute": 0,
+   "name": "",
+   "is_default_name": true
+  }
+ ],
+ "group_container": null,
+ "materials": {
+  "flowers": [],
+  "videos": [
+   {
+    "id": "C1CA3D68-D405-473c-8EA5-A6CF82C8313B",
+    "unique_id": "",
+    "type": "video",
+    "duration": 49733333,
+    "path": "C:/Users/Пользователь/Downloads/lv_0_20260717104406.mp4",
+    "media_path": "",
+    "local_id": "",
+    "has_audio": true,
+    "reverse_path": "",
+    "intensifies_path": "",
+    "reverse_intensifies_path": "",
+    "intensifies_audio_path": "",
+    "cartoon_path": "",
+    "width": 1920,
+    "height": 864,
+    "category_id": "",
+    "category_name": "local",
+    "material_id": "",
+    "material_name": "lv_0_20260717104406.mp4",
+    "material_url": "",
+    "crop": {
+     "upper_left_x": 0.0,
+     "upper_left_y": 0.0,
+     "upper_right_x": 1.0,
+     "upper_right_y": 0.0,
+     "lower_left_x": 0.0,
+     "lower_left_y": 1.0,
+     "lower_right_x": 1.0,
+     "lower_right_y": 1.0
+    },
+    "crop_ratio": "free",
+    "audio_fade": null,
+    "crop_scale": 1.0,
+    "extra_type_option": 0,
+    "stable": {
+     "stable_level": 0,
+     "matrix_path": "",
+     "time_range": {
+      "start": 0,
+      "duration": 0
+     }
+    },
+    "matting": {
+     "flag": 0,
+     "path": "",
+     "interactiveTime": [],
+     "has_use_quick_brush": false,
+     "strokes": [],
+     "has_use_quick_eraser": false,
+     "expansion": 0,
+     "feather": 0,
+     "reverse": false,
+     "custom_matting_id": "",
+     "enable_matting_stroke": false,
+     "is_clould": false,
+     "mask_video_path": "",
+     "cloud_product_fps": 0.0
+    },
+    "source": 0,
+    "source_platform": 0,
+    "formula_id": "",
+    "check_flag": 62978047,
+    "video_algorithm": {
+     "algorithms": [],
+     "time_range": null,
+     "path": "",
+     "gameplay_configs": [],
+     "ai_in_painting_config": [],
+     "complement_frame_config": null,
+     "motion_blur_config": null,
+     "deflicker": null,
+     "noise_reduction": null,
+     "quality_enhance": null,
+     "super_resolution": null,
+     "ai_background_configs": [],
+     "smart_complement_frame": null,
+     "aigc_generate": null,
+     "aigc_generate_list": [],
+     "mouth_shape_driver": null,
+     "ai_expression_driven": null,
+     "ai_motion_driven": null,
+     "image_interpretation": null,
+     "story_video_modify_video_config": {
+      "task_id": "",
+      "is_overwrite_last_video": false,
+      "tracker_task_id": ""
+     },
+     "skip_algorithm_index": []
+    },
+    "is_unified_beauty_mode": false,
+    "is_set_beauty_mode": false,
+    "object_locked": null,
+    "smart_motion": null,
+    "multi_camera_info": null,
+    "freeze": null,
+    "picture_from": "none",
+    "picture_set_category_id": "",
+    "picture_set_category_name": "",
+    "team_id": "",
+    "local_material_id": "a59be409-743f-4f14-afb7-11c9487b0ec4",
+    "origin_material_id": "",
+    "request_id": "",
+    "has_sound_separated": false,
+    "is_text_edit_overdub": false,
+    "is_ai_generate_content": false,
+    "aigc_type": "none",
+    "is_copyright": false,
+    "aigc_history_id": "",
+    "aigc_item_id": "",
+    "local_material_from": "",
+    "smart_match_info": null,
+    "beauty_face_preset_infos": [],
+    "beauty_body_preset_id": "",
+    "beauty_face_auto_preset": {
+     "preset_id": "",
+     "name": "",
+     "rate_map": "",
+     "scene": ""
+    },
+    "beauty_face_auto_preset_infos": [],
+    "beauty_body_auto_preset": null,
+    "live_photo_timestamp": -1,
+    "live_photo_cover_path": "",
+    "content_feature_info": null,
+    "corner_pin": null,
+    "surface_trackings": [],
+    "video_mask_stroke": {
+     "resource_id": "",
+     "path": "",
+     "type": "",
+     "color": "",
+     "size": 0.0,
+     "alpha": 0.0,
+     "distance": 0.0,
+     "texture": 0.0,
+     "horizontal_shift": 0.0,
+     "vertical_shift": 0.0
+    },
+    "video_mask_shadow": {
+     "resource_id": "",
+     "path": "",
+     "color": "",
+     "alpha": 0.0,
+     "blur": 0.0,
+     "distance": 0.0,
+     "angle": 0.0
+    }
+   },
+   {
+    "id": "17EA0E36-97DC-4408-8EFD-FA61CF04DC9D",
+    "unique_id": "",
+    "type": "video",
+    "duration": 49733333,
+    "path": "C:/Users/Пользователь/Downloads/lv_0_20260717104406.mp4",
+    "media_path": "",
+    "local_id": "",
+    "has_audio": true,
+    "reverse_path": "",
+    "intensifies_path": "",
+    "reverse_intensifies_path": "",
+    "intensifies_audio_path": "",
+    "cartoon_path": "",
+    "width": 1920,
+    "height": 864,
+    "category_id": "",
+    "category_name": "local",
+    "material_id": "",
+    "material_name": "lv_0_20260717104406.mp4",
+    "material_url": "",
+    "crop": {
+     "upper_left_x": 0.0,
+     "upper_left_y": 0.0,
+     "upper_right_x": 1.0,
+     "upper_right_y": 0.0,
+     "lower_left_x": 0.0,
+     "lower_left_y": 1.0,
+     "lower_right_x": 1.0,
+     "lower_right_y": 1.0
+    },
+    "crop_ratio": "free",
+    "audio_fade": null,
+    "crop_scale": 1.0,
+    "extra_type_option": 0,
+    "stable": {
+     "stable_level": 0,
+     "matrix_path": "",
+     "time_range": {
+      "start": 0,
+      "duration": 0
+     }
+    },
+    "matting": {
+     "flag": 0,
+     "path": "",
+     "interactiveTime": [],
+     "has_use_quick_brush": false,
+     "strokes": [],
+     "has_use_quick_eraser": false,
+     "expansion": 0,
+     "feather": 0,
+     "reverse": false,
+     "custom_matting_id": "",
+     "enable_matting_stroke": false,
+     "is_clould": false,
+     "mask_video_path": "",
+     "cloud_product_fps": 0.0
+    },
+    "source": 0,
+    "source_platform": 0,
+    "formula_id": "",
+    "check_flag": 62978047,
+    "video_algorithm": {
+     "algorithms": [],
+     "time_range": null,
+     "path": "",
+     "gameplay_configs": [],
+     "ai_in_painting_config": [],
+     "complement_frame_config": null,
+     "motion_blur_config": null,
+     "deflicker": null,
+     "noise_reduction": null,
+     "quality_enhance": null,
+     "super_resolution": null,
+     "ai_background_configs": [],
+     "smart_complement_frame": null,
+     "aigc_generate": null,
+     "aigc_generate_list": [],
+     "mouth_shape_driver": null,
+     "ai_expression_driven": null,
+     "ai_motion_driven": null,
+     "image_interpretation": null,
+     "story_video_modify_video_config": {
+      "task_id": "",
+      "is_overwrite_last_video": false,
+      "tracker_task_id": ""
+     },
+     "skip_algorithm_index": []
+    },
+    "is_unified_beauty_mode": false,
+    "is_set_beauty_mode": false,
+    "object_locked": null,
+    "smart_motion": null,
+    "multi_camera_info": null,
+    "freeze": null,
+    "picture_from": "none",
+    "picture_set_category_id": "",
+    "picture_set_category_name": "",
+    "team_id": "",
+    "local_material_id": "a59be409-743f-4f14-afb7-11c9487b0ec4",
+    "origin_material_id": "",
+    "request_id": "",
+    "has_sound_separated": false,
+    "is_text_edit_overdub": false,
+    "is_ai_generate_content": false,
+    "aigc_type": "none",
+    "is_copyright": false,
+    "aigc_history_id": "",
+    "aigc_item_id": "",
+    "local_material_from": "",
+    "smart_match_info": null,
+    "beauty_face_preset_infos": [],
+    "beauty_body_preset_id": "",
+    "beauty_face_auto_preset": {
+     "preset_id": "",
+     "name": "",
+     "rate_map": "",
+     "scene": ""
+    },
+    "beauty_face_auto_preset_infos": [],
+    "beauty_body_auto_preset": null,
+    "live_photo_timestamp": -1,
+    "live_photo_cover_path": "",
+    "content_feature_info": null,
+    "corner_pin": null,
+    "surface_trackings": [],
+    "video_mask_stroke": {
+     "resource_id": "",
+     "path": "",
+     "type": "",
+     "color": "",
+     "size": 0.0,
+     "alpha": 0.0,
+     "distance": 0.0,
+     "texture": 0.0,
+     "horizontal_shift": 0.0,
+     "vertical_shift": 0.0
+    },
+    "video_mask_shadow": {
+     "resource_id": "",
+     "path": "",
+     "color": "",
+     "alpha": 0.0,
+     "blur": 0.0,
+     "distance": 0.0,
+     "angle": 0.0
+    }
+   },
+   {
+    "id": "2E6DE092-4D47-4134-8B89-65C789B7CBF8",
+    "unique_id": "",
+    "type": "video",
+    "duration": 49733333,
+    "path": "C:/Users/Пользователь/Downloads/lv_0_20260717104406.mp4",
+    "media_path": "",
+    "local_id": "",
+    "has_audio": true,
+    "reverse_path": "",
+    "intensifies_path": "",
+    "reverse_intensifies_path": "",
+    "intensifies_audio_path": "",
+    "cartoon_path": "",
+    "width": 1920,
+    "height": 864,
+    "category_id": "",
+    "category_name": "local",
+    "material_id": "",
+    "material_name": "lv_0_20260717104406.mp4",
+    "material_url": "",
+    "crop": {
+     "upper_left_x": 0.0,
+     "upper_left_y": 0.0,
+     "upper_right_x": 1.0,
+     "upper_right_y": 0.0,
+     "lower_left_x": 0.0,
+     "lower_left_y": 1.0,
+     "lower_right_x": 1.0,
+     "lower_right_y": 1.0
+    },
+    "crop_ratio": "free",
+    "audio_fade": null,
+    "crop_scale": 1.0,
+    "extra_type_option": 0,
+    "stable": {
+     "stable_level": 0,
+     "matrix_path": "",
+     "time_range": {
+      "start": 0,
+      "duration": 0
+     }
+    },
+    "matting": {
+     "flag": 0,
+     "path": "",
+     "interactiveTime": [],
+     "has_use_quick_brush": false,
+     "strokes": [],
+     "has_use_quick_eraser": false,
+     "expansion": 0,
+     "feather": 0,
+     "reverse": false,
+     "custom_matting_id": "",
+     "enable_matting_stroke": false,
+     "is_clould": false,
+     "mask_video_path": "",
+     "cloud_product_fps": 0.0
+    },
+    "source": 0,
+    "source_platform": 0,
+    "formula_id": "",
+    "check_flag": 62978047,
+    "video_algorithm": {
+     "algorithms": [],
+     "time_range": null,
+     "path": "",
+     "gameplay_configs": [],
+     "ai_in_painting_config": [],
+     "complement_frame_config": null,
+     "motion_blur_config": null,
+     "deflicker": null,
+     "noise_reduction": null,
+     "quality_enhance": null,
+     "super_resolution": null,
+     "ai_background_configs": [],
+     "smart_complement_frame": null,
+     "aigc_generate": null,
+     "aigc_generate_list": [],
+     "mouth_shape_driver": null,
+     "ai_expression_driven": null,
+     "ai_motion_driven": null,
+     "image_interpretation": null,
+     "story_video_modify_video_config": {
+      "task_id": "",
+      "is_overwrite_last_video": false,
+      "tracker_task_id": ""
+     },
+     "skip_algorithm_index": []
+    },
+    "is_unified_beauty_mode": false,
+    "is_set_beauty_mode": false,
+    "object_locked": null,
+    "smart_motion": null,
+    "multi_camera_info": null,
+    "freeze": null,
+    "picture_from": "none",
+    "picture_set_category_id": "",
+    "picture_set_category_name": "",
+    "team_id": "",
+    "local_material_id": "a59be409-743f-4f14-afb7-11c9487b0ec4",
+    "origin_material_id": "",
+    "request_id": "",
+    "has_sound_separated": false,
+    "is_text_edit_overdub": false,
+    "is_ai_generate_content": false,
+    "aigc_type": "none",
+    "is_copyright": false,
+    "aigc_history_id": "",
+    "aigc_item_id": "",
+    "local_material_from": "",
+    "smart_match_info": null,
+    "beauty_face_preset_infos": [],
+    "beauty_body_preset_id": "",
+    "beauty_face_auto_preset": {
+     "preset_id": "",
+     "name": "",
+     "rate_map": "",
+     "scene": ""
+    },
+    "beauty_face_auto_preset_infos": [],
+    "beauty_body_auto_preset": null,
+    "live_photo_timestamp": -1,
+    "live_photo_cover_path": "",
+    "content_feature_info": null,
+    "corner_pin": null,
+    "surface_trackings": [],
+    "video_mask_stroke": {
+     "resource_id": "",
+     "path": "",
+     "type": "",
+     "color": "",
+     "size": 0.0,
+     "alpha": 0.0,
+     "distance": 0.0,
+     "texture": 0.0,
+     "horizontal_shift": 0.0,
+     "vertical_shift": 0.0
+    },
+    "video_mask_shadow": {
+     "resource_id": "",
+     "path": "",
+     "color": "",
+     "alpha": 0.0,
+     "blur": 0.0,
+     "distance": 0.0,
+     "angle": 0.0
+    }
+   },
+   {
+    "id": "A9927F58-EAFD-4bf2-8E18-A19164AA5AA2",
+    "unique_id": "",
+    "type": "video",
+    "duration": 49733333,
+    "path": "C:/Users/Пользователь/Downloads/lv_0_20260717104406.mp4",
+    "media_path": "",
+    "local_id": "",
+    "has_audio": true,
+    "reverse_path": "",
+    "intensifies_path": "",
+    "reverse_intensifies_path": "",
+    "intensifies_audio_path": "",
+    "cartoon_path": "",
+    "width": 1920,
+    "height": 864,
+    "category_id": "",
+    "category_name": "local",
+    "material_id": "",
+    "material_name": "lv_0_20260717104406.mp4",
+    "material_url": "",
+    "crop": {
+     "upper_left_x": 0.0,
+     "upper_left_y": 0.0,
+     "upper_right_x": 1.0,
+     "upper_right_y": 0.0,
+     "lower_left_x": 0.0,
+     "lower_left_y": 1.0,
+     "lower_right_x": 1.0,
+     "lower_right_y": 1.0
+    },
+    "crop_ratio": "free",
+    "audio_fade": null,
+    "crop_scale": 1.0,
+    "extra_type_option": 0,
+    "stable": {
+     "stable_level": 0,
+     "matrix_path": "",
+     "time_range": {
+      "start": 0,
+      "duration": 0
+     }
+    },
+    "matting": {
+     "flag": 0,
+     "path": "",
+     "interactiveTime": [],
+     "has_use_quick_brush": false,
+     "strokes": [],
+     "has_use_quick_eraser": false,
+     "expansion": 0,
+     "feather": 0,
+     "reverse": false,
+     "custom_matting_id": "",
+     "enable_matting_stroke": false,
+     "is_clould": false,
+     "mask_video_path": "",
+     "cloud_product_fps": 0.0
+    },
+    "source": 0,
+    "source_platform": 0,
+    "formula_id": "",
+    "check_flag": 62978047,
+    "video_algorithm": {
+     "algorithms": [],
+     "time_range": null,
+     "path": "",
+     "gameplay_configs": [],
+     "ai_in_painting_config": [],
+     "complement_frame_config": null,
+     "motion_blur_config": null,
+     "deflicker": null,
+     "noise_reduction": null,
+     "quality_enhance": null,
+     "super_resolution": null,
+     "ai_background_configs": [],
+     "smart_complement_frame": null,
+     "aigc_generate": null,
+     "aigc_generate_list": [],
+     "mouth_shape_driver": null,
+     "ai_expression_driven": null,
+     "ai_motion_driven": null,
+     "image_interpretation": null,
+     "story_video_modify_video_config": {
+      "task_id": "",
+      "is_overwrite_last_video": false,
+      "tracker_task_id": ""
+     },
+     "skip_algorithm_index": []
+    },
+    "is_unified_beauty_mode": false,
+    "is_set_beauty_mode": false,
+    "object_locked": null,
+    "smart_motion": null,
+    "multi_camera_info": null,
+    "freeze": null,
+    "picture_from": "none",
+    "picture_set_category_id": "",
+    "picture_set_category_name": "",
+    "team_id": "",
+    "local_material_id": "a59be409-743f-4f14-afb7-11c9487b0ec4",
+    "origin_material_id": "",
+    "request_id": "",
+    "has_sound_separated": false,
+    "is_text_edit_overdub": false,
+    "is_ai_generate_content": false,
+    "aigc_type": "none",
+    "is_copyright": false,
+    "aigc_history_id": "",
+    "aigc_item_id": "",
+    "local_material_from": "",
+    "smart_match_info": null,
+    "beauty_face_preset_infos": [],
+    "beauty_body_preset_id": "",
+    "beauty_face_auto_preset": {
+     "preset_id": "",
+     "name": "",
+     "rate_map": "",
+     "scene": ""
+    },
+    "beauty_face_auto_preset_infos": [],
+    "beauty_body_auto_preset": null,
+    "live_photo_timestamp": -1,
+    "live_photo_cover_path": "",
+    "content_feature_info": null,
+    "corner_pin": null,
+    "surface_trackings": [],
+    "video_mask_stroke": {
+     "resource_id": "",
+     "path": "",
+     "type": "",
+     "color": "",
+     "size": 0.0,
+     "alpha": 0.0,
+     "distance": 0.0,
+     "texture": 0.0,
+     "horizontal_shift": 0.0,
+     "vertical_shift": 0.0
+    },
+    "video_mask_shadow": {
+     "resource_id": "",
+     "path": "",
+     "color": "",
+     "alpha": 0.0,
+     "blur": 0.0,
+     "distance": 0.0,
+     "angle": 0.0
+    }
+   },
+   {
+    "id": "7B10205D-C31A-4c08-BD2D-D7C3D45F661A",
+    "unique_id": "",
+    "type": "video",
+    "duration": 3000000,
+    "path": "C:/Users/Пользователь/Downloads/video5389041791532049531.mp4",
+    "media_path": "",
+    "local_id": "",
+    "has_audio": false,
+    "reverse_path": "",
+    "intensifies_path": "",
+    "reverse_intensifies_path": "",
+    "intensifies_audio_path": "",
+    "cartoon_path": "",
+    "width": 850,
+    "height": 854,
+    "category_id": "",
+    "category_name": "local",
+    "material_id": "",
+    "material_name": "video5389041791532049531.mp4",
+    "material_url": "",
+    "crop": {
+     "upper_left_x": 0.0,
+     "upper_left_y": 0.0,
+     "upper_right_x": 1.0,
+     "upper_right_y": 0.0,
+     "lower_left_x": 0.0,
+     "lower_left_y": 1.0,
+     "lower_right_x": 1.0,
+     "lower_right_y": 1.0
+    },
+    "crop_ratio": "free",
+    "audio_fade": null,
+    "crop_scale": 1.0,
+    "extra_type_option": 0,
+    "stable": {
+     "stable_level": 0,
+     "matrix_path": "",
+     "time_range": {
+      "start": 0,
+      "duration": 0
+     }
+    },
+    "matting": {
+     "flag": 0,
+     "path": "",
+     "interactiveTime": [],
+     "has_use_quick_brush": false,
+     "strokes": [],
+     "has_use_quick_eraser": false,
+     "expansion": 0,
+     "feather": 0,
+     "reverse": false,
+     "custom_matting_id": "",
+     "enable_matting_stroke": false,
+     "is_clould": false,
+     "mask_video_path": "",
+     "cloud_product_fps": 0.0
+    },
+    "source": 0,
+    "source_platform": 0,
+    "formula_id": "",
+    "check_flag": 62978047,
+    "video_algorithm": {
+     "algorithms": [],
+     "time_range": null,
+     "path": "",
+     "gameplay_configs": [],
+     "ai_in_painting_config": [],
+     "complement_frame_config": null,
+     "motion_blur_config": null,
+     "deflicker": null,
+     "noise_reduction": null,
+     "quality_enhance": null,
+     "super_resolution": null,
+     "ai_background_configs": [],
+     "smart_complement_frame": null,
+     "aigc_generate": null,
+     "aigc_generate_list": [],
+     "mouth_shape_driver": null,
+     "ai_expression_driven": null,
+     "ai_motion_driven": null,
+     "image_interpretation": null,
+     "story_video_modify_video_config": {
+      "task_id": "",
+      "is_overwrite_last_video": false,
+      "tracker_task_id": ""
+     },
+     "skip_algorithm_index": []
+    },
+    "is_unified_beauty_mode": false,
+    "is_set_beauty_mode": false,
+    "object_locked": null,
+    "smart_motion": null,
+    "multi_camera_info": null,
+    "freeze": null,
+    "picture_from": "none",
+    "picture_set_category_id": "",
+    "picture_set_category_name": "",
+    "team_id": "",
+    "local_material_id": "b8c96399-62ce-4e86-91a0-3e733aeafd21",
+    "origin_material_id": "",
+    "request_id": "",
+    "has_sound_separated": false,
+    "is_text_edit_overdub": false,
+    "is_ai_generate_content": false,
+    "aigc_type": "none",
+    "is_copyright": false,
+    "aigc_history_id": "",
+    "aigc_item_id": "",
+    "local_material_from": "",
+    "smart_match_info": null,
+    "beauty_face_preset_infos": [],
+    "beauty_body_preset_id": "",
+    "beauty_face_auto_preset": {
+     "preset_id": "",
+     "name": "",
+     "rate_map": "",
+     "scene": ""
+    },
+    "beauty_face_auto_preset_infos": [],
+    "beauty_body_auto_preset": null,
+    "live_photo_timestamp": -1,
+    "live_photo_cover_path": "",
+    "content_feature_info": null,
+    "corner_pin": null,
+    "surface_trackings": [],
+    "video_mask_stroke": {
+     "resource_id": "",
+     "path": "C:/Users/Пользователь/AppData/Local/CapCut/Apps/8.7.0.3685/Resources/Chroma2",
+     "type": "",
+     "color": "",
+     "size": 0.0,
+     "alpha": 0.0,
+     "distance": 0.0,
+     "texture": 0.0,
+     "horizontal_shift": 0.0,
+     "vertical_shift": 0.0
+    },
+    "video_mask_shadow": {
+     "resource_id": "",
+     "path": "C:/Users/Пользователь/AppData/Local/CapCut/Apps/8.7.0.3685/Resources/Chroma2",
+     "color": "",
+     "alpha": 0.0,
+     "blur": 0.0,
+     "distance": 0.0,
+     "angle": 0.0
+    }
+   },
+   {
+    "id": "842D259D-C169-486e-8811-6F3640E26B7C",
+    "unique_id": "",
+    "type": "photo",
+    "duration": 10800000000,
+    "path": "C:/Users/Пользователь/Downloads/5389041791992011754.jpg",
+    "media_path": "",
+    "local_id": "",
+    "has_audio": false,
+    "reverse_path": "",
+    "intensifies_path": "",
+    "reverse_intensifies_path": "",
+    "intensifies_audio_path": "",
+    "cartoon_path": "",
+    "width": 768,
+    "height": 768,
+    "category_id": "",
+    "category_name": "local",
+    "material_id": "",
+    "material_name": "5389041791992011754.jpg",
+    "material_url": "",
+    "crop": {
+     "upper_left_x": 0.0,
+     "upper_left_y": 0.0,
+     "upper_right_x": 1.0,
+     "upper_right_y": 0.0,
+     "lower_left_x": 0.0,
+     "lower_left_y": 1.0,
+     "lower_right_x": 1.0,
+     "lower_right_y": 1.0
+    },
+    "crop_ratio": "free",
+    "audio_fade": null,
+    "crop_scale": 1.0,
+    "extra_type_option": 0,
+    "stable": {
+     "stable_level": 0,
+     "matrix_path": "",
+     "time_range": {
+      "start": 0,
+      "duration": 0
+     }
+    },
+    "matting": {
+     "flag": 0,
+     "path": "",
+     "interactiveTime": [],
+     "has_use_quick_brush": false,
+     "strokes": [],
+     "has_use_quick_eraser": false,
+     "expansion": 0,
+     "feather": 0,
+     "reverse": false,
+     "custom_matting_id": "",
+     "enable_matting_stroke": false,
+     "is_clould": false,
+     "mask_video_path": "",
+     "cloud_product_fps": 0.0
+    },
+    "source": 0,
+    "source_platform": 0,
+    "formula_id": "",
+    "check_flag": 62978047,
+    "video_algorithm": {
+     "algorithms": [],
+     "time_range": null,
+     "path": "",
+     "gameplay_configs": [],
+     "ai_in_painting_config": [],
+     "complement_frame_config": null,
+     "motion_blur_config": null,
+     "deflicker": null,
+     "noise_reduction": null,
+     "quality_enhance": null,
+     "super_resolution": null,
+     "ai_background_configs": [],
+     "smart_complement_frame": null,
+     "aigc_generate": null,
+     "aigc_generate_list": [],
+     "mouth_shape_driver": null,
+     "ai_expression_driven": null,
+     "ai_motion_driven": null,
+     "image_interpretation": null,
+     "story_video_modify_video_config": {
+      "task_id": "",
+      "is_overwrite_last_video": false,
+      "tracker_task_id": ""
+     },
+     "skip_algorithm_index": []
+    },
+    "is_unified_beauty_mode": false,
+    "is_set_beauty_mode": false,
+    "object_locked": null,
+    "smart_motion": null,
+    "multi_camera_info": null,
+    "freeze": null,
+    "picture_from": "none",
+    "picture_set_category_id": "",
+    "picture_set_category_name": "",
+    "team_id": "",
+    "local_material_id": "",
+    "origin_material_id": "",
+    "request_id": "",
+    "has_sound_separated": false,
+    "is_text_edit_overdub": false,
+    "is_ai_generate_content": false,
+    "aigc_type": "none",
+    "is_copyright": false,
+    "aigc_history_id": "",
+    "aigc_item_id": "",
+    "local_material_from": "",
+    "smart_match_info": null,
+    "beauty_face_preset_infos": [],
+    "beauty_body_preset_id": "",
+    "beauty_face_auto_preset": {
+     "preset_id": "",
+     "name": "",
+     "rate_map": "",
+     "scene": ""
+    },
+    "beauty_face_auto_preset_infos": [],
+    "beauty_body_auto_preset": null,
+    "live_photo_timestamp": -1,
+    "live_photo_cover_path": "",
+    "content_feature_info": null,
+    "corner_pin": null,
+    "surface_trackings": [],
+    "video_mask_stroke": {
+     "resource_id": "",
+     "path": "",
+     "type": "",
+     "color": "",
+     "size": 0.0,
+     "alpha": 0.0,
+     "distance": 0.0,
+     "texture": 0.0,
+     "horizontal_shift": 0.0,
+     "vertical_shift": 0.0
+    },
+    "video_mask_shadow": {
+     "resource_id": "",
+     "path": "",
+     "color": "",
+     "alpha": 0.0,
+     "blur": 0.0,
+     "distance": 0.0,
+     "angle": 0.0
+    }
+   }
+  ],
+  "tail_leaders": [],
+  "audios": [
+   {
+    "id": "C5EE59B4-E8F2-4e43-905B-F9CC0E122E2B",
+    "unique_id": "",
+    "type": "extract_music",
+    "name": "ElevenLabs_2026-07-17T05_21_54_ют1_gen_sp107_s35_sb75_se36_b_m2.mp3",
+    "duration": 12100000,
+    "path": "C:/Users/Пользователь/Downloads/ElevenLabs_2026-07-17T05_21_54_ют1_gen_sp107_s35_sb75_se36_b_m2.mp3",
+    "category_name": "local",
+    "wave_points": [],
+    "music_id": "964949fa-c194-472c-8352-fc1f382a34c7",
+    "app_id": 0,
+    "text_id": "",
+    "tone_type": "",
+    "source_platform": 0,
+    "video_id": "",
+    "effect_id": "",
+    "resource_id": "",
+    "third_resource_id": "",
+    "category_id": "",
+    "intensifies_path": "",
+    "formula_id": "",
+    "check_flag": 1,
+    "team_id": "",
+    "local_material_id": "b3325b13-04cb-4de5-9b31-50ed7ab53ac3",
+    "tone_speaker": "",
+    "mock_tone_speaker": "",
+    "tone_effect_id": "",
+    "tone_effect_name": "",
+    "tone_platform": "",
+    "cloned_model_type": "",
+    "tone_category_id": "",
+    "tone_category_name": "",
+    "tone_second_category_id": "",
+    "tone_second_category_name": "",
+    "tone_emotion_name_key": "",
+    "tone_emotion_style": "",
+    "tone_emotion_role": "",
+    "tone_emotion_selection": "",
+    "tone_emotion_scale": 0.0,
+    "moyin_emotion": "",
+    "request_id": "",
+    "query": "",
+    "search_id": "",
+    "sound_separate_type": "",
+    "is_text_edit_overdub": false,
+    "is_ugc": false,
+    "is_ai_clone_tone": false,
+    "is_ai_clone_tone_post": false,
+    "source_from": "",
+    "copyright_limit_type": "none",
+    "aigc_history_id": "",
+    "aigc_item_id": "",
+    "music_source": "",
+    "pgc_id": "",
+    "pgc_name": "",
+    "similiar_music_info": {
+     "original_song_id": "",
+     "original_song_name": ""
+    },
+    "ai_music_type": 0,
+    "ai_music_enter_from": "",
+    "lyric_type": 0,
+    "tts_task_id": "",
+    "tts_generate_scene": "",
+    "ai_music_generate_scene": 0,
+    "tts_benefit_info": {
+     "benefit_type": "none",
+     "benefit_log_id": "",
+     "benefit_log_extra": "",
+     "benefit_amount": -1
+    }
+   },
+   {
+    "id": "00A9CDAA-ECE9-403d-8D56-9D25DE521F8C",
+    "unique_id": "",
+    "type": "music",
+    "name": "Swish",
+    "duration": 433333,
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/music/d2059d83f11fa732e2c6599c9fccf301.mp3",
+    "category_name": "search_audio",
+    "wave_points": [],
+    "music_id": "6993230936993204226",
+    "app_id": 1775,
+    "text_id": "",
+    "tone_type": "",
+    "source_platform": 0,
+    "video_id": "",
+    "effect_id": "",
+    "resource_id": "",
+    "third_resource_id": "",
+    "category_id": "0",
+    "intensifies_path": "",
+    "formula_id": "",
+    "check_flag": 1,
+    "team_id": "",
+    "local_material_id": "",
+    "tone_speaker": "",
+    "mock_tone_speaker": "",
+    "tone_effect_id": "",
+    "tone_effect_name": "",
+    "tone_platform": "",
+    "cloned_model_type": "",
+    "tone_category_id": "",
+    "tone_category_name": "",
+    "tone_second_category_id": "",
+    "tone_second_category_name": "",
+    "tone_emotion_name_key": "",
+    "tone_emotion_style": "",
+    "tone_emotion_role": "",
+    "tone_emotion_selection": "",
+    "tone_emotion_scale": 0.0,
+    "moyin_emotion": "",
+    "request_id": "",
+    "query": "",
+    "search_id": "",
+    "sound_separate_type": "",
+    "is_text_edit_overdub": false,
+    "is_ugc": false,
+    "is_ai_clone_tone": false,
+    "is_ai_clone_tone_post": false,
+    "source_from": "",
+    "copyright_limit_type": "none",
+    "aigc_history_id": "",
+    "aigc_item_id": "",
+    "music_source": "",
+    "pgc_id": "",
+    "pgc_name": "",
+    "similiar_music_info": {
+     "original_song_id": "",
+     "original_song_name": ""
+    },
+    "ai_music_type": 0,
+    "ai_music_enter_from": "",
+    "lyric_type": 0,
+    "tts_task_id": "",
+    "tts_generate_scene": "",
+    "ai_music_generate_scene": 0,
+    "tts_benefit_info": {
+     "benefit_type": "none",
+     "benefit_log_id": "",
+     "benefit_log_extra": "",
+     "benefit_amount": -1
+    }
+   },
+   {
+    "id": "537BC2A3-2E9C-49df-936F-6F6AAB89ECC9",
+    "unique_id": "",
+    "type": "extract_music",
+    "name": "Извлечено20260716-2",
+    "duration": 1966666,
+    "path": "C:/Users/Пользователь/Downloads/bell-sound.mp3",
+    "category_name": "local_music",
+    "wave_points": [],
+    "music_id": "20e5045b-76f5-4977-8d44-0f74f500d863",
+    "app_id": 0,
+    "text_id": "",
+    "tone_type": "",
+    "source_platform": 0,
+    "video_id": "",
+    "effect_id": "",
+    "resource_id": "",
+    "third_resource_id": "",
+    "category_id": "local",
+    "intensifies_path": "",
+    "formula_id": "",
+    "check_flag": 1,
+    "team_id": "",
+    "local_material_id": "",
+    "tone_speaker": "",
+    "mock_tone_speaker": "",
+    "tone_effect_id": "",
+    "tone_effect_name": "",
+    "tone_platform": "",
+    "cloned_model_type": "",
+    "tone_category_id": "",
+    "tone_category_name": "",
+    "tone_second_category_id": "",
+    "tone_second_category_name": "",
+    "tone_emotion_name_key": "",
+    "tone_emotion_style": "",
+    "tone_emotion_role": "",
+    "tone_emotion_selection": "",
+    "tone_emotion_scale": 0.0,
+    "moyin_emotion": "",
+    "request_id": "",
+    "query": "",
+    "search_id": "",
+    "sound_separate_type": "",
+    "is_text_edit_overdub": false,
+    "is_ugc": false,
+    "is_ai_clone_tone": false,
+    "is_ai_clone_tone_post": false,
+    "source_from": "",
+    "copyright_limit_type": "none",
+    "aigc_history_id": "",
+    "aigc_item_id": "",
+    "music_source": "",
+    "pgc_id": "",
+    "pgc_name": "",
+    "similiar_music_info": {
+     "original_song_id": "",
+     "original_song_name": ""
+    },
+    "ai_music_type": 0,
+    "ai_music_enter_from": "",
+    "lyric_type": 0,
+    "tts_task_id": "",
+    "tts_generate_scene": "",
+    "ai_music_generate_scene": 0,
+    "tts_benefit_info": {
+     "benefit_type": "none",
+     "benefit_log_id": "",
+     "benefit_log_extra": "",
+     "benefit_amount": -1
+    }
+   },
+   {
+    "id": "5D637A37-F7D5-4e39-BFB4-BED0BA8120FB",
+    "unique_id": "",
+    "type": "extract_music",
+    "name": "Извлечено20260716-1",
+    "duration": 1900000,
+    "path": "C:/Users/Пользователь/Downloads/вау.mp3",
+    "category_name": "local_music",
+    "wave_points": [],
+    "music_id": "ab519f77-8158-4e43-8d71-0bec53dfe81e",
+    "app_id": 0,
+    "text_id": "",
+    "tone_type": "",
+    "source_platform": 0,
+    "video_id": "",
+    "effect_id": "",
+    "resource_id": "",
+    "third_resource_id": "",
+    "category_id": "local",
+    "intensifies_path": "",
+    "formula_id": "",
+    "check_flag": 1,
+    "team_id": "",
+    "local_material_id": "",
+    "tone_speaker": "",
+    "mock_tone_speaker": "",
+    "tone_effect_id": "",
+    "tone_effect_name": "",
+    "tone_platform": "",
+    "cloned_model_type": "",
+    "tone_category_id": "",
+    "tone_category_name": "",
+    "tone_second_category_id": "",
+    "tone_second_category_name": "",
+    "tone_emotion_name_key": "",
+    "tone_emotion_style": "",
+    "tone_emotion_role": "",
+    "tone_emotion_selection": "",
+    "tone_emotion_scale": 0.0,
+    "moyin_emotion": "",
+    "request_id": "",
+    "query": "",
+    "search_id": "",
+    "sound_separate_type": "",
+    "is_text_edit_overdub": false,
+    "is_ugc": false,
+    "is_ai_clone_tone": false,
+    "is_ai_clone_tone_post": false,
+    "source_from": "",
+    "copyright_limit_type": "none",
+    "aigc_history_id": "",
+    "aigc_item_id": "",
+    "music_source": "",
+    "pgc_id": "",
+    "pgc_name": "",
+    "similiar_music_info": {
+     "original_song_id": "",
+     "original_song_name": ""
+    },
+    "ai_music_type": 0,
+    "ai_music_enter_from": "",
+    "lyric_type": 0,
+    "tts_task_id": "",
+    "tts_generate_scene": "",
+    "ai_music_generate_scene": 0,
+    "tts_benefit_info": {
+     "benefit_type": "none",
+     "benefit_log_id": "",
+     "benefit_log_extra": "",
+     "benefit_amount": -1
+    }
+   },
+   {
+    "id": "E0784781-0DDE-43e5-A72B-256F89B41A2E",
+    "unique_id": "",
+    "type": "extract_music",
+    "name": "Извлечено20260716-3",
+    "duration": 119100000,
+    "path": "C:/Users/Пользователь/Downloads/Montagem Nada Tropica   Eternxlkz.mp3",
+    "category_name": "local_music",
+    "wave_points": [],
+    "music_id": "bfaaaa00-6a22-4a6f-8cc1-8f92792a647d",
+    "app_id": 0,
+    "text_id": "",
+    "tone_type": "",
+    "source_platform": 0,
+    "video_id": "",
+    "effect_id": "",
+    "resource_id": "",
+    "third_resource_id": "",
+    "category_id": "local",
+    "intensifies_path": "",
+    "formula_id": "",
+    "check_flag": 1,
+    "team_id": "",
+    "local_material_id": "",
+    "tone_speaker": "",
+    "mock_tone_speaker": "",
+    "tone_effect_id": "",
+    "tone_effect_name": "",
+    "tone_platform": "",
+    "cloned_model_type": "",
+    "tone_category_id": "",
+    "tone_category_name": "",
+    "tone_second_category_id": "",
+    "tone_second_category_name": "",
+    "tone_emotion_name_key": "",
+    "tone_emotion_style": "",
+    "tone_emotion_role": "",
+    "tone_emotion_selection": "",
+    "tone_emotion_scale": 0.0,
+    "moyin_emotion": "",
+    "request_id": "",
+    "query": "",
+    "search_id": "",
+    "sound_separate_type": "",
+    "is_text_edit_overdub": false,
+    "is_ugc": false,
+    "is_ai_clone_tone": false,
+    "is_ai_clone_tone_post": false,
+    "source_from": "",
+    "copyright_limit_type": "none",
+    "aigc_history_id": "",
+    "aigc_item_id": "",
+    "music_source": "",
+    "pgc_id": "",
+    "pgc_name": "",
+    "similiar_music_info": {
+     "original_song_id": "",
+     "original_song_name": ""
+    },
+    "ai_music_type": 0,
+    "ai_music_enter_from": "",
+    "lyric_type": 0,
+    "tts_task_id": "",
+    "tts_generate_scene": "",
+    "ai_music_generate_scene": 0,
+    "tts_benefit_info": {
+     "benefit_type": "none",
+     "benefit_log_id": "",
+     "benefit_log_extra": "",
+     "benefit_amount": -1
+    }
+   }
+  ],
+  "images": [],
+  "texts": [
+   {
+    "recognize_task_id": "6a59d5c51e9d1601fd0fa7c0_8_0",
+    "id": "41FEAF11-7AC6-4f39-ADF2-BBD2C29D81EE",
+    "name": "6806B6C0-D9E7-4704-B514-C513E4BC2A5F",
+    "recognize_text": "так где же Суперселл спрятали нори ящик",
+    "recognize_model": "",
+    "punc_model": "",
+    "type": "text",
+    "content": "{\"text\":\"так где же Суперселл спрятали нори ящик\",\"styles\":[{\"fill\":{\"content\":{\"render_type\":\"solid\",\"solid\":{\"color\":[1,1,1]}}},\"font\":{\"path\":\"C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf\",\"id\":\"7579481374890003713\"},\"size\":12,\"shadows\":[{\"thickness_projection_angle\":-45,\"thickness_projection_enable\":false,\"alpha\":0.649999976158142,\"distance\":8.0000648498535156,\"content\":{\"render_type\":\"solid\",\"solid\":{\"color\":[0,0,0]}},\"feather\":0,\"angle\":-45,\"thickness_projection_distance\":0}],\"range\":[0,39]}]}",
+    "base_content": "",
+    "words": {
+     "start_time": [
+      0,
+      240,
+      240,
+      400,
+      440,
+      600,
+      640,
+      1200,
+      1280,
+      1640,
+      1680,
+      1960,
+      2040
+     ],
+     "end_time": [
+      240,
+      240,
+      400,
+      400,
+      600,
+      600,
+      1200,
+      1200,
+      1640,
+      1640,
+      1960,
+      1960,
+      2320
+     ],
+     "text": [
+      "так",
+      " ",
+      "где",
+      " ",
+      "же",
+      " ",
+      "Суперселл",
+      " ",
+      "спрятали",
+      " ",
+      "нори",
+      " ",
+      "ящик"
+     ]
+    },
+    "current_words": {
+     "start_time": [],
+     "end_time": [],
+     "text": []
+    },
+    "global_alpha": 1.0,
+    "combo_info": {
+     "text_templates": []
+    },
+    "caption_template_info": {
+     "resource_id": "",
+     "third_resource_id": "",
+     "resource_name": "",
+     "category_id": "",
+     "category_name": "",
+     "effect_id": "",
+     "request_id": "",
+     "path": "",
+     "is_new": false,
+     "source_platform": 0
+    },
+    "layer_weight": 1,
+    "letter_spacing": 0.0,
+    "text_curve": null,
+    "text_loop_on_path": false,
+    "offset_on_path": 0.0,
+    "enable_path_typesetting": false,
+    "text_exceeds_path_process_type": 0,
+    "text_typesetting_paths": null,
+    "text_typesetting_paths_file": "",
+    "text_typesetting_path_index": 0,
+    "line_spacing": 0.0,
+    "has_shadow": true,
+    "shadow_color": "#000000",
+    "shadow_alpha": 0.6499999761581421,
+    "shadow_smoothing": 0.0,
+    "shadow_distance": 8.0,
+    "shadow_point": {
+     "x": 1.0182337649086284,
+     "y": -1.0182337649086284
+    },
+    "shadow_angle": -45.0,
+    "shadow_thickness_projection_enable": false,
+    "shadow_thickness_projection_angle": 0.0,
+    "shadow_thickness_projection_distance": 0.0,
+    "border_alpha": 0.0,
+    "border_color": "",
+    "border_width": 0.08,
+    "border_mode": 0,
+    "style_name": "",
+    "text_color": "#ffffff",
+    "text_alpha": 1.0,
+    "font_name": "",
+    "font_title": "none",
+    "font_size": 12.0,
+    "font_path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf",
+    "font_id": "",
+    "font_resource_id": "7579481374890003713",
+    "initial_scale": 1.0,
+    "font_url": "",
+    "typesetting": 0,
+    "alignment": 1,
+    "line_feed": 1,
+    "use_effect_default_color": false,
+    "is_rich_text": false,
+    "shape_clip_x": false,
+    "shape_clip_y": false,
+    "ktv_color": "",
+    "text_to_audio_ids": [],
+    "bold_width": 0.008,
+    "italic_degree": 10,
+    "underline": false,
+    "underline_width": 0.05,
+    "underline_offset": 0.22,
+    "sub_type": 0,
+    "check_flag": 39,
+    "text_size": 30,
+    "font_category_name": "",
+    "font_source_platform": 0,
+    "font_third_resource_id": "",
+    "font_category_id": "",
+    "add_type": 1,
+    "operation_type": 0,
+    "recognize_type": 0,
+    "fonts": [
+     {
+      "id": "1D88ACFD-A40E-4e7c-95E1-E8186299086A",
+      "resource_id": "7579481374890003713",
+      "third_resource_id": "",
+      "category_id": "preset",
+      "category_name": "Пресеты",
+      "source_platform": 1,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf",
+      "effect_id": "7579481374890003713",
+      "title": "Блок-Hv",
+      "team_id": "",
+      "file_uri": "",
+      "request_id": "20260717132221C62224FB34F8DD94F5B4"
+     }
+    ],
+    "background_color": "",
+    "background_alpha": 1.0,
+    "background_style": 0,
+    "background_round_radius": 0.0,
+    "background_width": 0.14,
+    "background_height": 0.14,
+    "background_vertical_offset": 0.0,
+    "background_horizontal_offset": 0.0,
+    "background_fill": "",
+    "single_char_bg_enable": false,
+    "single_char_bg_color": "",
+    "single_char_bg_alpha": 1.0,
+    "single_char_bg_round_radius": 0.3,
+    "single_char_bg_width": 0.0,
+    "single_char_bg_height": 0.0,
+    "single_char_bg_vertical_offset": 0.0,
+    "single_char_bg_horizontal_offset": 0.0,
+    "font_team_id": "",
+    "tts_auto_update": false,
+    "text_preset_resource_id": "",
+    "group_id": "ru-RU_1784272330008",
+    "preset_id": "",
+    "preset_name": "",
+    "preset_category": "",
+    "preset_category_id": "",
+    "preset_index": 0,
+    "preset_has_set_alignment": false,
+    "force_apply_line_max_width": true,
+    "language": "ru-RU",
+    "relevance_segment": [],
+    "original_size": [],
+    "fixed_width": -1.0,
+    "fixed_height": -1.0,
+    "line_max_width": 0.82,
+    "oneline_cutoff": false,
+    "cutoff_postfix": "",
+    "subtitle_template_original_fontsize": 0.0,
+    "subtitle_keywords": null,
+    "inner_padding": -1.0,
+    "multi_language_current": "none",
+    "source_from": "",
+    "is_lyric_effect": false,
+    "lyric_group_id": "",
+    "lyrics_template": {
+     "resource_id": "",
+     "resource_name": "",
+     "panel": "",
+     "effect_id": "",
+     "path": "",
+     "category_id": "",
+     "category_name": "",
+     "request_id": ""
+    },
+    "is_batch_replace": false,
+    "is_words_linear": false,
+    "ssml_content": "",
+    "subtitle_keywords_config": null,
+    "sub_template_id": -1,
+    "translate_original_text": ""
+   },
+   {
+    "recognize_task_id": "6a59d5c51e9d1601fd0fa7c0_8_0",
+    "id": "5B3A9017-8413-47e3-9AEF-1555269380D2",
+    "name": "6806B6C0-D9E7-4704-B514-C513E4BC2A5F",
+    "recognize_text": "недавно на своих каналах они оставили нам пасхалку",
+    "recognize_model": "",
+    "punc_model": "",
+    "type": "text",
+    "content": "{\"text\":\"недавно на своих каналах они оставили нам пасхалку\",\"styles\":[{\"fill\":{\"content\":{\"render_type\":\"solid\",\"solid\":{\"color\":[1,1,1]}}},\"font\":{\"path\":\"C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf\",\"id\":\"7579481374890003713\"},\"size\":12,\"shadows\":[{\"thickness_projection_angle\":-45,\"thickness_projection_enable\":false,\"alpha\":0.649999976158142,\"distance\":8.0000648498535156,\"content\":{\"render_type\":\"solid\",\"solid\":{\"color\":[0,0,0]}},\"feather\":0,\"angle\":-45,\"thickness_projection_distance\":0}],\"range\":[0,50]}]}",
+    "base_content": "",
+    "words": {
+     "start_time": [
+      0,
+      320,
+      320,
+      440,
+      440,
+      640,
+      640,
+      1040,
+      1120,
+      1280,
+      1320,
+      1680,
+      1680,
+      1840,
+      1920
+     ],
+     "end_time": [
+      320,
+      320,
+      440,
+      440,
+      640,
+      640,
+      1040,
+      1040,
+      1280,
+      1280,
+      1680,
+      1680,
+      1840,
+      1840,
+      2400
+     ],
+     "text": [
+      "недавно",
+      " ",
+      "на",
+      " ",
+      "своих",
+      " ",
+      "каналах",
+      " ",
+      "они",
+      " ",
+      "оставили",
+      " ",
+      "нам",
+      " ",
+      "пасхалку"
+     ]
+    },
+    "current_words": {
+     "start_time": [],
+     "end_time": [],
+     "text": []
+    },
+    "global_alpha": 1.0,
+    "combo_info": {
+     "text_templates": []
+    },
+    "caption_template_info": {
+     "resource_id": "",
+     "third_resource_id": "",
+     "resource_name": "",
+     "category_id": "",
+     "category_name": "",
+     "effect_id": "",
+     "request_id": "",
+     "path": "",
+     "is_new": false,
+     "source_platform": 0
+    },
+    "layer_weight": 1,
+    "letter_spacing": 0.0,
+    "text_curve": null,
+    "text_loop_on_path": false,
+    "offset_on_path": 0.0,
+    "enable_path_typesetting": false,
+    "text_exceeds_path_process_type": 0,
+    "text_typesetting_paths": null,
+    "text_typesetting_paths_file": "",
+    "text_typesetting_path_index": 0,
+    "line_spacing": 0.0,
+    "has_shadow": true,
+    "shadow_color": "#000000",
+    "shadow_alpha": 0.6499999761581421,
+    "shadow_smoothing": 0.0,
+    "shadow_distance": 8.0,
+    "shadow_point": {
+     "x": 1.0182337649086284,
+     "y": -1.0182337649086284
+    },
+    "shadow_angle": -45.0,
+    "shadow_thickness_projection_enable": false,
+    "shadow_thickness_projection_angle": 0.0,
+    "shadow_thickness_projection_distance": 0.0,
+    "border_alpha": 0.0,
+    "border_color": "",
+    "border_width": 0.08,
+    "border_mode": 0,
+    "style_name": "",
+    "text_color": "#ffffff",
+    "text_alpha": 1.0,
+    "font_name": "",
+    "font_title": "none",
+    "font_size": 12.0,
+    "font_path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf",
+    "font_id": "",
+    "font_resource_id": "7579481374890003713",
+    "initial_scale": 1.0,
+    "font_url": "",
+    "typesetting": 0,
+    "alignment": 1,
+    "line_feed": 1,
+    "use_effect_default_color": false,
+    "is_rich_text": false,
+    "shape_clip_x": false,
+    "shape_clip_y": false,
+    "ktv_color": "",
+    "text_to_audio_ids": [],
+    "bold_width": 0.008,
+    "italic_degree": 10,
+    "underline": false,
+    "underline_width": 0.05,
+    "underline_offset": 0.22,
+    "sub_type": 0,
+    "check_flag": 39,
+    "text_size": 30,
+    "font_category_name": "",
+    "font_source_platform": 0,
+    "font_third_resource_id": "",
+    "font_category_id": "",
+    "add_type": 1,
+    "operation_type": 0,
+    "recognize_type": 0,
+    "fonts": [
+     {
+      "id": "3DB57F42-C0C2-42a8-B709-CC08D26E8FB5",
+      "resource_id": "7579481374890003713",
+      "third_resource_id": "",
+      "category_id": "preset",
+      "category_name": "Пресеты",
+      "source_platform": 1,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf",
+      "effect_id": "7579481374890003713",
+      "title": "Блок-Hv",
+      "team_id": "",
+      "file_uri": "",
+      "request_id": "20260717132221C62224FB34F8DD94F5B4"
+     }
+    ],
+    "background_color": "",
+    "background_alpha": 1.0,
+    "background_style": 0,
+    "background_round_radius": 0.0,
+    "background_width": 0.14,
+    "background_height": 0.14,
+    "background_vertical_offset": 0.0,
+    "background_horizontal_offset": 0.0,
+    "background_fill": "",
+    "single_char_bg_enable": false,
+    "single_char_bg_color": "",
+    "single_char_bg_alpha": 1.0,
+    "single_char_bg_round_radius": 0.3,
+    "single_char_bg_width": 0.0,
+    "single_char_bg_height": 0.0,
+    "single_char_bg_vertical_offset": 0.0,
+    "single_char_bg_horizontal_offset": 0.0,
+    "font_team_id": "",
+    "tts_auto_update": false,
+    "text_preset_resource_id": "",
+    "group_id": "ru-RU_1784272330008",
+    "preset_id": "",
+    "preset_name": "",
+    "preset_category": "",
+    "preset_category_id": "",
+    "preset_index": 0,
+    "preset_has_set_alignment": false,
+    "force_apply_line_max_width": true,
+    "language": "ru-RU",
+    "relevance_segment": [],
+    "original_size": [],
+    "fixed_width": -1.0,
+    "fixed_height": -1.0,
+    "line_max_width": 0.82,
+    "oneline_cutoff": false,
+    "cutoff_postfix": "",
+    "subtitle_template_original_fontsize": 0.0,
+    "subtitle_keywords": null,
+    "inner_padding": -1.0,
+    "multi_language_current": "none",
+    "source_from": "",
+    "is_lyric_effect": false,
+    "lyric_group_id": "",
+    "lyrics_template": {
+     "resource_id": "",
+     "resource_name": "",
+     "panel": "",
+     "effect_id": "",
+     "path": "",
+     "category_id": "",
+     "category_name": "",
+     "request_id": ""
+    },
+    "is_batch_replace": false,
+    "is_words_linear": false,
+    "ssml_content": "",
+    "subtitle_keywords_config": null,
+    "sub_template_id": -1,
+    "translate_original_text": ""
+   },
+   {
+    "recognize_task_id": "6a59d5c51e9d1601fd0fa7c0_8_0",
+    "id": "6049DBDE-DA6C-4d95-82D3-108463FBE7B3",
+    "name": "6806B6C0-D9E7-4704-B514-C513E4BC2A5F",
+    "recognize_text": "в которой по их словам спрятана награда для всех",
+    "recognize_model": "",
+    "punc_model": "",
+    "type": "text",
+    "content": "{\"text\":\"в которой по их словам спрятана награда для всех\",\"styles\":[{\"fill\":{\"content\":{\"render_type\":\"solid\",\"solid\":{\"color\":[1,1,1]}}},\"font\":{\"path\":\"C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf\",\"id\":\"7579481374890003713\"},\"size\":12,\"shadows\":[{\"thickness_projection_angle\":-45,\"thickness_projection_enable\":false,\"alpha\":0.649999976158142,\"distance\":8.0000648498535156,\"content\":{\"render_type\":\"solid\",\"solid\":{\"color\":[0,0,0]}},\"feather\":0,\"angle\":-45,\"thickness_projection_distance\":0}],\"range\":[0,48]}]}",
+    "base_content": "",
+    "words": {
+     "start_time": [
+      0,
+      120,
+      120,
+      360,
+      400,
+      520,
+      560,
+      680,
+      720,
+      1040,
+      1120,
+      1560,
+      1640,
+      2080,
+      2160,
+      2280,
+      2280
+     ],
+     "end_time": [
+      120,
+      120,
+      360,
+      360,
+      520,
+      520,
+      680,
+      680,
+      1040,
+      1040,
+      1560,
+      1560,
+      2080,
+      2080,
+      2280,
+      2280,
+      2440
+     ],
+     "text": [
+      "в",
+      " ",
+      "которой",
+      " ",
+      "по",
+      " ",
+      "их",
+      " ",
+      "словам",
+      " ",
+      "спрятана",
+      " ",
+      "награда",
+      " ",
+      "для",
+      " ",
+      "всех"
+     ]
+    },
+    "current_words": {
+     "start_time": [],
+     "end_time": [],
+     "text": []
+    },
+    "global_alpha": 1.0,
+    "combo_info": {
+     "text_templates": []
+    },
+    "caption_template_info": {
+     "resource_id": "",
+     "third_resource_id": "",
+     "resource_name": "",
+     "category_id": "",
+     "category_name": "",
+     "effect_id": "",
+     "request_id": "",
+     "path": "",
+     "is_new": false,
+     "source_platform": 0
+    },
+    "layer_weight": 1,
+    "letter_spacing": 0.0,
+    "text_curve": null,
+    "text_loop_on_path": false,
+    "offset_on_path": 0.0,
+    "enable_path_typesetting": false,
+    "text_exceeds_path_process_type": 0,
+    "text_typesetting_paths": null,
+    "text_typesetting_paths_file": "",
+    "text_typesetting_path_index": 0,
+    "line_spacing": 0.0,
+    "has_shadow": true,
+    "shadow_color": "#000000",
+    "shadow_alpha": 0.6499999761581421,
+    "shadow_smoothing": 0.0,
+    "shadow_distance": 8.0,
+    "shadow_point": {
+     "x": 1.0182337649086284,
+     "y": -1.0182337649086284
+    },
+    "shadow_angle": -45.0,
+    "shadow_thickness_projection_enable": false,
+    "shadow_thickness_projection_angle": 0.0,
+    "shadow_thickness_projection_distance": 0.0,
+    "border_alpha": 0.0,
+    "border_color": "",
+    "border_width": 0.08,
+    "border_mode": 0,
+    "style_name": "",
+    "text_color": "#ffffff",
+    "text_alpha": 1.0,
+    "font_name": "",
+    "font_title": "none",
+    "font_size": 12.0,
+    "font_path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf",
+    "font_id": "",
+    "font_resource_id": "7579481374890003713",
+    "initial_scale": 1.0,
+    "font_url": "",
+    "typesetting": 0,
+    "alignment": 1,
+    "line_feed": 1,
+    "use_effect_default_color": false,
+    "is_rich_text": false,
+    "shape_clip_x": false,
+    "shape_clip_y": false,
+    "ktv_color": "",
+    "text_to_audio_ids": [],
+    "bold_width": 0.008,
+    "italic_degree": 10,
+    "underline": false,
+    "underline_width": 0.05,
+    "underline_offset": 0.22,
+    "sub_type": 0,
+    "check_flag": 39,
+    "text_size": 30,
+    "font_category_name": "",
+    "font_source_platform": 0,
+    "font_third_resource_id": "",
+    "font_category_id": "",
+    "add_type": 1,
+    "operation_type": 0,
+    "recognize_type": 0,
+    "fonts": [
+     {
+      "id": "1DF3C544-9350-4cfe-A0C8-FA2D72735783",
+      "resource_id": "7579481374890003713",
+      "third_resource_id": "",
+      "category_id": "preset",
+      "category_name": "Пресеты",
+      "source_platform": 1,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf",
+      "effect_id": "7579481374890003713",
+      "title": "Блок-Hv",
+      "team_id": "",
+      "file_uri": "",
+      "request_id": "20260717132221C62224FB34F8DD94F5B4"
+     }
+    ],
+    "background_color": "",
+    "background_alpha": 1.0,
+    "background_style": 0,
+    "background_round_radius": 0.0,
+    "background_width": 0.14,
+    "background_height": 0.14,
+    "background_vertical_offset": 0.0,
+    "background_horizontal_offset": 0.0,
+    "background_fill": "",
+    "single_char_bg_enable": false,
+    "single_char_bg_color": "",
+    "single_char_bg_alpha": 1.0,
+    "single_char_bg_round_radius": 0.3,
+    "single_char_bg_width": 0.0,
+    "single_char_bg_height": 0.0,
+    "single_char_bg_vertical_offset": 0.0,
+    "single_char_bg_horizontal_offset": 0.0,
+    "font_team_id": "",
+    "tts_auto_update": false,
+    "text_preset_resource_id": "",
+    "group_id": "ru-RU_1784272330008",
+    "preset_id": "",
+    "preset_name": "",
+    "preset_category": "",
+    "preset_category_id": "",
+    "preset_index": 0,
+    "preset_has_set_alignment": false,
+    "force_apply_line_max_width": true,
+    "language": "ru-RU",
+    "relevance_segment": [],
+    "original_size": [],
+    "fixed_width": -1.0,
+    "fixed_height": -1.0,
+    "line_max_width": 0.82,
+    "oneline_cutoff": false,
+    "cutoff_postfix": "",
+    "subtitle_template_original_fontsize": 0.0,
+    "subtitle_keywords": null,
+    "inner_padding": -1.0,
+    "multi_language_current": "none",
+    "source_from": "",
+    "is_lyric_effect": false,
+    "lyric_group_id": "",
+    "lyrics_template": {
+     "resource_id": "",
+     "resource_name": "",
+     "panel": "",
+     "effect_id": "",
+     "path": "",
+     "category_id": "",
+     "category_name": "",
+     "request_id": ""
+    },
+    "is_batch_replace": false,
+    "is_words_linear": false,
+    "ssml_content": "",
+    "subtitle_keywords_config": null,
+    "sub_template_id": -1,
+    "translate_original_text": ""
+   },
+   {
+    "recognize_task_id": "6a59d5c51e9d1601fd0fa7c0_8_0",
+    "id": "CF61757B-DE02-4156-BBA6-7474EA23E520",
+    "name": "6806B6C0-D9E7-4704-B514-C513E4BC2A5F",
+    "recognize_text": "но сколько нори ящиков нам дадут и где найти пасхалку",
+    "recognize_model": "",
+    "punc_model": "",
+    "type": "text",
+    "content": "{\"text\":\"но сколько нори ящиков нам дадут и где найти пасхалку\",\"styles\":[{\"fill\":{\"content\":{\"render_type\":\"solid\",\"solid\":{\"color\":[1,1,1]}}},\"font\":{\"path\":\"C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf\",\"id\":\"7579481374890003713\"},\"size\":12,\"shadows\":[{\"thickness_projection_angle\":-45,\"thickness_projection_enable\":false,\"alpha\":0.649999976158142,\"distance\":8.0000648498535156,\"content\":{\"render_type\":\"solid\",\"solid\":{\"color\":[0,0,0]}},\"feather\":0,\"angle\":-45,\"thickness_projection_distance\":0}],\"range\":[0,53]}]}",
+    "base_content": "",
+    "words": {
+     "start_time": [
+      0,
+      160,
+      160,
+      360,
+      400,
+      640,
+      680,
+      1040,
+      1080,
+      1200,
+      1200,
+      1520,
+      1560,
+      1640,
+      1640,
+      1840,
+      1840,
+      2080,
+      2160
+     ],
+     "end_time": [
+      160,
+      160,
+      360,
+      360,
+      640,
+      640,
+      1040,
+      1040,
+      1200,
+      1200,
+      1520,
+      1520,
+      1640,
+      1640,
+      1840,
+      1840,
+      2080,
+      2080,
+      2600
+     ],
+     "text": [
+      "но",
+      " ",
+      "сколько",
+      " ",
+      "нори",
+      " ",
+      "ящиков",
+      " ",
+      "нам",
+      " ",
+      "дадут",
+      " ",
+      "и",
+      " ",
+      "где",
+      " ",
+      "найти",
+      " ",
+      "пасхалку"
+     ]
+    },
+    "current_words": {
+     "start_time": [],
+     "end_time": [],
+     "text": []
+    },
+    "global_alpha": 1.0,
+    "combo_info": {
+     "text_templates": []
+    },
+    "caption_template_info": {
+     "resource_id": "",
+     "third_resource_id": "",
+     "resource_name": "",
+     "category_id": "",
+     "category_name": "",
+     "effect_id": "",
+     "request_id": "",
+     "path": "",
+     "is_new": false,
+     "source_platform": 0
+    },
+    "layer_weight": 1,
+    "letter_spacing": 0.0,
+    "text_curve": null,
+    "text_loop_on_path": false,
+    "offset_on_path": 0.0,
+    "enable_path_typesetting": false,
+    "text_exceeds_path_process_type": 0,
+    "text_typesetting_paths": null,
+    "text_typesetting_paths_file": "",
+    "text_typesetting_path_index": 0,
+    "line_spacing": 0.0,
+    "has_shadow": true,
+    "shadow_color": "#000000",
+    "shadow_alpha": 0.6499999761581421,
+    "shadow_smoothing": 0.0,
+    "shadow_distance": 8.0,
+    "shadow_point": {
+     "x": 1.0182337649086284,
+     "y": -1.0182337649086284
+    },
+    "shadow_angle": -45.0,
+    "shadow_thickness_projection_enable": false,
+    "shadow_thickness_projection_angle": 0.0,
+    "shadow_thickness_projection_distance": 0.0,
+    "border_alpha": 0.0,
+    "border_color": "",
+    "border_width": 0.08,
+    "border_mode": 0,
+    "style_name": "",
+    "text_color": "#ffffff",
+    "text_alpha": 1.0,
+    "font_name": "",
+    "font_title": "none",
+    "font_size": 12.0,
+    "font_path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf",
+    "font_id": "",
+    "font_resource_id": "7579481374890003713",
+    "initial_scale": 1.0,
+    "font_url": "",
+    "typesetting": 0,
+    "alignment": 1,
+    "line_feed": 1,
+    "use_effect_default_color": false,
+    "is_rich_text": false,
+    "shape_clip_x": false,
+    "shape_clip_y": false,
+    "ktv_color": "",
+    "text_to_audio_ids": [],
+    "bold_width": 0.008,
+    "italic_degree": 10,
+    "underline": false,
+    "underline_width": 0.05,
+    "underline_offset": 0.22,
+    "sub_type": 0,
+    "check_flag": 39,
+    "text_size": 30,
+    "font_category_name": "",
+    "font_source_platform": 0,
+    "font_third_resource_id": "",
+    "font_category_id": "",
+    "add_type": 1,
+    "operation_type": 0,
+    "recognize_type": 0,
+    "fonts": [
+     {
+      "id": "B627DB1E-3505-4ab2-B844-4AB54DF88A2F",
+      "resource_id": "7579481374890003713",
+      "third_resource_id": "",
+      "category_id": "preset",
+      "category_name": "Пресеты",
+      "source_platform": 1,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf",
+      "effect_id": "7579481374890003713",
+      "title": "Блок-Hv",
+      "team_id": "",
+      "file_uri": "",
+      "request_id": "20260717132221C62224FB34F8DD94F5B4"
+     }
+    ],
+    "background_color": "",
+    "background_alpha": 1.0,
+    "background_style": 0,
+    "background_round_radius": 0.0,
+    "background_width": 0.14,
+    "background_height": 0.14,
+    "background_vertical_offset": 0.0,
+    "background_horizontal_offset": 0.0,
+    "background_fill": "",
+    "single_char_bg_enable": false,
+    "single_char_bg_color": "",
+    "single_char_bg_alpha": 1.0,
+    "single_char_bg_round_radius": 0.3,
+    "single_char_bg_width": 0.0,
+    "single_char_bg_height": 0.0,
+    "single_char_bg_vertical_offset": 0.0,
+    "single_char_bg_horizontal_offset": 0.0,
+    "font_team_id": "",
+    "tts_auto_update": false,
+    "text_preset_resource_id": "",
+    "group_id": "ru-RU_1784272330008",
+    "preset_id": "",
+    "preset_name": "",
+    "preset_category": "",
+    "preset_category_id": "",
+    "preset_index": 0,
+    "preset_has_set_alignment": false,
+    "force_apply_line_max_width": true,
+    "language": "ru-RU",
+    "relevance_segment": [],
+    "original_size": [],
+    "fixed_width": -1.0,
+    "fixed_height": -1.0,
+    "line_max_width": 0.82,
+    "oneline_cutoff": false,
+    "cutoff_postfix": "",
+    "subtitle_template_original_fontsize": 0.0,
+    "subtitle_keywords": null,
+    "inner_padding": -1.0,
+    "multi_language_current": "none",
+    "source_from": "",
+    "is_lyric_effect": false,
+    "lyric_group_id": "",
+    "lyrics_template": {
+     "resource_id": "",
+     "resource_name": "",
+     "panel": "",
+     "effect_id": "",
+     "path": "",
+     "category_id": "",
+     "category_name": "",
+     "request_id": ""
+    },
+    "is_batch_replace": false,
+    "is_words_linear": false,
+    "ssml_content": "",
+    "subtitle_keywords_config": null,
+    "sub_template_id": -1,
+    "translate_original_text": ""
+   },
+   {
+    "recognize_task_id": "6a59d5c51e9d1601fd0fa7c0_8_0",
+    "id": "D6D8B7C9-5E4B-438a-BA80-A70A80A9E078",
+    "name": "6806B6C0-D9E7-4704-B514-C513E4BC2A5F",
+    "recognize_text": "я уже всё сделал за вас держите",
+    "recognize_model": "",
+    "punc_model": "",
+    "type": "text",
+    "content": "{\"text\":\"я уже всё сделал за вас держите\",\"styles\":[{\"fill\":{\"content\":{\"render_type\":\"solid\",\"solid\":{\"color\":[1,1,1]}}},\"font\":{\"path\":\"C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf\",\"id\":\"7579481374890003713\"},\"size\":12,\"shadows\":[{\"thickness_projection_angle\":-45,\"thickness_projection_enable\":false,\"alpha\":0.649999976158142,\"distance\":8.0000648498535156,\"content\":{\"render_type\":\"solid\",\"solid\":{\"color\":[0,0,0]}},\"feather\":0,\"angle\":-45,\"thickness_projection_distance\":0}],\"range\":[0,31]}]}",
+    "base_content": "",
+    "words": {
+     "start_time": [
+      0,
+      120,
+      120,
+      280,
+      280,
+      400,
+      440,
+      680,
+      720,
+      880,
+      880,
+      1040,
+      1080
+     ],
+     "end_time": [
+      120,
+      120,
+      280,
+      280,
+      400,
+      400,
+      680,
+      680,
+      880,
+      880,
+      1040,
+      1040,
+      1440
+     ],
+     "text": [
+      "я",
+      " ",
+      "уже",
+      " ",
+      "всё",
+      " ",
+      "сделал",
+      " ",
+      "за",
+      " ",
+      "вас",
+      " ",
+      "держите"
+     ]
+    },
+    "current_words": {
+     "start_time": [],
+     "end_time": [],
+     "text": []
+    },
+    "global_alpha": 1.0,
+    "combo_info": {
+     "text_templates": []
+    },
+    "caption_template_info": {
+     "resource_id": "",
+     "third_resource_id": "",
+     "resource_name": "",
+     "category_id": "",
+     "category_name": "",
+     "effect_id": "",
+     "request_id": "",
+     "path": "",
+     "is_new": false,
+     "source_platform": 0
+    },
+    "layer_weight": 1,
+    "letter_spacing": 0.0,
+    "text_curve": null,
+    "text_loop_on_path": false,
+    "offset_on_path": 0.0,
+    "enable_path_typesetting": false,
+    "text_exceeds_path_process_type": 0,
+    "text_typesetting_paths": null,
+    "text_typesetting_paths_file": "",
+    "text_typesetting_path_index": 0,
+    "line_spacing": 0.0,
+    "has_shadow": true,
+    "shadow_color": "#000000",
+    "shadow_alpha": 0.6499999761581421,
+    "shadow_smoothing": 0.0,
+    "shadow_distance": 8.0,
+    "shadow_point": {
+     "x": 1.0182337649086284,
+     "y": -1.0182337649086284
+    },
+    "shadow_angle": -45.0,
+    "shadow_thickness_projection_enable": false,
+    "shadow_thickness_projection_angle": 0.0,
+    "shadow_thickness_projection_distance": 0.0,
+    "border_alpha": 0.0,
+    "border_color": "",
+    "border_width": 0.08,
+    "border_mode": 0,
+    "style_name": "",
+    "text_color": "#ffffff",
+    "text_alpha": 1.0,
+    "font_name": "",
+    "font_title": "none",
+    "font_size": 12.0,
+    "font_path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf",
+    "font_id": "",
+    "font_resource_id": "7579481374890003713",
+    "initial_scale": 1.0,
+    "font_url": "",
+    "typesetting": 0,
+    "alignment": 1,
+    "line_feed": 1,
+    "use_effect_default_color": false,
+    "is_rich_text": false,
+    "shape_clip_x": false,
+    "shape_clip_y": false,
+    "ktv_color": "",
+    "text_to_audio_ids": [],
+    "bold_width": 0.008,
+    "italic_degree": 10,
+    "underline": false,
+    "underline_width": 0.05,
+    "underline_offset": 0.22,
+    "sub_type": 0,
+    "check_flag": 39,
+    "text_size": 30,
+    "font_category_name": "",
+    "font_source_platform": 0,
+    "font_third_resource_id": "",
+    "font_category_id": "",
+    "add_type": 1,
+    "operation_type": 0,
+    "recognize_type": 0,
+    "fonts": [
+     {
+      "id": "36133693-CFF9-49b1-87C4-133753B27D83",
+      "resource_id": "7579481374890003713",
+      "third_resource_id": "",
+      "category_id": "preset",
+      "category_name": "Пресеты",
+      "source_platform": 1,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7579481374890003713/0b5a0704565a89aa6291be6bad0cfda1/font.ttf",
+      "effect_id": "7579481374890003713",
+      "title": "Блок-Hv",
+      "team_id": "",
+      "file_uri": "",
+      "request_id": "20260717132221C62224FB34F8DD94F5B4"
+     }
+    ],
+    "background_color": "",
+    "background_alpha": 1.0,
+    "background_style": 0,
+    "background_round_radius": 0.0,
+    "background_width": 0.14,
+    "background_height": 0.14,
+    "background_vertical_offset": 0.0,
+    "background_horizontal_offset": 0.0,
+    "background_fill": "",
+    "single_char_bg_enable": false,
+    "single_char_bg_color": "",
+    "single_char_bg_alpha": 1.0,
+    "single_char_bg_round_radius": 0.3,
+    "single_char_bg_width": 0.0,
+    "single_char_bg_height": 0.0,
+    "single_char_bg_vertical_offset": 0.0,
+    "single_char_bg_horizontal_offset": 0.0,
+    "font_team_id": "",
+    "tts_auto_update": false,
+    "text_preset_resource_id": "",
+    "group_id": "ru-RU_1784272330008",
+    "preset_id": "",
+    "preset_name": "",
+    "preset_category": "",
+    "preset_category_id": "",
+    "preset_index": 0,
+    "preset_has_set_alignment": false,
+    "force_apply_line_max_width": true,
+    "language": "ru-RU",
+    "relevance_segment": [],
+    "original_size": [],
+    "fixed_width": -1.0,
+    "fixed_height": -1.0,
+    "line_max_width": 0.82,
+    "oneline_cutoff": false,
+    "cutoff_postfix": "",
+    "subtitle_template_original_fontsize": 0.0,
+    "subtitle_keywords": null,
+    "inner_padding": -1.0,
+    "multi_language_current": "none",
+    "source_from": "",
+    "is_lyric_effect": false,
+    "lyric_group_id": "",
+    "lyrics_template": {
+     "resource_id": "",
+     "resource_name": "",
+     "panel": "",
+     "effect_id": "",
+     "path": "",
+     "category_id": "",
+     "category_name": "",
+     "request_id": ""
+    },
+    "is_batch_replace": false,
+    "is_words_linear": false,
+    "ssml_content": "",
+    "subtitle_keywords_config": null,
+    "sub_template_id": -1,
+    "translate_original_text": ""
+   }
+  ],
+  "effects": [],
+  "stickers": [],
+  "canvases": [
+   {
+    "id": "1459EF73-DC71-4855-ACFB-F2F1E2BD4C62",
+    "type": "canvas_color",
+    "color": "",
+    "blur": 0.0,
+    "image": "",
+    "album_image": "",
+    "image_id": "",
+    "image_name": "",
+    "source_platform": 0,
+    "team_id": ""
+   },
+   {
+    "id": "30D73B98-138F-44c9-98CD-A2AFCA8F210A",
+    "type": "canvas_color",
+    "color": "",
+    "blur": 0.0,
+    "image": "",
+    "album_image": "",
+    "image_id": "",
+    "image_name": "",
+    "source_platform": 0,
+    "team_id": ""
+   },
+   {
+    "id": "3D1DFC59-74F6-4eaf-A3A3-D43E3CD94304",
+    "type": "canvas_color",
+    "color": "",
+    "blur": 0.0,
+    "image": "",
+    "album_image": "",
+    "image_id": "",
+    "image_name": "",
+    "source_platform": 0,
+    "team_id": ""
+   },
+   {
+    "id": "BD892282-9D90-49e1-B1CA-8AE4393C6698",
+    "type": "canvas_color",
+    "color": "",
+    "blur": 0.0,
+    "image": "",
+    "album_image": "",
+    "image_id": "",
+    "image_name": "",
+    "source_platform": 0,
+    "team_id": ""
+   },
+   {
+    "id": "E9B9ABC9-E959-4204-9CB1-C5438597201D",
+    "type": "canvas_color",
+    "color": "",
+    "blur": 0.0,
+    "image": "",
+    "album_image": "",
+    "image_id": "",
+    "image_name": "",
+    "source_platform": 0,
+    "team_id": ""
+   },
+   {
+    "id": "F6EFB8EF-CE6E-4a2b-8518-B5B7129C65B4",
+    "type": "canvas_color",
+    "color": "",
+    "blur": 0.0,
+    "image": "",
+    "album_image": "",
+    "image_id": "",
+    "image_name": "",
+    "source_platform": 0,
+    "team_id": ""
+   }
+  ],
+  "transitions": [],
+  "audio_effects": [],
+  "audio_fades": [
+   {
+    "id": "FE2E4A73-612E-4582-85E7-6C570335055F",
+    "type": "audio_fade",
+    "fade_type": 0,
+    "fade_in_duration": 0,
+    "fade_out_duration": 0
+   }
+  ],
+  "beats": [
+   {
+    "id": "09350ADA-371F-4d8b-BE79-B7051F79C793",
+    "type": "beats",
+    "enable_ai_beats": false,
+    "gear": 404,
+    "gear_count": 0,
+    "mode": 404,
+    "user_beats": [],
+    "user_delete_ai_beats": null,
+    "ai_beats": {
+     "melody_url": "",
+     "melody_path": "",
+     "beats_url": "",
+     "beats_path": "",
+     "melody_percents": [
+      0.0
+     ],
+     "beat_speed_infos": []
+    }
+   },
+   {
+    "id": "CE963EE1-430D-44a5-8B6B-BC9463DB7685",
+    "type": "beats",
+    "enable_ai_beats": false,
+    "gear": 404,
+    "gear_count": 0,
+    "mode": 404,
+    "user_beats": [],
+    "user_delete_ai_beats": null,
+    "ai_beats": {
+     "melody_url": "",
+     "melody_path": "",
+     "beats_url": "https://sf16-web-music.capcutstatic.com/obj/tos-alisg-v-2774/oU6ZxkECIAfFxRDXt218HxgEDfCWFAAK4BAmRE",
+     "beats_path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/music/3fbf3ca4502edddbbc19bb45dd1cf2dd.beat",
+     "melody_percents": [
+      0.6000000238418579
+     ],
+     "beat_speed_infos": []
+    }
+   },
+   {
+    "id": "4597C492-E3A0-4c29-B831-D0A49CAE9F58",
+    "type": "beats",
+    "enable_ai_beats": false,
+    "gear": 404,
+    "gear_count": 0,
+    "mode": 404,
+    "user_beats": [],
+    "user_delete_ai_beats": null,
+    "ai_beats": {
+     "melody_url": "",
+     "melody_path": "",
+     "beats_url": "",
+     "beats_path": "",
+     "melody_percents": [
+      0.0
+     ],
+     "beat_speed_infos": []
+    }
+   },
+   {
+    "id": "C7185B06-E43C-4c91-944A-515B49AF5D37",
+    "type": "beats",
+    "enable_ai_beats": false,
+    "gear": 404,
+    "gear_count": 0,
+    "mode": 404,
+    "user_beats": [],
+    "user_delete_ai_beats": null,
+    "ai_beats": {
+     "melody_url": "",
+     "melody_path": "",
+     "beats_url": "",
+     "beats_path": "",
+     "melody_percents": [
+      0.0
+     ],
+     "beat_speed_infos": []
+    }
+   },
+   {
+    "id": "055E17E0-4A7F-429d-B076-5AA5CA4BB7B4",
+    "type": "beats",
+    "enable_ai_beats": false,
+    "gear": 404,
+    "gear_count": 0,
+    "mode": 404,
+    "user_beats": [],
+    "user_delete_ai_beats": null,
+    "ai_beats": {
+     "melody_url": "",
+     "melody_path": "",
+     "beats_url": "",
+     "beats_path": "",
+     "melody_percents": [
+      0.0
+     ],
+     "beat_speed_infos": []
+    }
+   }
+  ],
+  "material_animations": [
+   {
+    "id": "E1F903D5-A0C8-4d61-88E7-BF1045FCAC85",
+    "type": "sticker_animation",
+    "animations": [
+     {
+      "id": "6739338374441603598",
+      "type": "in",
+      "start": 0,
+      "duration": 500000,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/6739338374441603598/4c3ac20ec647fc31079df672e39bf1f7",
+      "platform": "all",
+      "resource_id": "6739338374441603598",
+      "third_resource_id": "6739338374441603598",
+      "source_platform": 1,
+      "name": "Качели вниз",
+      "category_id": "2037708296",
+      "category_name": "Trending1",
+      "panel": "video",
+      "material_type": "video",
+      "anim_adjust_params": null,
+      "request_id": "20260717132227AAC9B7EEEDEABC89887D"
+     }
+    ],
+    "multi_language_current": "none"
+   },
+   {
+    "id": "782E208A-F477-49bb-B5B8-F0B261FB506E",
+    "type": "sticker_animation",
+    "animations": [
+     {
+      "id": "6739338374441603598",
+      "type": "in",
+      "start": 0,
+      "duration": 500000,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/6739338374441603598/4c3ac20ec647fc31079df672e39bf1f7",
+      "platform": "all",
+      "resource_id": "6739338374441603598",
+      "third_resource_id": "6739338374441603598",
+      "source_platform": 1,
+      "name": "Качели вниз",
+      "category_id": "2037708296",
+      "category_name": "Trending1",
+      "panel": "video",
+      "material_type": "video",
+      "anim_adjust_params": null,
+      "request_id": "20260717132227AAC9B7EEEDEABC89887D"
+     }
+    ],
+    "multi_language_current": "none"
+   },
+   {
+    "id": "788BBC28-DCBC-4ec9-A289-B26A0BE7973B",
+    "type": "sticker_animation",
+    "animations": [
+     {
+      "id": "6759078592740594184",
+      "type": "group",
+      "start": 0,
+      "duration": 2233333,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/6759078592740594184/cac9a365aab6a7fe878431abd85d4b5d",
+      "platform": "all",
+      "resource_id": "6759078592740594184",
+      "third_resource_id": "6759078592740594184",
+      "source_platform": 1,
+      "name": "Зум 1",
+      "category_id": "2037708346",
+      "category_name": "Trending-1",
+      "panel": "video",
+      "material_type": "video",
+      "anim_adjust_params": null,
+      "request_id": "202607171322229ECDA3E94987EB8D8D97"
+     }
+    ],
+    "multi_language_current": "none"
+   },
+   {
+    "id": "591A0207-4B69-4bc8-9D14-D0D750B83BB4",
+    "type": "sticker_animation",
+    "animations": [
+     {
+      "id": "6740867832570974733",
+      "type": "in",
+      "start": 0,
+      "duration": 233333,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/6740867832570974733/4c241a9c8ef566b91b6a499c33648062",
+      "platform": "all",
+      "resource_id": "6740867832570974733",
+      "third_resource_id": "6740867832570974733",
+      "source_platform": 1,
+      "name": "Зум 2",
+      "category_id": "2037708312",
+      "category_name": "Basic",
+      "panel": "video",
+      "material_type": "video",
+      "anim_adjust_params": null,
+      "request_id": ""
+     },
+     {
+      "id": "6798320902548230669",
+      "type": "out",
+      "start": 653390,
+      "duration": 233333,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/6798320902548230669/c6f05ce62355b537be762550040bfc08",
+      "platform": "all",
+      "resource_id": "6798320902548230669",
+      "third_resource_id": "6798320902548230669",
+      "source_platform": 1,
+      "name": "Осветление",
+      "category_id": "2037708371",
+      "category_name": "Trending-2",
+      "panel": "video",
+      "material_type": "video",
+      "anim_adjust_params": null,
+      "request_id": ""
+     }
+    ],
+    "multi_language_current": "none"
+   },
+   {
+    "id": "D0466AC5-A2E8-4471-AECB-EABEEDE070EA",
+    "type": "sticker_animation",
+    "animations": [
+     {
+      "id": "",
+      "type": "caption",
+      "start": 0,
+      "duration": 2233333,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7362061652197380625/f399de8a8ce2ad3a16960d6fe6b10cb8",
+      "platform": "all",
+      "resource_id": "7362061652197380625",
+      "third_resource_id": "",
+      "source_platform": 1,
+      "name": "",
+      "category_id": "",
+      "category_name": "",
+      "panel": "",
+      "material_type": "sticker",
+      "anim_adjust_params": null,
+      "request_id": ""
+     }
+    ],
+    "multi_language_current": "none"
+   },
+   {
+    "id": "0D26B1EE-0883-4c2a-AA74-0C64773352BB",
+    "type": "sticker_animation",
+    "animations": [
+     {
+      "id": "",
+      "type": "caption",
+      "start": 0,
+      "duration": 2400000,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7362061652197380625/f399de8a8ce2ad3a16960d6fe6b10cb8",
+      "platform": "all",
+      "resource_id": "7362061652197380625",
+      "third_resource_id": "",
+      "source_platform": 1,
+      "name": "",
+      "category_id": "",
+      "category_name": "",
+      "panel": "",
+      "material_type": "sticker",
+      "anim_adjust_params": null,
+      "request_id": ""
+     }
+    ],
+    "multi_language_current": "none"
+   },
+   {
+    "id": "5A972942-00E7-400b-91AD-056C48EE3C37",
+    "type": "sticker_animation",
+    "animations": [
+     {
+      "id": "",
+      "type": "caption",
+      "start": 0,
+      "duration": 2466667,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7362061652197380625/f399de8a8ce2ad3a16960d6fe6b10cb8",
+      "platform": "all",
+      "resource_id": "7362061652197380625",
+      "third_resource_id": "",
+      "source_platform": 1,
+      "name": "",
+      "category_id": "",
+      "category_name": "",
+      "panel": "",
+      "material_type": "sticker",
+      "anim_adjust_params": null,
+      "request_id": ""
+     }
+    ],
+    "multi_language_current": "none"
+   },
+   {
+    "id": "E966062B-2926-4eb6-8E4F-60C2058F3620",
+    "type": "sticker_animation",
+    "animations": [
+     {
+      "id": "",
+      "type": "caption",
+      "start": 0,
+      "duration": 2600000,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7362061652197380625/f399de8a8ce2ad3a16960d6fe6b10cb8",
+      "platform": "all",
+      "resource_id": "7362061652197380625",
+      "third_resource_id": "",
+      "source_platform": 1,
+      "name": "",
+      "category_id": "",
+      "category_name": "",
+      "panel": "",
+      "material_type": "sticker",
+      "anim_adjust_params": null,
+      "request_id": ""
+     }
+    ],
+    "multi_language_current": "none"
+   },
+   {
+    "id": "80FB3E5F-8B8B-4690-8BB5-A3A8D37C7C8C",
+    "type": "sticker_animation",
+    "animations": [
+     {
+      "id": "",
+      "type": "caption",
+      "start": 0,
+      "duration": 1433333,
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7362061652197380625/f399de8a8ce2ad3a16960d6fe6b10cb8",
+      "platform": "all",
+      "resource_id": "7362061652197380625",
+      "third_resource_id": "",
+      "source_platform": 1,
+      "name": "",
+      "category_id": "",
+      "category_name": "",
+      "panel": "",
+      "material_type": "sticker",
+      "anim_adjust_params": null,
+      "request_id": ""
+     }
+    ],
+    "multi_language_current": "none"
+   }
+  ],
+  "placeholders": [],
+  "placeholder_infos": [
+   {
+    "id": "22A16120-DBE0-4dc1-8B90-E913482E0F4C",
+    "type": "placeholder_info",
+    "meta_type": "none",
+    "res_path": "",
+    "res_text": "",
+    "error_path": "",
+    "error_text": ""
+   },
+   {
+    "id": "58691392-94DB-4966-93DA-6CC58D5F25BC",
+    "type": "placeholder_info",
+    "meta_type": "none",
+    "res_path": "",
+    "res_text": "",
+    "error_path": "",
+    "error_text": ""
+   },
+   {
+    "id": "B014DDCD-E01A-403f-BEBA-D4E5686DB95B",
+    "type": "placeholder_info",
+    "meta_type": "none",
+    "res_path": "",
+    "res_text": "",
+    "error_path": "",
+    "error_text": ""
+   },
+   {
+    "id": "315E6FD6-7069-4804-AECA-8793E3110067",
+    "type": "placeholder_info",
+    "meta_type": "none",
+    "res_path": "",
+    "res_text": "",
+    "error_path": "",
+    "error_text": ""
+   },
+   {
+    "id": "076FE475-7942-4436-AB63-C3156A3DBBE8",
+    "type": "placeholder_info",
+    "meta_type": "none",
+    "res_path": "",
+    "res_text": "",
+    "error_path": "",
+    "error_text": ""
+   },
+   {
+    "id": "8EF608F6-0221-4145-9887-3A8BEBC2B67F",
+    "type": "placeholder_info",
+    "meta_type": "none",
+    "res_path": "",
+    "res_text": "",
+    "error_path": "",
+    "error_text": ""
+   },
+   {
+    "id": "65DB4E4B-9050-4254-A47C-2F268932435A",
+    "type": "placeholder_info",
+    "meta_type": "none",
+    "res_path": "",
+    "res_text": "",
+    "error_path": "",
+    "error_text": ""
+   },
+   {
+    "id": "A399CB10-9565-47e4-9478-111AA236A795",
+    "type": "placeholder_info",
+    "meta_type": "none",
+    "res_path": "",
+    "res_text": "",
+    "error_path": "",
+    "error_text": ""
+   },
+   {
+    "id": "7E7DBFFE-02C1-423f-8911-951704D0BCCF",
+    "type": "placeholder_info",
+    "meta_type": "none",
+    "res_path": "",
+    "res_text": "",
+    "error_path": "",
+    "error_text": ""
+   },
+   {
+    "id": "493FE07C-5227-4dd7-AF0A-F8BBDD9677BC",
+    "type": "placeholder_info",
+    "meta_type": "none",
+    "res_path": "",
+    "res_text": "",
+    "error_path": "",
+    "error_text": ""
+   },
+   {
+    "id": "28C2FCD0-7155-4ccc-B45D-94E165C3C552",
+    "type": "placeholder_info",
+    "meta_type": "none",
+    "res_path": "",
+    "res_text": "",
+    "error_path": "",
+    "error_text": ""
+   }
+  ],
+  "speeds": [
+   {
+    "id": "D85E3495-6E2F-4265-8CF5-F78492529547",
+    "type": "speed",
+    "mode": 0,
+    "speed": 1.0,
+    "curve_speed": null
+   },
+   {
+    "id": "FD4E141C-14EE-4adc-865E-56B4D45FC5AC",
+    "type": "speed",
+    "mode": 0,
+    "speed": 1.0,
+    "curve_speed": null
+   },
+   {
+    "id": "7C233767-CB3C-4a4f-AEA9-19698C9F88EC",
+    "type": "speed",
+    "mode": 0,
+    "speed": 1.0,
+    "curve_speed": null
+   },
+   {
+    "id": "70365A72-2DEB-4000-B8BE-893F597D941F",
+    "type": "speed",
+    "mode": 0,
+    "speed": 1.0,
+    "curve_speed": null
+   },
+   {
+    "id": "F9C74BA6-B356-4f3a-A375-2A9BC57A56C6",
+    "type": "speed",
+    "mode": 0,
+    "speed": 1.33,
+    "curve_speed": null
+   },
+   {
+    "id": "62519794-4A39-4080-BA49-19301C960831",
+    "type": "speed",
+    "mode": 0,
+    "speed": 1.0,
+    "curve_speed": null
+   },
+   {
+    "id": "0BD9FDC8-9F4C-40ac-B4BB-63C1B7B7B547",
+    "type": "speed",
+    "mode": 0,
+    "speed": 1.0,
+    "curve_speed": null
+   },
+   {
+    "id": "F3467D98-314D-4f91-8ECF-4AADA38612E1",
+    "type": "speed",
+    "mode": 0,
+    "speed": 1.0,
+    "curve_speed": null
+   },
+   {
+    "id": "EA123834-DBCF-49d3-B78F-4E2277943A7C",
+    "type": "speed",
+    "mode": 0,
+    "speed": 1.0,
+    "curve_speed": null
+   },
+   {
+    "id": "93C48191-BC18-4a78-89AC-2299FBAAD2FD",
+    "type": "speed",
+    "mode": 0,
+    "speed": 1.63,
+    "curve_speed": null
+   },
+   {
+    "id": "2CEAED43-52EF-4937-BF1C-7A839CD88E1F",
+    "type": "speed",
+    "mode": 0,
+    "speed": 1.0,
+    "curve_speed": null
+   }
+  ],
+  "common_mask": [],
+  "chromas": [
+   {
+    "id": "7EAEF566-3C2D-4629-9F3D-B4B833D76419",
+    "type": "chroma",
+    "color": "#00d700ff",
+    "intensity_value": 0.2,
+    "shadow_value": 0.0,
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/Apps/8.7.0.3685/Resources/Chroma2",
+    "resource_id": "",
+    "should_transfer_color": true,
+    "edge_smooth_value": 0.0,
+    "spill_value": 0.0,
+    "version": "v2"
+   }
+  ],
+  "text_templates": [
+   {
+    "id": "3B4F9BD6-4509-4342-BEE7-6ECCC70CCA78",
+    "version": "1.0.0",
+    "effect_id": "7577568565935475985",
+    "resource_id": "7577568565935475985",
+    "third_resource_id": "0",
+    "name": "cc_胖卡通粉紫对比_english",
+    "type": "text_template_subtitle",
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7577568565935475985/a2dafdb5bbdd2ff529d459c98f537ce0",
+    "category_id": "",
+    "category_name": "",
+    "platform": "all",
+    "text_to_audio_ids": [],
+    "source_platform": 1,
+    "resources": [
+     {
+      "panel": "text",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7362061652197380625/f399de8a8ce2ad3a16960d6fe6b10cb8",
+      "resource_id": "7362061652197380625",
+      "source_platform": 1
+     },
+     {
+      "panel": "text_glow",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7367637998579487248/9c7e9af83b4e4effc689afcd35febcd5",
+      "resource_id": "7367637998579487248",
+      "source_platform": 1
+     },
+     {
+      "panel": "fonts",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7444856932642329104/182f834ff9329c7bebec39dccfc814c9/Monaz-Regular.otf",
+      "resource_id": "7444856932642329104",
+      "source_platform": 1
+     }
+    ],
+    "formula_id": "",
+    "text_info_resources": [
+     {
+      "id": "4C41388B-BC8E-4b0c-9442-CFBF9E621224",
+      "attach_info": {
+       "start_time": 0,
+       "duration": 2233333,
+       "original_size_width": 581.6008911132812,
+       "original_size_height": 120.0,
+       "clip": {
+        "scale": {
+         "x": 1.0,
+         "y": 1.0
+        },
+        "rotation": 0.0,
+        "transform": {
+         "x": 0.0,
+         "y": 0.0
+        },
+        "flip": {
+         "vertical": false,
+         "horizontal": false
+        },
+        "alpha": 1.0
+       }
+      },
+      "text_material_id": "41FEAF11-7AC6-4f39-ADF2-BBD2C29D81EE",
+      "extra_material_refs": [
+       "D0466AC5-A2E8-4471-AECB-EABEEDE070EA"
+      ],
+      "clip_type": "",
+      "lyric_keyframes": [],
+      "word_index": [],
+      "order_in_layer": 0,
+      "capital": ""
+     }
+    ],
+    "non_text_info_resources": [],
+    "check_flag": 7,
+    "text_template_preset_resource_id": "",
+    "is_3d": false,
+    "is_pre_rendered": false,
+    "aigc_type": "none",
+    "text_template_resource_type": "subtitle_template",
+    "aigc_config": {
+     "prompt": "",
+     "seed": 0,
+     "model": "",
+     "font_item": {
+      "id": "F3F9142D-FAFD-41fd-B85D-0419C17F9179",
+      "resource_id": "",
+      "third_resource_id": "",
+      "category_id": "",
+      "category_name": "",
+      "source_platform": 0,
+      "path": "",
+      "effect_id": "",
+      "title": "",
+      "team_id": "",
+      "file_uri": "",
+      "request_id": ""
+     }
+    },
+    "request_id": "",
+    "origin_word_info": {
+     "text": "так где же Суперселл спрятали нори ящик",
+     "start_time": 0,
+     "end_time": 2233,
+     "words": [
+      {
+       "text": "так",
+       "start_time": 0,
+       "end_time": 240
+      },
+      {
+       "text": " ",
+       "start_time": 240,
+       "end_time": 240
+      },
+      {
+       "text": "где",
+       "start_time": 240,
+       "end_time": 400
+      },
+      {
+       "text": " ",
+       "start_time": 400,
+       "end_time": 400
+      },
+      {
+       "text": "же",
+       "start_time": 440,
+       "end_time": 600
+      },
+      {
+       "text": " ",
+       "start_time": 600,
+       "end_time": 600
+      },
+      {
+       "text": "Суперселл",
+       "start_time": 640,
+       "end_time": 1200
+      },
+      {
+       "text": " ",
+       "start_time": 1200,
+       "end_time": 1200
+      },
+      {
+       "text": "спрятали",
+       "start_time": 1280,
+       "end_time": 1640
+      },
+      {
+       "text": " ",
+       "start_time": 1640,
+       "end_time": 1640
+      },
+      {
+       "text": "нори",
+       "start_time": 1680,
+       "end_time": 1960
+      },
+      {
+       "text": " ",
+       "start_time": 1960,
+       "end_time": 1960
+      },
+      {
+       "text": "ящик",
+       "start_time": 2040,
+       "end_time": 2320
+      }
+     ],
+     "keyword_ranges": []
+    },
+    "current_word_info": {
+     "text": "так где же Суперселл спрятали нори ящик",
+     "start_time": 0,
+     "end_time": 2233,
+     "words": [
+      {
+       "text": "так",
+       "start_time": 0,
+       "end_time": 240
+      },
+      {
+       "text": " ",
+       "start_time": 240,
+       "end_time": 240
+      },
+      {
+       "text": "где",
+       "start_time": 240,
+       "end_time": 400
+      },
+      {
+       "text": " ",
+       "start_time": 400,
+       "end_time": 400
+      },
+      {
+       "text": "же",
+       "start_time": 440,
+       "end_time": 600
+      },
+      {
+       "text": " ",
+       "start_time": 600,
+       "end_time": 600
+      },
+      {
+       "text": "Суперселл",
+       "start_time": 640,
+       "end_time": 1200
+      },
+      {
+       "text": " ",
+       "start_time": 1200,
+       "end_time": 1200
+      },
+      {
+       "text": "спрятали",
+       "start_time": 1280,
+       "end_time": 1640
+      },
+      {
+       "text": " ",
+       "start_time": 1640,
+       "end_time": 1640
+      },
+      {
+       "text": "нори",
+       "start_time": 1680,
+       "end_time": 1960
+      },
+      {
+       "text": " ",
+       "start_time": 1960,
+       "end_time": 1960
+      },
+      {
+       "text": "ящик",
+       "start_time": 2040,
+       "end_time": 2320
+      }
+     ],
+     "keyword_ranges": []
+    },
+    "is_dynamic_build": false,
+    "is_ai_emoji": false,
+    "is_lyric_effect": false,
+    "lyric_group_id": "",
+    "merge_content": "так где же Суперселл спрятали нори ящиктак где же Суперселл спрятали нори ящик",
+    "is_uneven_animation": false,
+    "material_text_ranges": [
+     {
+      "location": 0,
+      "length": 6,
+      "source_type": "unknown"
+     },
+     {
+      "location": 6,
+      "length": 7,
+      "source_type": "unknown"
+     },
+     {
+      "location": 13,
+      "length": 5,
+      "source_type": "unknown"
+     },
+     {
+      "location": 18,
+      "length": 19,
+      "source_type": "unknown"
+     },
+     {
+      "location": 37,
+      "length": 17,
+      "source_type": "unknown"
+     },
+     {
+      "location": 54,
+      "length": 9,
+      "source_type": "unknown"
+     },
+     {
+      "location": 63,
+      "length": 9,
+      "source_type": "unknown"
+     },
+     {
+      "location": 72,
+      "length": 72,
+      "source_type": "unknown"
+     }
+    ],
+    "ai_emoji_config": null
+   },
+   {
+    "id": "9EC2CC79-D080-4961-8C6E-138EC8969343",
+    "version": "1.0.0",
+    "effect_id": "7577568565935475985",
+    "resource_id": "7577568565935475985",
+    "third_resource_id": "0",
+    "name": "cc_胖卡通粉紫对比_english",
+    "type": "text_template_subtitle",
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7577568565935475985/a2dafdb5bbdd2ff529d459c98f537ce0",
+    "category_id": "",
+    "category_name": "",
+    "platform": "all",
+    "text_to_audio_ids": [],
+    "source_platform": 1,
+    "resources": [
+     {
+      "panel": "text",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7362061652197380625/f399de8a8ce2ad3a16960d6fe6b10cb8",
+      "resource_id": "7362061652197380625",
+      "source_platform": 1
+     },
+     {
+      "panel": "text_glow",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7367637998579487248/9c7e9af83b4e4effc689afcd35febcd5",
+      "resource_id": "7367637998579487248",
+      "source_platform": 1
+     },
+     {
+      "panel": "fonts",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7444856932642329104/182f834ff9329c7bebec39dccfc814c9/Monaz-Regular.otf",
+      "resource_id": "7444856932642329104",
+      "source_platform": 1
+     }
+    ],
+    "formula_id": "",
+    "text_info_resources": [
+     {
+      "id": "62D36D8A-C23C-422c-9564-38C4091B0522",
+      "attach_info": {
+       "start_time": 0,
+       "duration": 2400000,
+       "original_size_width": 585.9067993164062,
+       "original_size_height": 170.0,
+       "clip": {
+        "scale": {
+         "x": 1.0,
+         "y": 1.0
+        },
+        "rotation": 0.0,
+        "transform": {
+         "x": 0.0,
+         "y": 0.0
+        },
+        "flip": {
+         "vertical": false,
+         "horizontal": false
+        },
+        "alpha": 1.0
+       }
+      },
+      "text_material_id": "5B3A9017-8413-47e3-9AEF-1555269380D2",
+      "extra_material_refs": [
+       "0D26B1EE-0883-4c2a-AA74-0C64773352BB"
+      ],
+      "clip_type": "",
+      "lyric_keyframes": [],
+      "word_index": [],
+      "order_in_layer": 0,
+      "capital": ""
+     }
+    ],
+    "non_text_info_resources": [],
+    "check_flag": 7,
+    "text_template_preset_resource_id": "",
+    "is_3d": false,
+    "is_pre_rendered": false,
+    "aigc_type": "none",
+    "text_template_resource_type": "subtitle_template",
+    "aigc_config": {
+     "prompt": "",
+     "seed": 0,
+     "model": "",
+     "font_item": {
+      "id": "2DB1AFEA-8045-477a-BE40-179AF1AAD9A0",
+      "resource_id": "",
+      "third_resource_id": "",
+      "category_id": "",
+      "category_name": "",
+      "source_platform": 0,
+      "path": "",
+      "effect_id": "",
+      "title": "",
+      "team_id": "",
+      "file_uri": "",
+      "request_id": ""
+     }
+    },
+    "request_id": "",
+    "origin_word_info": {
+     "text": "недавно на своих каналах они оставили нам пасхалку",
+     "start_time": 2400,
+     "end_time": 4800,
+     "words": [
+      {
+       "text": "недавно",
+       "start_time": 0,
+       "end_time": 320
+      },
+      {
+       "text": " ",
+       "start_time": 320,
+       "end_time": 320
+      },
+      {
+       "text": "на",
+       "start_time": 320,
+       "end_time": 440
+      },
+      {
+       "text": " ",
+       "start_time": 440,
+       "end_time": 440
+      },
+      {
+       "text": "своих",
+       "start_time": 440,
+       "end_time": 640
+      },
+      {
+       "text": " ",
+       "start_time": 640,
+       "end_time": 640
+      },
+      {
+       "text": "каналах",
+       "start_time": 640,
+       "end_time": 1040
+      },
+      {
+       "text": " ",
+       "start_time": 1040,
+       "end_time": 1040
+      },
+      {
+       "text": "они",
+       "start_time": 1120,
+       "end_time": 1280
+      },
+      {
+       "text": " ",
+       "start_time": 1280,
+       "end_time": 1280
+      },
+      {
+       "text": "оставили",
+       "start_time": 1320,
+       "end_time": 1680
+      },
+      {
+       "text": " ",
+       "start_time": 1680,
+       "end_time": 1680
+      },
+      {
+       "text": "нам",
+       "start_time": 1680,
+       "end_time": 1840
+      },
+      {
+       "text": " ",
+       "start_time": 1840,
+       "end_time": 1840
+      },
+      {
+       "text": "пасхалку",
+       "start_time": 1920,
+       "end_time": 2400
+      }
+     ],
+     "keyword_ranges": []
+    },
+    "current_word_info": {
+     "text": "недавно на своих каналах они оставили нам пасхалку",
+     "start_time": 2400,
+     "end_time": 4800,
+     "words": [
+      {
+       "text": "недавно",
+       "start_time": 0,
+       "end_time": 320
+      },
+      {
+       "text": " ",
+       "start_time": 320,
+       "end_time": 320
+      },
+      {
+       "text": "на",
+       "start_time": 320,
+       "end_time": 440
+      },
+      {
+       "text": " ",
+       "start_time": 440,
+       "end_time": 440
+      },
+      {
+       "text": "своих",
+       "start_time": 440,
+       "end_time": 640
+      },
+      {
+       "text": " ",
+       "start_time": 640,
+       "end_time": 640
+      },
+      {
+       "text": "каналах",
+       "start_time": 640,
+       "end_time": 1040
+      },
+      {
+       "text": " ",
+       "start_time": 1040,
+       "end_time": 1040
+      },
+      {
+       "text": "они",
+       "start_time": 1120,
+       "end_time": 1280
+      },
+      {
+       "text": " ",
+       "start_time": 1280,
+       "end_time": 1280
+      },
+      {
+       "text": "оставили",
+       "start_time": 1320,
+       "end_time": 1680
+      },
+      {
+       "text": " ",
+       "start_time": 1680,
+       "end_time": 1680
+      },
+      {
+       "text": "нам",
+       "start_time": 1680,
+       "end_time": 1840
+      },
+      {
+       "text": " ",
+       "start_time": 1840,
+       "end_time": 1840
+      },
+      {
+       "text": "пасхалку",
+       "start_time": 1920,
+       "end_time": 2400
+      }
+     ],
+     "keyword_ranges": []
+    },
+    "is_dynamic_build": false,
+    "is_ai_emoji": false,
+    "is_lyric_effect": false,
+    "lyric_group_id": "",
+    "merge_content": "недавно на своих каналах они оставили нам пасхалкунедавно на своих каналах они оставили нам пасхалку",
+    "is_uneven_animation": false,
+    "material_text_ranges": [
+     {
+      "location": 0,
+      "length": 14,
+      "source_type": "unknown"
+     },
+     {
+      "location": 14,
+      "length": 5,
+      "source_type": "unknown"
+     },
+     {
+      "location": 19,
+      "length": 11,
+      "source_type": "unknown"
+     },
+     {
+      "location": 30,
+      "length": 15,
+      "source_type": "unknown"
+     },
+     {
+      "location": 45,
+      "length": 7,
+      "source_type": "unknown"
+     },
+     {
+      "location": 52,
+      "length": 17,
+      "source_type": "unknown"
+     },
+     {
+      "location": 69,
+      "length": 7,
+      "source_type": "unknown"
+     },
+     {
+      "location": 76,
+      "length": 17,
+      "source_type": "unknown"
+     },
+     {
+      "location": 93,
+      "length": 93,
+      "source_type": "unknown"
+     }
+    ],
+    "ai_emoji_config": null
+   },
+   {
+    "id": "8A256C9C-FA69-4fbf-96B6-4773700908F6",
+    "version": "1.0.0",
+    "effect_id": "7577568565935475985",
+    "resource_id": "7577568565935475985",
+    "third_resource_id": "0",
+    "name": "cc_胖卡通粉紫对比_english",
+    "type": "text_template_subtitle",
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7577568565935475985/a2dafdb5bbdd2ff529d459c98f537ce0",
+    "category_id": "",
+    "category_name": "",
+    "platform": "all",
+    "text_to_audio_ids": [],
+    "source_platform": 1,
+    "resources": [
+     {
+      "panel": "text",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7362061652197380625/f399de8a8ce2ad3a16960d6fe6b10cb8",
+      "resource_id": "7362061652197380625",
+      "source_platform": 1
+     },
+     {
+      "panel": "text_glow",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7367637998579487248/9c7e9af83b4e4effc689afcd35febcd5",
+      "resource_id": "7367637998579487248",
+      "source_platform": 1
+     },
+     {
+      "panel": "fonts",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7444856932642329104/182f834ff9329c7bebec39dccfc814c9/Monaz-Regular.otf",
+      "resource_id": "7444856932642329104",
+      "source_platform": 1
+     }
+    ],
+    "formula_id": "",
+    "text_info_resources": [
+     {
+      "id": "DBC683A3-3794-4b9a-BB0F-E2A1025228BA",
+      "attach_info": {
+       "start_time": 0,
+       "duration": 2466667,
+       "original_size_width": 582.5632934570312,
+       "original_size_height": 170.0,
+       "clip": {
+        "scale": {
+         "x": 1.0,
+         "y": 1.0
+        },
+        "rotation": 0.0,
+        "transform": {
+         "x": 0.0,
+         "y": 0.0
+        },
+        "flip": {
+         "vertical": false,
+         "horizontal": false
+        },
+        "alpha": 1.0
+       }
+      },
+      "text_material_id": "6049DBDE-DA6C-4d95-82D3-108463FBE7B3",
+      "extra_material_refs": [
+       "5A972942-00E7-400b-91AD-056C48EE3C37"
+      ],
+      "clip_type": "",
+      "lyric_keyframes": [],
+      "word_index": [],
+      "order_in_layer": 0,
+      "capital": ""
+     }
+    ],
+    "non_text_info_resources": [],
+    "check_flag": 7,
+    "text_template_preset_resource_id": "",
+    "is_3d": false,
+    "is_pre_rendered": false,
+    "aigc_type": "none",
+    "text_template_resource_type": "subtitle_template",
+    "aigc_config": {
+     "prompt": "",
+     "seed": 0,
+     "model": "",
+     "font_item": {
+      "id": "43A15C01-3FD9-4969-B744-12F41DE02467",
+      "resource_id": "",
+      "third_resource_id": "",
+      "category_id": "",
+      "category_name": "",
+      "source_platform": 0,
+      "path": "",
+      "effect_id": "",
+      "title": "",
+      "team_id": "",
+      "file_uri": "",
+      "request_id": ""
+     }
+    },
+    "request_id": "",
+    "origin_word_info": {
+     "text": "в которой по их словам спрятана награда для всех",
+     "start_time": 4833,
+     "end_time": 7299,
+     "words": [
+      {
+       "text": "в",
+       "start_time": 0,
+       "end_time": 120
+      },
+      {
+       "text": " ",
+       "start_time": 120,
+       "end_time": 120
+      },
+      {
+       "text": "которой",
+       "start_time": 120,
+       "end_time": 360
+      },
+      {
+       "text": " ",
+       "start_time": 360,
+       "end_time": 360
+      },
+      {
+       "text": "по",
+       "start_time": 400,
+       "end_time": 520
+      },
+      {
+       "text": " ",
+       "start_time": 520,
+       "end_time": 520
+      },
+      {
+       "text": "их",
+       "start_time": 560,
+       "end_time": 680
+      },
+      {
+       "text": " ",
+       "start_time": 680,
+       "end_time": 680
+      },
+      {
+       "text": "словам",
+       "start_time": 720,
+       "end_time": 1040
+      },
+      {
+       "text": " ",
+       "start_time": 1040,
+       "end_time": 1040
+      },
+      {
+       "text": "спрятана",
+       "start_time": 1120,
+       "end_time": 1560
+      },
+      {
+       "text": " ",
+       "start_time": 1560,
+       "end_time": 1560
+      },
+      {
+       "text": "награда",
+       "start_time": 1640,
+       "end_time": 2080
+      },
+      {
+       "text": " ",
+       "start_time": 2080,
+       "end_time": 2080
+      },
+      {
+       "text": "для",
+       "start_time": 2160,
+       "end_time": 2280
+      },
+      {
+       "text": " ",
+       "start_time": 2280,
+       "end_time": 2280
+      },
+      {
+       "text": "всех",
+       "start_time": 2280,
+       "end_time": 2440
+      }
+     ],
+     "keyword_ranges": []
+    },
+    "current_word_info": {
+     "text": "в которой по их словам спрятана награда для всех",
+     "start_time": 4833,
+     "end_time": 7299,
+     "words": [
+      {
+       "text": "в",
+       "start_time": 0,
+       "end_time": 120
+      },
+      {
+       "text": " ",
+       "start_time": 120,
+       "end_time": 120
+      },
+      {
+       "text": "которой",
+       "start_time": 120,
+       "end_time": 360
+      },
+      {
+       "text": " ",
+       "start_time": 360,
+       "end_time": 360
+      },
+      {
+       "text": "по",
+       "start_time": 400,
+       "end_time": 520
+      },
+      {
+       "text": " ",
+       "start_time": 520,
+       "end_time": 520
+      },
+      {
+       "text": "их",
+       "start_time": 560,
+       "end_time": 680
+      },
+      {
+       "text": " ",
+       "start_time": 680,
+       "end_time": 680
+      },
+      {
+       "text": "словам",
+       "start_time": 720,
+       "end_time": 1040
+      },
+      {
+       "text": " ",
+       "start_time": 1040,
+       "end_time": 1040
+      },
+      {
+       "text": "спрятана",
+       "start_time": 1120,
+       "end_time": 1560
+      },
+      {
+       "text": " ",
+       "start_time": 1560,
+       "end_time": 1560
+      },
+      {
+       "text": "награда",
+       "start_time": 1640,
+       "end_time": 2080
+      },
+      {
+       "text": " ",
+       "start_time": 2080,
+       "end_time": 2080
+      },
+      {
+       "text": "для",
+       "start_time": 2160,
+       "end_time": 2280
+      },
+      {
+       "text": " ",
+       "start_time": 2280,
+       "end_time": 2280
+      },
+      {
+       "text": "всех",
+       "start_time": 2280,
+       "end_time": 2440
+      }
+     ],
+     "keyword_ranges": []
+    },
+    "is_dynamic_build": false,
+    "is_ai_emoji": false,
+    "is_lyric_effect": false,
+    "lyric_group_id": "",
+    "merge_content": "в которой по их словам спрятана награда для всехв которой по их словам спрятана награда для всех",
+    "is_uneven_animation": false,
+    "material_text_ranges": [
+     {
+      "location": 0,
+      "length": 2,
+      "source_type": "unknown"
+     },
+     {
+      "location": 2,
+      "length": 15,
+      "source_type": "unknown"
+     },
+     {
+      "location": 17,
+      "length": 5,
+      "source_type": "unknown"
+     },
+     {
+      "location": 22,
+      "length": 5,
+      "source_type": "unknown"
+     },
+     {
+      "location": 27,
+      "length": 13,
+      "source_type": "unknown"
+     },
+     {
+      "location": 40,
+      "length": 17,
+      "source_type": "unknown"
+     },
+     {
+      "location": 57,
+      "length": 15,
+      "source_type": "unknown"
+     },
+     {
+      "location": 72,
+      "length": 7,
+      "source_type": "unknown"
+     },
+     {
+      "location": 79,
+      "length": 9,
+      "source_type": "unknown"
+     },
+     {
+      "location": 88,
+      "length": 88,
+      "source_type": "unknown"
+     }
+    ],
+    "ai_emoji_config": null
+   },
+   {
+    "id": "95A31D86-C8E4-493a-95F2-7471E7F94A89",
+    "version": "1.0.0",
+    "effect_id": "7577568565935475985",
+    "resource_id": "7577568565935475985",
+    "third_resource_id": "0",
+    "name": "cc_胖卡通粉紫对比_english",
+    "type": "text_template_subtitle",
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7577568565935475985/a2dafdb5bbdd2ff529d459c98f537ce0",
+    "category_id": "",
+    "category_name": "",
+    "platform": "all",
+    "text_to_audio_ids": [],
+    "source_platform": 1,
+    "resources": [
+     {
+      "panel": "text",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7362061652197380625/f399de8a8ce2ad3a16960d6fe6b10cb8",
+      "resource_id": "7362061652197380625",
+      "source_platform": 1
+     },
+     {
+      "panel": "text_glow",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7367637998579487248/9c7e9af83b4e4effc689afcd35febcd5",
+      "resource_id": "7367637998579487248",
+      "source_platform": 1
+     },
+     {
+      "panel": "fonts",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7444856932642329104/182f834ff9329c7bebec39dccfc814c9/Monaz-Regular.otf",
+      "resource_id": "7444856932642329104",
+      "source_platform": 1
+     }
+    ],
+    "formula_id": "",
+    "text_info_resources": [
+     {
+      "id": "70300E52-5080-41c9-AC2C-DE918A46ABD3",
+      "attach_info": {
+       "start_time": 0,
+       "duration": 2600000,
+       "original_size_width": 582.8671875,
+       "original_size_height": 170.0,
+       "clip": {
+        "scale": {
+         "x": 1.0,
+         "y": 1.0
+        },
+        "rotation": 0.0,
+        "transform": {
+         "x": 0.0,
+         "y": 0.0
+        },
+        "flip": {
+         "vertical": false,
+         "horizontal": false
+        },
+        "alpha": 1.0
+       }
+      },
+      "text_material_id": "CF61757B-DE02-4156-BBA6-7474EA23E520",
+      "extra_material_refs": [
+       "E966062B-2926-4eb6-8E4F-60C2058F3620"
+      ],
+      "clip_type": "",
+      "lyric_keyframes": [],
+      "word_index": [],
+      "order_in_layer": 0,
+      "capital": ""
+     }
+    ],
+    "non_text_info_resources": [],
+    "check_flag": 7,
+    "text_template_preset_resource_id": "",
+    "is_3d": false,
+    "is_pre_rendered": false,
+    "aigc_type": "none",
+    "text_template_resource_type": "subtitle_template",
+    "aigc_config": {
+     "prompt": "",
+     "seed": 0,
+     "model": "",
+     "font_item": {
+      "id": "259E250A-98BE-4eda-9D11-3FB78B6AADF7",
+      "resource_id": "",
+      "third_resource_id": "",
+      "category_id": "",
+      "category_name": "",
+      "source_platform": 0,
+      "path": "",
+      "effect_id": "",
+      "title": "",
+      "team_id": "",
+      "file_uri": "",
+      "request_id": ""
+     }
+    },
+    "request_id": "",
+    "origin_word_info": {
+     "text": "но сколько нори ящиков нам дадут и где найти пасхалку",
+     "start_time": 7600,
+     "end_time": 10200,
+     "words": [
+      {
+       "text": "но",
+       "start_time": 0,
+       "end_time": 160
+      },
+      {
+       "text": " ",
+       "start_time": 160,
+       "end_time": 160
+      },
+      {
+       "text": "сколько",
+       "start_time": 160,
+       "end_time": 360
+      },
+      {
+       "text": " ",
+       "start_time": 360,
+       "end_time": 360
+      },
+      {
+       "text": "нори",
+       "start_time": 400,
+       "end_time": 640
+      },
+      {
+       "text": " ",
+       "start_time": 640,
+       "end_time": 640
+      },
+      {
+       "text": "ящиков",
+       "start_time": 680,
+       "end_time": 1040
+      },
+      {
+       "text": " ",
+       "start_time": 1040,
+       "end_time": 1040
+      },
+      {
+       "text": "нам",
+       "start_time": 1080,
+       "end_time": 1200
+      },
+      {
+       "text": " ",
+       "start_time": 1200,
+       "end_time": 1200
+      },
+      {
+       "text": "дадут",
+       "start_time": 1200,
+       "end_time": 1520
+      },
+      {
+       "text": " ",
+       "start_time": 1520,
+       "end_time": 1520
+      },
+      {
+       "text": "и",
+       "start_time": 1560,
+       "end_time": 1640
+      },
+      {
+       "text": " ",
+       "start_time": 1640,
+       "end_time": 1640
+      },
+      {
+       "text": "где",
+       "start_time": 1640,
+       "end_time": 1840
+      },
+      {
+       "text": " ",
+       "start_time": 1840,
+       "end_time": 1840
+      },
+      {
+       "text": "найти",
+       "start_time": 1840,
+       "end_time": 2080
+      },
+      {
+       "text": " ",
+       "start_time": 2080,
+       "end_time": 2080
+      },
+      {
+       "text": "пасхалку",
+       "start_time": 2160,
+       "end_time": 2600
+      }
+     ],
+     "keyword_ranges": []
+    },
+    "current_word_info": {
+     "text": "но сколько нори ящиков нам дадут и где найти пасхалку",
+     "start_time": 7600,
+     "end_time": 10200,
+     "words": [
+      {
+       "text": "но",
+       "start_time": 0,
+       "end_time": 160
+      },
+      {
+       "text": " ",
+       "start_time": 160,
+       "end_time": 160
+      },
+      {
+       "text": "сколько",
+       "start_time": 160,
+       "end_time": 360
+      },
+      {
+       "text": " ",
+       "start_time": 360,
+       "end_time": 360
+      },
+      {
+       "text": "нори",
+       "start_time": 400,
+       "end_time": 640
+      },
+      {
+       "text": " ",
+       "start_time": 640,
+       "end_time": 640
+      },
+      {
+       "text": "ящиков",
+       "start_time": 680,
+       "end_time": 1040
+      },
+      {
+       "text": " ",
+       "start_time": 1040,
+       "end_time": 1040
+      },
+      {
+       "text": "нам",
+       "start_time": 1080,
+       "end_time": 1200
+      },
+      {
+       "text": " ",
+       "start_time": 1200,
+       "end_time": 1200
+      },
+      {
+       "text": "дадут",
+       "start_time": 1200,
+       "end_time": 1520
+      },
+      {
+       "text": " ",
+       "start_time": 1520,
+       "end_time": 1520
+      },
+      {
+       "text": "и",
+       "start_time": 1560,
+       "end_time": 1640
+      },
+      {
+       "text": " ",
+       "start_time": 1640,
+       "end_time": 1640
+      },
+      {
+       "text": "где",
+       "start_time": 1640,
+       "end_time": 1840
+      },
+      {
+       "text": " ",
+       "start_time": 1840,
+       "end_time": 1840
+      },
+      {
+       "text": "найти",
+       "start_time": 1840,
+       "end_time": 2080
+      },
+      {
+       "text": " ",
+       "start_time": 2080,
+       "end_time": 2080
+      },
+      {
+       "text": "пасхалку",
+       "start_time": 2160,
+       "end_time": 2600
+      }
+     ],
+     "keyword_ranges": []
+    },
+    "is_dynamic_build": false,
+    "is_ai_emoji": false,
+    "is_lyric_effect": false,
+    "lyric_group_id": "",
+    "merge_content": "но сколько нори ящиков нам дадут и где найти пасхалкуно сколько нори ящиков нам дадут и где найти пасхалку",
+    "is_uneven_animation": false,
+    "material_text_ranges": [
+     {
+      "location": 0,
+      "length": 4,
+      "source_type": "unknown"
+     },
+     {
+      "location": 4,
+      "length": 15,
+      "source_type": "unknown"
+     },
+     {
+      "location": 19,
+      "length": 9,
+      "source_type": "unknown"
+     },
+     {
+      "location": 28,
+      "length": 13,
+      "source_type": "unknown"
+     },
+     {
+      "location": 41,
+      "length": 7,
+      "source_type": "unknown"
+     },
+     {
+      "location": 48,
+      "length": 11,
+      "source_type": "unknown"
+     },
+     {
+      "location": 59,
+      "length": 3,
+      "source_type": "unknown"
+     },
+     {
+      "location": 62,
+      "length": 7,
+      "source_type": "unknown"
+     },
+     {
+      "location": 69,
+      "length": 11,
+      "source_type": "unknown"
+     },
+     {
+      "location": 80,
+      "length": 17,
+      "source_type": "unknown"
+     },
+     {
+      "location": 97,
+      "length": 97,
+      "source_type": "unknown"
+     }
+    ],
+    "ai_emoji_config": null
+   },
+   {
+    "id": "06BDE471-7C30-42de-9266-54ECCFB31C95",
+    "version": "1.0.0",
+    "effect_id": "7577568565935475985",
+    "resource_id": "7577568565935475985",
+    "third_resource_id": "0",
+    "name": "cc_胖卡通粉紫对比_english",
+    "type": "text_template_subtitle",
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7577568565935475985/a2dafdb5bbdd2ff529d459c98f537ce0",
+    "category_id": "",
+    "category_name": "",
+    "platform": "all",
+    "text_to_audio_ids": [],
+    "source_platform": 1,
+    "resources": [
+     {
+      "panel": "text",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7362061652197380625/f399de8a8ce2ad3a16960d6fe6b10cb8",
+      "resource_id": "7362061652197380625",
+      "source_platform": 1
+     },
+     {
+      "panel": "text_glow",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7367637998579487248/9c7e9af83b4e4effc689afcd35febcd5",
+      "resource_id": "7367637998579487248",
+      "source_platform": 1
+     },
+     {
+      "panel": "fonts",
+      "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7444856932642329104/182f834ff9329c7bebec39dccfc814c9/Monaz-Regular.otf",
+      "resource_id": "7444856932642329104",
+      "source_platform": 1
+     }
+    ],
+    "formula_id": "",
+    "text_info_resources": [
+     {
+      "id": "CE2CC671-B4FB-40af-BEB4-883912AAACCF",
+      "attach_info": {
+       "start_time": 0,
+       "duration": 1433333,
+       "original_size_width": 569.0375366210938,
+       "original_size_height": 120.0,
+       "clip": {
+        "scale": {
+         "x": 1.0,
+         "y": 1.0
+        },
+        "rotation": 0.0,
+        "transform": {
+         "x": 0.0,
+         "y": 0.0
+        },
+        "flip": {
+         "vertical": false,
+         "horizontal": false
+        },
+        "alpha": 1.0
+       }
+      },
+      "text_material_id": "D6D8B7C9-5E4B-438a-BA80-A70A80A9E078",
+      "extra_material_refs": [
+       "80FB3E5F-8B8B-4690-8BB5-A3A8D37C7C8C"
+      ],
+      "clip_type": "",
+      "lyric_keyframes": [],
+      "word_index": [],
+      "order_in_layer": 0,
+      "capital": ""
+     }
+    ],
+    "non_text_info_resources": [],
+    "check_flag": 7,
+    "text_template_preset_resource_id": "",
+    "is_3d": false,
+    "is_pre_rendered": false,
+    "aigc_type": "none",
+    "text_template_resource_type": "subtitle_template",
+    "aigc_config": {
+     "prompt": "",
+     "seed": 0,
+     "model": "",
+     "font_item": {
+      "id": "B3C4F4BB-FAD2-4172-8BBE-ED2910EBFD13",
+      "resource_id": "",
+      "third_resource_id": "",
+      "category_id": "",
+      "category_name": "",
+      "source_platform": 0,
+      "path": "",
+      "effect_id": "",
+      "title": "",
+      "team_id": "",
+      "file_uri": "",
+      "request_id": ""
+     }
+    },
+    "request_id": "",
+    "origin_word_info": {
+     "text": "я уже всё сделал за вас держите",
+     "start_time": 10333,
+     "end_time": 11766,
+     "words": [
+      {
+       "text": "я",
+       "start_time": 0,
+       "end_time": 120
+      },
+      {
+       "text": " ",
+       "start_time": 120,
+       "end_time": 120
+      },
+      {
+       "text": "уже",
+       "start_time": 120,
+       "end_time": 280
+      },
+      {
+       "text": " ",
+       "start_time": 280,
+       "end_time": 280
+      },
+      {
+       "text": "всё",
+       "start_time": 280,
+       "end_time": 400
+      },
+      {
+       "text": " ",
+       "start_time": 400,
+       "end_time": 400
+      },
+      {
+       "text": "сделал",
+       "start_time": 440,
+       "end_time": 680
+      },
+      {
+       "text": " ",
+       "start_time": 680,
+       "end_time": 680
+      },
+      {
+       "text": "за",
+       "start_time": 720,
+       "end_time": 880
+      },
+      {
+       "text": " ",
+       "start_time": 880,
+       "end_time": 880
+      },
+      {
+       "text": "вас",
+       "start_time": 880,
+       "end_time": 1040
+      },
+      {
+       "text": " ",
+       "start_time": 1040,
+       "end_time": 1040
+      },
+      {
+       "text": "держите",
+       "start_time": 1080,
+       "end_time": 1440
+      }
+     ],
+     "keyword_ranges": []
+    },
+    "current_word_info": {
+     "text": "я уже всё сделал за вас держите",
+     "start_time": 10333,
+     "end_time": 11766,
+     "words": [
+      {
+       "text": "я",
+       "start_time": 0,
+       "end_time": 120
+      },
+      {
+       "text": " ",
+       "start_time": 120,
+       "end_time": 120
+      },
+      {
+       "text": "уже",
+       "start_time": 120,
+       "end_time": 280
+      },
+      {
+       "text": " ",
+       "start_time": 280,
+       "end_time": 280
+      },
+      {
+       "text": "всё",
+       "start_time": 280,
+       "end_time": 400
+      },
+      {
+       "text": " ",
+       "start_time": 400,
+       "end_time": 400
+      },
+      {
+       "text": "сделал",
+       "start_time": 440,
+       "end_time": 680
+      },
+      {
+       "text": " ",
+       "start_time": 680,
+       "end_time": 680
+      },
+      {
+       "text": "за",
+       "start_time": 720,
+       "end_time": 880
+      },
+      {
+       "text": " ",
+       "start_time": 880,
+       "end_time": 880
+      },
+      {
+       "text": "вас",
+       "start_time": 880,
+       "end_time": 1040
+      },
+      {
+       "text": " ",
+       "start_time": 1040,
+       "end_time": 1040
+      },
+      {
+       "text": "держите",
+       "start_time": 1080,
+       "end_time": 1440
+      }
+     ],
+     "keyword_ranges": []
+    },
+    "is_dynamic_build": false,
+    "is_ai_emoji": false,
+    "is_lyric_effect": false,
+    "lyric_group_id": "",
+    "merge_content": "я уже всё сделал за вас держитея уже всё сделал за вас держите",
+    "is_uneven_animation": false,
+    "material_text_ranges": [
+     {
+      "location": 0,
+      "length": 2,
+      "source_type": "unknown"
+     },
+     {
+      "location": 2,
+      "length": 7,
+      "source_type": "unknown"
+     },
+     {
+      "location": 9,
+      "length": 7,
+      "source_type": "unknown"
+     },
+     {
+      "location": 16,
+      "length": 13,
+      "source_type": "unknown"
+     },
+     {
+      "location": 29,
+      "length": 5,
+      "source_type": "unknown"
+     },
+     {
+      "location": 34,
+      "length": 7,
+      "source_type": "unknown"
+     },
+     {
+      "location": 41,
+      "length": 15,
+      "source_type": "unknown"
+     },
+     {
+      "location": 56,
+      "length": 56,
+      "source_type": "unknown"
+     }
+    ],
+    "ai_emoji_config": null
+   }
+  ],
+  "realtime_denoises": [],
+  "audio_pannings": [],
+  "audio_pitch_shifts": [],
+  "video_trackings": [],
+  "hsl": [
+   {
+    "id": "DE2C2A06-282B-4483-A2BC-59DC594721C3",
+    "constant_material_id": "E90F3078-77A7-4d30-B0C5-536FCB4783EA",
+    "hsl_color_type": 1,
+    "hue": 0,
+    "saturation": 0,
+    "lightness": 0,
+    "interacting": true,
+    "version": "1",
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7501974767453474064/e7194e6f595ab73d826a78becfe33a61",
+    "type": "hsl",
+    "lumi_hub_path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7501974767453474064/e7194e6f595ab73d826a78becfe33a61/lumi_hub_path",
+    "custom_color": "#FFE64444",
+    "resource_id": "",
+    "source_platform": 0
+   },
+   {
+    "id": "B0EDA2DD-1EE2-4283-9946-5DE2FB490872",
+    "constant_material_id": "E90F3078-77A7-4d30-B0C5-536FCB4783EA",
+    "hsl_color_type": 1,
+    "hue": 0,
+    "saturation": 0,
+    "lightness": 0,
+    "interacting": true,
+    "version": "1",
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7501974767453474064/e7194e6f595ab73d826a78becfe33a61",
+    "type": "hsl",
+    "lumi_hub_path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7501974767453474064/e7194e6f595ab73d826a78becfe33a61/lumi_hub_path",
+    "custom_color": "#FFE64444",
+    "resource_id": "",
+    "source_platform": 0
+   },
+   {
+    "id": "993114AD-1616-4e91-9FA0-4D38B21D7DCF",
+    "constant_material_id": "E90F3078-77A7-4d30-B0C5-536FCB4783EA",
+    "hsl_color_type": 1,
+    "hue": 0,
+    "saturation": 0,
+    "lightness": 0,
+    "interacting": true,
+    "version": "1",
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7501974767453474064/e7194e6f595ab73d826a78becfe33a61",
+    "type": "hsl",
+    "lumi_hub_path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7501974767453474064/e7194e6f595ab73d826a78becfe33a61/lumi_hub_path",
+    "custom_color": "#FFE64444",
+    "resource_id": "",
+    "source_platform": 0
+   },
+   {
+    "id": "7EA9157D-31CD-4148-8ACF-7905277189C4",
+    "constant_material_id": "E90F3078-77A7-4d30-B0C5-536FCB4783EA",
+    "hsl_color_type": 1,
+    "hue": 0,
+    "saturation": 0,
+    "lightness": 0,
+    "interacting": true,
+    "version": "1",
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7501974767453474064/e7194e6f595ab73d826a78becfe33a61",
+    "type": "hsl",
+    "lumi_hub_path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7501974767453474064/e7194e6f595ab73d826a78becfe33a61/lumi_hub_path",
+    "custom_color": "#FFE64444",
+    "resource_id": "",
+    "source_platform": 0
+   },
+   {
+    "id": "206491FA-449A-4e48-8D85-2D96C2D3AF1E",
+    "constant_material_id": "754964C8-5FD9-4997-9F7C-EAC6E3AB3D91",
+    "hsl_color_type": 1,
+    "hue": 0,
+    "saturation": 0,
+    "lightness": 0,
+    "interacting": true,
+    "version": "1",
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7501974767453474064/e7194e6f595ab73d826a78becfe33a61",
+    "type": "hsl",
+    "lumi_hub_path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7501974767453474064/e7194e6f595ab73d826a78becfe33a61/lumi_hub_path",
+    "custom_color": "#FFE64444",
+    "resource_id": "",
+    "source_platform": 0
+   }
+  ],
+  "drafts": [],
+  "color_curves": [],
+  "hsl_curves": [],
+  "primary_color_wheels": [],
+  "log_color_wheels": [],
+  "video_effects": [
+   {
+    "id": "7BDB0326-1707-4e0a-B642-1D10EF18490D",
+    "effect_id": "7399464929830423813",
+    "resource_id": "7399464929830423813",
+    "name": "Размытие",
+    "type": "video_effect",
+    "sub_type": 0,
+    "bind_segment_id": "",
+    "transparent_params": "",
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7399464929830423813/2db7bf49d9349e308ef0f46c39b14abf",
+    "value": 1.0,
+    "category_id": "1111",
+    "category_name": "Эффекты видео",
+    "platform": "all",
+    "apply_target_type": 0,
+    "source_platform": 1,
+    "version": "",
+    "item_effect_type": 0,
+    "adjust_params": [
+     {
+      "name": "effects_adjust_blur",
+      "value": 0.35,
+      "default_value": 0.5
+     }
+    ],
+    "time_range": null,
+    "formula_id": "",
+    "apply_time_range": null,
+    "render_index": 11000,
+    "track_render_index": 0,
+    "common_keyframes": [],
+    "request_id": "202607170554371720180002046550F40",
+    "algorithm_artifact_path": "",
+    "disable_effect_faces": [],
+    "covering_relation_change": 0,
+    "enable_mask": true,
+    "effect_mask": [],
+    "enable_video_mask_stroke": true,
+    "enable_video_mask_shadow": true
+   },
+   {
+    "id": "5FE6228B-F4B7-4054-918F-73D88EC7DA9A",
+    "effect_id": "7399464929830423813",
+    "resource_id": "7399464929830423813",
+    "name": "Размытие",
+    "type": "video_effect",
+    "sub_type": 0,
+    "bind_segment_id": "",
+    "transparent_params": "",
+    "path": "C:/Users/Пользователь/AppData/Local/CapCut/User Data/Cache/effect/7399464929830423813/2db7bf49d9349e308ef0f46c39b14abf",
+    "value": 1.0,
+    "category_id": "1111",
+    "category_name": "Эффекты видео",
+    "platform": "all",
+    "apply_target_type": 0,
+    "source_platform": 1,
+    "version": "",
+    "item_effect_type": 0,
+    "adjust_params": [
+     {
+      "name": "effects_adjust_blur",
+      "value": 0.34,
+      "default_value": 0.5
+     }
+    ],
+    "time_range": null,
+    "formula_id": "",
+    "apply_time_range": null,
+    "render_index": 11000,
+    "track_render_index": 0,
+    "common_keyframes": [],
+    "request_id": "202607170554371720180002046550F40",
+    "algorithm_artifact_path": "",
+    "disable_effect_faces": [],
+    "covering_relation_change": 0,
+    "enable_mask": true,
+    "effect_mask": [],
+    "enable_video_mask_stroke": true,
+    "enable_video_mask_shadow": true
+   }
+  ],
+  "audio_balances": [],
+  "handwrites": [],
+  "manual_deformations": [],
+  "manual_beautys": [],
+  "plugin_effects": [],
+  "sound_channel_mappings": [
+   {
+    "id": "6DF84007-51B2-4683-85BF-E006867FF8A3",
+    "type": "none",
+    "audio_channel_mapping": 0,
+    "is_config_open": false
+   },
+   {
+    "id": "ACF09E0A-034C-4bcf-8862-FF948ED4281D",
+    "type": "none",
+    "audio_channel_mapping": 0,
+    "is_config_open": false
+   },
+   {
+    "id": "3AC688BA-F581-4534-A4C9-9C6B0E0B90CF",
+    "type": "none",
+    "audio_channel_mapping": 0,
+    "is_config_open": false
+   },
+   {
+    "id": "E4B3E20A-ACAF-42cd-A646-101061DF1124",
+    "type": "none",
+    "audio_channel_mapping": 0,
+    "is_config_open": false
+   },
+   {
+    "id": "493A8C39-0547-4a1d-97F2-95A10E28C197",
+    "type": "none",
+    "audio_channel_mapping": 0,
+    "is_config_open": false
+   },
+   {
+    "id": "BC5FB75B-6B2D-431f-BEBB-1833D8A22959",
+    "type": "none",
+    "audio_channel_mapping": 0,
+    "is_config_open": false
+   },
+   {
+    "id": "B50FFF0E-548B-436b-8999-F201A9D77B9D",
+    "type": "none",
+    "audio_channel_mapping": 0,
+    "is_config_open": false
+   },
+   {
+    "id": "918EEAA5-B657-4707-A4D2-761A36778843",
+    "type": "none",
+    "audio_channel_mapping": 0,
+    "is_config_open": false
+   },
+   {
+    "id": "AAD1879A-C2AE-473f-B6C1-8C6919138937",
+    "type": "none",
+    "audio_channel_mapping": 0,
+    "is_config_open": false
+   },
+   {
+    "id": "A4247C64-D540-4065-9684-5FC7F4FFDDCC",
+    "type": "none",
+    "audio_channel_mapping": 0,
+    "is_config_open": false
+   },
+   {
+    "id": "F8FA2FE6-BD20-48b2-BC7A-39BA3F307AA0",
+    "type": "none",
+    "audio_channel_mapping": 0,
+    "is_config_open": false
+   }
+  ],
+  "green_screens": [],
+  "shapes": [],
+  "material_colors": [
+   {
+    "id": "DF00EB19-2CA3-46b4-8927-3CF81D27DCE6",
+    "is_color_clip": false,
+    "is_gradient": false,
+    "solid_color": "",
+    "gradient_colors": [],
+    "gradient_percents": [],
+    "gradient_angle": 90.0,
+    "width": 0.0,
+    "height": 0.0
+   },
+   {
+    "id": "0463B71C-4355-4801-8B2E-A0D60BA8DD99",
+    "is_color_clip": false,
+    "is_gradient": false,
+    "solid_color": "",
+    "gradient_colors": [],
+    "gradient_percents": [],
+    "gradient_angle": 90.0,
+    "width": 0.0,
+    "height": 0.0
+   },
+   {
+    "id": "E62D3FED-E14C-4442-AC3C-8CEE6FCEEF0E",
+    "is_color_clip": false,
+    "is_gradient": false,
+    "solid_color": "",
+    "gradient_colors": [],
+    "gradient_percents": [],
+    "gradient_angle": 90.0,
+    "width": 0.0,
+    "height": 0.0
+   },
+   {
+    "id": "12680E81-18B5-4562-BF2A-77E2EDA0E7BE",
+    "is_color_clip": false,
+    "is_gradient": false,
+    "solid_color": "",
+    "gradient_colors": [],
+    "gradient_percents": [],
+    "gradient_angle": 90.0,
+    "width": 0.0,
+    "height": 0.0
+   },
+   {
+    "id": "96A227BB-7BFF-43c3-AD5B-7C989D1ECADB",
+    "is_color_clip": false,
+    "is_gradient": false,
+    "solid_color": "",
+    "gradient_colors": [],
+    "gradient_percents": [],
+    "gradient_angle": 90.0,
+    "width": 0.0,
+    "height": 0.0
+   },
+   {
+    "id": "885E744F-D274-45eb-A430-E2C30C9A66CC",
+    "is_color_clip": false,
+    "is_gradient": false,
+    "solid_color": "",
+    "gradient_colors": [],
+    "gradient_percents": [],
+    "gradient_angle": 90.0,
+    "width": 0.0,
+    "height": 0.0
+   }
+  ],
+  "digital_humans": [],
+  "digital_human_model_dressing": [],
+  "smart_crops": [],
+  "ai_translates": [],
+  "audio_track_indexes": [],
+  "loudnesses": [
+   {
+    "id": "32C3CF4F-069F-4e99-A8F4-3254B79E0CDF",
+    "enable": false,
+    "time_range": null,
+    "file_id": "",
+    "target_loudness": 0.0,
+    "loudness_param": null
+   }
+  ],
+  "vocal_beautifys": [],
+  "vocal_separations": [
+   {
+    "id": "8B226AB3-979E-47d1-8B6B-F2FB82483069",
+    "type": "vocal_separation",
+    "choice": 0,
+    "removed_sounds": [],
+    "time_range": null,
+    "production_path": "",
+    "final_algorithm": "",
+    "enter_from": ""
+   },
+   {
+    "id": "2D8743D6-CB68-4f64-B31D-FCFED7CA8381",
+    "type": "vocal_separation",
+    "choice": 0,
+    "removed_sounds": [],
+    "time_range": null,
+    "production_path": "",
+    "final_algorithm": "",
+    "enter_from": ""
+   },
+   {
+    "id": "EC6E9506-EA7A-4610-B838-90E2E1A6446A",
+    "type": "vocal_separation",
+    "choice": 0,
+    "removed_sounds": [],
+    "time_range": null,
+    "production_path": "",
+    "final_algorithm": "",
+    "enter_from": ""
+   },
+   {
+    "id": "704B3C3A-0800-499b-B901-8B6C25AA38E3",
+    "type": "vocal_separation",
+    "choice": 0,
+    "removed_sounds": [],
+    "time_range": null,
+    "production_path": "",
+    "final_algorithm": "",
+    "enter_from": ""
+   },
+   {
+    "id": "65C5EF1B-57E3-4edf-AA0E-13E279DCC803",
+    "type": "vocal_separation",
+    "choice": 0,
+    "removed_sounds": [],
+    "time_range": null,
+    "production_path": "",
+    "final_algorithm": "",
+    "enter_from": ""
+   },
+   {
+    "id": "9A5B6BED-8093-40a0-B786-613DE63DFF69",
+    "type": "vocal_separation",
+    "choice": 0,
+    "removed_sounds": [],
+    "time_range": null,
+    "production_path": "",
+    "final_algorithm": "",
+    "enter_from": ""
+   },
+   {
+    "id": "7E0C895F-3A55-40d4-8D08-676DF41A25F4",
+    "type": "vocal_separation",
+    "choice": 0,
+    "removed_sounds": [],
+    "time_range": null,
+    "production_path": "",
+    "final_algorithm": "",
+    "enter_from": ""
+   },
+   {
+    "id": "27F6810E-D306-40e3-848D-946CDF1B4AE3",
+    "type": "vocal_separation",
+    "choice": 0,
+    "removed_sounds": [],
+    "time_range": null,
+    "production_path": "",
+    "final_algorithm": "",
+    "enter_from": ""
+   },
+   {
+    "id": "DA64942A-ACF1-44a6-820C-EF8EFF116FF7",
+    "type": "vocal_separation",
+    "choice": 0,
+    "removed_sounds": [],
+    "time_range": null,
+    "production_path": "",
+    "final_algorithm": "",
+    "enter_from": ""
+   },
+   {
+    "id": "236D3FA5-A323-4588-9E84-A7C0C5CD0FE4",
+    "type": "vocal_separation",
+    "choice": 0,
+    "removed_sounds": [],
+    "time_range": null,
+    "production_path": "",
+    "final_algorithm": "",
+    "enter_from": ""
+   },
+   {
+    "id": "E67EC4D4-DEFE-4064-AD46-5965D60D7B5A",
+    "type": "vocal_separation",
+    "choice": 0,
+    "removed_sounds": [],
+    "time_range": null,
+    "production_path": "",
+    "final_algorithm": "",
+    "enter_from": ""
+   }
+  ],
+  "smart_relights": [],
+  "time_marks": [],
+  "multi_language_refs": [],
+  "video_shadows": [],
+  "video_strokes": [],
+  "video_radius": []
+ },
+ "keyframes": {
+  "videos": [],
+  "audios": [],
+  "texts": [],
+  "stickers": [],
+  "filters": [],
+  "adjusts": [],
+  "handwrites": [],
+  "effects": []
+ },
+ "keyframe_graph_list": [],
+ "platform": {
+  "os": "windows",
+  "os_version": "10.0.19045",
+  "app_id": 359289,
+  "app_version": "8.7.0",
+  "app_source": "cc",
+  "device_id": "",
+  "hard_disk_id": "",
+  "mac_address": ""
+ },
+ "last_modified_platform": {
+  "os": "windows",
+  "os_version": "10.0.19045",
+  "app_id": 359289,
+  "app_version": "8.7.0",
+  "app_source": "cc",
+  "device_id": "",
+  "hard_disk_id": "",
+  "mac_address": ""
+ },
+ "mutable_config": null,
+ "cover": null,
+ "retouch_cover": null,
+ "extra_info": {
+  "text_to_video": null,
+  "track_info": null,
+  "subtitle_fragment_info_list": [
+   {
+    "start_time": 0,
+    "end_time": 47480000,
+    "subtitle_cache_info": "",
+    "key": "32402224c7baf521d72b90a1727d103c"
+   },
+   {
+    "start_time": 47480000,
+    "end_time": 49800000,
+    "subtitle_cache_info": "{\"sentence_list\":[{\"attribute\":{\"event\":\"speech\"},\"bilingual_lan\":\"none\",\"end_time\":49800,\"language_server_recognize\":\"ru-RU\",\"language_user_select\":\"ru-RU\",\"start_time\":47480,\"task_id\":\"6a59d5c51e9d1601fd0fa7c0_8_0\",\"text\":\"так где же Суперселл спрятали нори ящик\",\"translation_text\":\"\",\"words\":[{\"end_time\":47720,\"start_time\":47480,\"text\":\"так\"},{\"end_time\":47720,\"start_time\":47720,\"text\":\" \"},{\"end_time\":47880,\"start_time\":47720,\"text\":\"где\"},{\"end_time\":47880,\"start_time\":47880,\"text\":\" \"},{\"end_time\":48080,\"start_time\":47920,\"text\":\"же\"},{\"end_time\":48080,\"start_time\":48080,\"text\":\" \"},{\"end_time\":48680,\"start_time\":48120,\"text\":\"Суперселл\"},{\"end_time\":48680,\"start_time\":48680,\"text\":\" \"},{\"end_time\":49120,\"start_time\":48760,\"text\":\"спрятали\"},{\"end_time\":49120,\"start_time\":49120,\"text\":\" \"},{\"end_time\":49440,\"start_time\":49160,\"text\":\"нори\"},{\"end_time\":49440,\"start_time\":49440,\"text\":\" \"},{\"end_time\":49800,\"start_time\":49520,\"text\":\"ящик\"}]}]}",
+    "key": "5a57c6c4b4107478a66dda6688dd506d"
+   },
+   {
+    "start_time": 49800000,
+    "end_time": 49960000,
+    "subtitle_cache_info": "",
+    "key": "fc6edd8bbe25c5c7f2cd8fb08324236c"
+   },
+   {
+    "start_time": 49960000,
+    "end_time": 52360000,
+    "subtitle_cache_info": "{\"sentence_list\":[{\"attribute\":{\"event\":\"speech\"},\"bilingual_lan\":\"none\",\"end_time\":52360,\"language_server_recognize\":\"ru-RU\",\"language_user_select\":\"ru-RU\",\"start_time\":49960,\"task_id\":\"6a59d5c51e9d1601fd0fa7c0_8_0\",\"text\":\"недавно на своих каналах они оставили нам пасхалку\",\"translation_text\":\"\",\"words\":[{\"end_time\":50280,\"start_time\":49960,\"text\":\"недавно\"},{\"end_time\":50280,\"start_time\":50280,\"text\":\" \"},{\"end_time\":50400,\"start_time\":50280,\"text\":\"на\"},{\"end_time\":50400,\"start_time\":50400,\"text\":\" \"},{\"end_time\":50600,\"start_time\":50400,\"text\":\"своих\"},{\"end_time\":50600,\"start_time\":50600,\"text\":\" \"},{\"end_time\":51000,\"start_time\":50600,\"text\":\"каналах\"},{\"end_time\":51000,\"start_time\":51000,\"text\":\" \"},{\"end_time\":51240,\"start_time\":51080,\"text\":\"они\"},{\"end_time\":51240,\"start_time\":51240,\"text\":\" \"},{\"end_time\":51640,\"start_time\":51280,\"text\":\"оставили\"},{\"end_time\":51640,\"start_time\":51640,\"text\":\" \"},{\"end_time\":51800,\"start_time\":51640,\"text\":\"нам\"},{\"end_time\":51800,\"start_time\":51800,\"text\":\" \"},{\"end_time\":52360,\"start_time\":51880,\"text\":\"пасхалку\"}]}]}",
+    "key": "2e6cfa6141606e0f6139eaeaea1c960c"
+   },
+   {
+    "start_time": 52360000,
+    "end_time": 52400000,
+    "subtitle_cache_info": "",
+    "key": "d41d8cd98f00b204e9800998ecf8427e"
+   },
+   {
+    "start_time": 52400000,
+    "end_time": 54840000,
+    "subtitle_cache_info": "{\"sentence_list\":[{\"attribute\":{\"event\":\"speech\"},\"bilingual_lan\":\"none\",\"end_time\":54840,\"language_server_recognize\":\"ru-RU\",\"language_user_select\":\"ru-RU\",\"start_time\":52400,\"task_id\":\"6a59d5c51e9d1601fd0fa7c0_8_0\",\"text\":\"в которой по их словам спрятана награда для всех\",\"translation_text\":\"\",\"words\":[{\"end_time\":52520,\"start_time\":52400,\"text\":\"в\"},{\"end_time\":52520,\"start_time\":52520,\"text\":\" \"},{\"end_time\":52760,\"start_time\":52520,\"text\":\"которой\"},{\"end_time\":52760,\"start_time\":52760,\"text\":\" \"},{\"end_time\":52920,\"start_time\":52800,\"text\":\"по\"},{\"end_time\":52920,\"start_time\":52920,\"text\":\" \"},{\"end_time\":53080,\"start_time\":52960,\"text\":\"их\"},{\"end_time\":53080,\"start_time\":53080,\"text\":\" \"},{\"end_time\":53440,\"start_time\":53120,\"text\":\"словам\"},{\"end_time\":53440,\"start_time\":53440,\"text\":\" \"},{\"end_time\":53960,\"start_time\":53520,\"text\":\"спрятана\"},{\"end_time\":53960,\"start_time\":53960,\"text\":\" \"},{\"end_time\":54480,\"start_time\":54040,\"text\":\"награда\"},{\"end_time\":54480,\"start_time\":54480,\"text\":\" \"},{\"end_time\":54680,\"start_time\":54560,\"text\":\"для\"},{\"end_time\":54680,\"start_time\":54680,\"text\":\" \"},{\"end_time\":54840,\"start_time\":54680,\"text\":\"всех\"}]}]}",
+    "key": "4bb36c542aa1e8fd2ce7f2b640b51a64"
+   },
+   {
+    "start_time": 54840000,
+    "end_time": 55160000,
+    "subtitle_cache_info": "",
+    "key": "96cf9c4f855894fc0cc962fff089325d"
+   },
+   {
+    "start_time": 55160000,
+    "end_time": 57760000,
+    "subtitle_cache_info": "{\"sentence_list\":[{\"attribute\":{\"event\":\"speech\"},\"bilingual_lan\":\"none\",\"end_time\":57760,\"language_server_recognize\":\"ru-RU\",\"language_user_select\":\"ru-RU\",\"start_time\":55160,\"task_id\":\"6a59d5c51e9d1601fd0fa7c0_8_0\",\"text\":\"но сколько нори ящиков нам дадут и где найти пасхалку\",\"translation_text\":\"\",\"words\":[{\"end_time\":55320,\"start_time\":55160,\"text\":\"но\"},{\"end_time\":55320,\"start_time\":55320,\"text\":\" \"},{\"end_time\":55520,\"start_time\":55320,\"text\":\"сколько\"},{\"end_time\":55520,\"start_time\":55520,\"text\":\" \"},{\"end_time\":55800,\"start_time\":55560,\"text\":\"нори\"},{\"end_time\":55800,\"start_time\":55800,\"text\":\" \"},{\"end_time\":56200,\"start_time\":55840,\"text\":\"ящиков\"},{\"end_time\":56200,\"start_time\":56200,\"text\":\" \"},{\"end_time\":56360,\"start_time\":56240,\"text\":\"нам\"},{\"end_time\":56360,\"start_time\":56360,\"text\":\" \"},{\"end_time\":56680,\"start_time\":56360,\"text\":\"дадут\"},{\"end_time\":56680,\"start_time\":56680,\"text\":\" \"},{\"end_time\":56800,\"start_time\":56720,\"text\":\"и\"},{\"end_time\":56800,\"start_time\":56800,\"text\":\" \"},{\"end_time\":57000,\"start_time\":56800,\"text\":\"где\"},{\"end_time\":57000,\"start_time\":57000,\"text\":\" \"},{\"end_time\":57240,\"start_time\":57000,\"text\":\"найти\"},{\"end_time\":57240,\"start_time\":57240,\"text\":\" \"},{\"end_time\":57760,\"start_time\":57320,\"text\":\"пасхалку\"}]}]}",
+    "key": "be9c0da8aa1c1777096f44da3c032bd2"
+   },
+   {
+    "start_time": 57760000,
+    "end_time": 57880000,
+    "subtitle_cache_info": "",
+    "key": "ce1c00d0e5d640f22411c6cffd19249d"
+   },
+   {
+    "start_time": 57880000,
+    "end_time": 59320000,
+    "subtitle_cache_info": "{\"sentence_list\":[{\"attribute\":{\"event\":\"speech\"},\"bilingual_lan\":\"none\",\"end_time\":59320,\"language_server_recognize\":\"ru-RU\",\"language_user_select\":\"ru-RU\",\"start_time\":57880,\"task_id\":\"6a59d5c51e9d1601fd0fa7c0_8_0\",\"text\":\"я уже всё сделал за вас держите\",\"translation_text\":\"\",\"words\":[{\"end_time\":58000,\"start_time\":57880,\"text\":\"я\"},{\"end_time\":58000,\"start_time\":58000,\"text\":\" \"},{\"end_time\":58160,\"start_time\":58000,\"text\":\"уже\"},{\"end_time\":58160,\"start_time\":58160,\"text\":\" \"},{\"end_time\":58280,\"start_time\":58160,\"text\":\"всё\"},{\"end_time\":58280,\"start_time\":58280,\"text\":\" \"},{\"end_time\":58560,\"start_time\":58320,\"text\":\"сделал\"},{\"end_time\":58560,\"start_time\":58560,\"text\":\" \"},{\"end_time\":58760,\"start_time\":58600,\"text\":\"за\"},{\"end_time\":58760,\"start_time\":58760,\"text\":\" \"},{\"end_time\":58920,\"start_time\":58760,\"text\":\"вас\"},{\"end_time\":58920,\"start_time\":58920,\"text\":\" \"},{\"end_time\":59320,\"start_time\":58960,\"text\":\"держите\"}]}]}",
+    "key": "220df8597dd28be4c14eb5303fbece3d"
+   },
+   {
+    "start_time": 59320000,
+    "end_time": 59566668,
+    "subtitle_cache_info": "",
+    "key": "519b54f9732780887e776658b7881d99"
+   }
+  ]
+ },
+ "relationships": [],
+ "render_index_track_mode_on": true,
+ "free_render_index_mode_on": false,
+ "static_cover_image_path": "",
+ "source": "default",
+ "time_marks": null,
+ "path": "",
+ "lyrics_effects": [],
+ "uneven_animation_template_info": {
+  "composition": "",
+  "content": "",
+  "order": "",
+  "sub_template_info_list": []
+ },
+ "draft_type": "video",
+ "smart_ads_info": {
+  "page_from": "",
+  "routine": "",
+  "draft_url": ""
+ },
+ "function_assistant_info": {
+  "smart_rec_applied": false,
+  "fixed_rec_applied": false,
+  "auto_adjust": false,
+  "auto_adjust_segid_list": [],
+  "color_correction": false,
+  "color_correction_segid_list": [],
+  "enhance_quality": false,
+  "smooth_slow_motion": false,
+  "deflicker_segid_list": [],
+  "video_noise_segid_list": [],
+  "enhance_quality_segid_list": [],
+  "smart_segid_list": [],
+  "retouch": false,
+  "retouch_segid_list": [],
+  "enhande_voice": false,
+  "enhance_voice_segid_list": [],
+  "audio_noise_segid_list": [],
+  "auto_caption": false,
+  "auto_caption_segid_list": [],
+  "auto_caption_template_id": "",
+  "caption_opt": false,
+  "caption_opt_segid_list": [],
+  "eye_correction": false,
+  "eye_correction_segid_list": [],
+  "normalize_loudness": false,
+  "normalize_loudness_segid_list": [],
+  "normalize_loudness_audio_denoise_segid_list": [],
+  "auto_adjust_fixed": false,
+  "auto_adjust_fixed_value": 50.0,
+  "color_correction_fixed": false,
+  "color_correction_fixed_value": 50.0,
+  "normalize_loudness_fixed": false,
+  "enhande_voice_fixed": false,
+  "retouch_fixed": false,
+  "enhance_quality_fixed": false,
+  "smooth_slow_motion_fixed": false,
+  "fps": {
+   "num": 0,
+   "den": 1
+  }
+ }
+}

@@ -1,0 +1,93 @@
+# ============================================================
+#  Шаблон монтажа (раскадровка).
+#  Софт собирает видео по этим слоям, подставляя ассеты из папок.
+#  Длительности сцен считаются от длины озвучки (тайминги ElevenLabs).
+# ============================================================
+
+# Общая структура — это СЛОИ поверх сквозного фона, а не отдельные ролики.
+layers:
+
+  # Слой 1: доп-фон — копия основного фона на весь экран + размытие.
+  - id: blur_background
+    type: background_blurred
+    source: backgrounds        # берётся тот же клип, что и основной фон
+    blur: 40
+
+  # Слой 2: основной фон — блок ~5:6 по центру, поверх размытого.
+  - id: main_background
+    type: background_main
+    source: backgrounds
+    aspect: [5, 6]
+    position: center
+    # В начале после swoosh — тот же фон; через пару секунд — пропуск (jump-cut).
+    intro_jumpcut_after_sec: 2.0
+
+  # Слой 3: субтитры (стиль «Сияние»: белый, свечение, обычно без обводки).
+  #   Шрифт берётся рандомно из файлов assets/fonts, начинающихся на "блок".
+  - id: subtitles
+    type: subtitles
+    style: glow_white          # см. subtitle_styles ниже
+    words_per_cue: 2           # сколько слов показывать за раз
+    position: center_lower
+    font_prefix: "блок"        # какой префикс имени шрифта брать
+    font_pick: random          # random из подходящих (их 3)
+    # тайминги берутся из word-timestamps озвучки
+
+  # Слой 4: эмодзи — 1 шт., на переходе в начале, комбо-анимация рандомом.
+  - id: emoji_hits
+    type: emoji
+    source: emojis
+    count: 1
+    trigger: on_intro_transition
+    animations: [zoom1, zoom2, bounce1, bounce2]   # zoom1/2, отскок1/2
+    animation_pick: random
+    accent_sound: sounds_accent   # звук перед появлением эмодзи (рандом из папки)
+
+  # Слой 5: swoosh-звук на переходе в начале (рандом из папки sounds_swoosh).
+  - id: swoosh
+    type: sound
+    source: sounds_swoosh
+    at: intro_transition
+    pick: random
+
+  # Переход в начале: анимация ввода — рандом из набора (для уникальности видео).
+  - id: intro_transition
+    type: transition
+    animations: [swing1, swing2, swing_left, swing_right, whip_pan,
+                 zoom_punch, shake, roll]   # «качели» и др. — много вариантов
+    animation_pick: random
+
+  # Слой 6: QR в конце — по центру, вход zoom1 0.2с, выход осветление 0.2с,
+  # общая длительность 1.2с, всё это время лёгкое увеличение.
+  #   Перед появлением QR — тот же акцент-звук из sounds_accent (рандом).
+  - id: qr_end
+    type: qr_overlay
+    source: qr
+    position: center
+    total_sec: 1.2
+    in_anim: { type: zoom1, sec: 0.2 }
+    out_anim: { type: lighten, sec: 0.2 }
+    scale_grow: 1.08           # во сколько раз подрастает за 1.2с
+    accent_sound: sounds_accent   # звук перед QR (рандом из папки)
+
+# Стили субтитров (шрифт «блок», белый, свечение как в разделе «Сияние»).
+subtitle_styles:
+  glow_white:
+    font: "assets/fonts/subtitle.ttf"   # положи сюда свой шрифт «блок»
+    font_size: 96
+    primary_color: "FFFFFF"             # белый
+    outline: 0                          # без обводки
+    glow: true
+    glow_color: "8A2BE2"                # фиолетовое свечение («Сияние»)
+    glow_strength: 3
+    # ключевые слова можно подсвечивать (маркер [[слово]] в тексте скрипта)
+    highlight_color: "39FF14"           # зелёная подсветка
+  glow_white_outlined:                  # запасной: белый + чёрная обводка
+    font: "assets/fonts/subtitle.ttf"
+    font_size: 96
+    primary_color: "FFFFFF"
+    outline: 6
+    outline_color: "000000"
+    glow: true
+    glow_color: "8A2BE2"
+    highlight_color: "39FF14"

@@ -1,0 +1,8 @@
+# Дополнительно только для Windows (авто-экспорт из CapCut через GUI).
+# Ставится на твоём ноуте: pip install -r requirements-windows.txt
+-r requirements.txt
+
+pywinauto>=0.6.8           # управление окнами CapCut
+pyautogui>=0.9.54          # запасные клики/горячие клавиши
+pygetwindow>=0.0.9         # поиск окна CapCut
+opencv-python>=4.10.0      # распознавание кнопки «Экспорт» по картинке (fallback)
