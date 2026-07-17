@@ -68,6 +68,18 @@ python -m autoshorts.cli montage --cycles 5
 
 Или через десктопный интерфейс (в разработке): `python -m autoshorts.cli gui`.
 
+### Быстрый тест сборки CapCut (на Windows-ноуте)
+
+Проверить, что сгенерированный черновик открывается в твоём CapCut 8.7.0:
+
+```bash
+python -m autoshorts.cli test-capcut
+```
+
+Команда клонирует эталон (`templates/capcut_reference_8.7.json`), меняет только
+субтитры и кладёт проект `autoshorts_test` в папку черновиков CapCut. Открой
+CapCut — проект появится в списке; проверь таймлайн и стиль.
+
 ## Тесты
 
 ```bash

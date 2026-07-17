@@ -56,6 +56,51 @@ class CloneAssets:
     accent_qr: Path | None
     music: Path | None
     duration: float
+    transition_at: float = 2.0        # момент перехода/jump-cut (конец 1-й фразы)
+    music_volume: float = 0.15        # громкость фоновой музыки (задаётся в UI)
+    cues: list | None = None          # заранее сгруппированные реплики субтитров
+
+
+def build_test_draft(cfg: Config, test_text: str | None = None) -> Path:
+    """Тестовый черновик: клон эталона с заменёнными субтитрами.
+
+    Используются РОДНЫЕ ассеты эталона (пути на твоём ноуте существуют),
+    меняется только текст субтитров — так проверяется, что сгенерированный
+    моим кодом draft_content.json нормально открывается в CapCut 8.7.0.
+    """
+    from types import SimpleNamespace
+
+    draft = _load_reference()
+    dur_us = int(draft.get("duration") or 12_000_000)
+    dur_s = dur_us / US
+
+    text = test_text or "тест автосборки CapCut работает субтитры меняются"
+    tokens = text.split()
+    n = len(tokens)
+    step = dur_s / max(n, 1)
+    words = [SimpleNamespace(text=t, start=i * step, end=(i + 1) * step)
+             for i, t in enumerate(tokens)]
+
+    _replace_subtitles(draft, SimpleNamespace(words=words), wpc=2)
+
+    name = "autoshorts_test"
+    draft_dir = _default_drafts_dir(cfg) / name
+    draft_dir.mkdir(parents=True, exist_ok=True)
+    draft["name"] = name
+    (draft_dir / "draft_content.json").write_text(
+        json.dumps(draft, ensure_ascii=False), encoding="utf-8")
+    (draft_dir / "draft_meta_info.json").write_text(
+        json.dumps({"draft_name": name, "draft_fold_path": str(draft_dir),
+                    "tm_draft_create": int(time.time() * 1000),
+                    "tm_draft_modified": int(time.time() * 1000)},
+                   ensure_ascii=False), encoding="utf-8")
+    log.info("Тестовый черновик собран: %s", draft_dir)
+    return draft_dir
+
+
+def _default_drafts_dir(cfg: Config) -> Path:
+    from .capcut_draft import _default_drafts_dir as _dd
+    return _dd(cfg)
 
 
 def _load_reference() -> dict:
@@ -166,7 +211,8 @@ def _rescale_two_segments(track: dict, jumpcut_us: int, dur_us: int,
 def _replace_backgrounds(draft: dict, a: CloneAssets, dur_us: int) -> None:
     blur = _find_track(draft, "video", 0)
     main = _find_track(draft, "video", 1)
-    jc = int(min(P.INTRO_JUMPCUT_SEC, a.duration) * US)
+    # переход/jump-cut — по концу первой фразы (а не по фиксированному времени)
+    jc = int(min(a.transition_at, a.duration) * US)
     src0 = int(a.bg_start * US)
     for track in (blur, main):
         if not track:
@@ -179,31 +225,54 @@ def _replace_backgrounds(draft: dict, a: CloneAssets, dur_us: int) -> None:
         _rescale_two_segments(track, jc, dur_us, src0)
 
 
+def _set_segment_speed(draft: dict, seg: dict, speed: float) -> None:
+    """Задать скорость сегмента (и связанный speed-материал)."""
+    seg["speed"] = speed
+    for rid in seg.get("extra_material_refs", []):
+        mat = _mat_by_id(draft, rid)
+        if mat and mat.get("type") == "speed":
+            mat["speed"] = speed
+            mat["curve_speed"] = None
+            return
+
+
 def _replace_overlays(draft: dict, a: CloneAssets, dur_us: int) -> None:
     overlay = _find_track(draft, "video", 2)
     if not overlay:
         return
     segs = overlay.get("segments") or []
-    # seg0 — эмодзи, seg1 — QR (по структуре эталона)
+    qr_us = int(P.QR_TOTAL_SEC * US)
+    qstart = max(dur_us - qr_us, 0)
+    trans_us = int(min(a.transition_at, a.duration) * US)
+
+    # seg0 — эмодзи: где-то между переходом и QR, чуть раньше середины,
+    # скорость 1.33 (как в эталоне), без анимации выхода.
     if segs and a.emoji:
         mat = _mat_by_id(draft, segs[0].get("material_id"))
         if mat:
             _set_video_material(mat, a.emoji, int(2.2 * US))
+        emo_dur = min(int(2.2 * US), max(qstart - trans_us, int(0.5 * US)))
+        emo_start = trans_us + int((qstart - trans_us) * 0.4)  # чуть раньше центра
+        emo_start = max(0, min(emo_start, dur_us - emo_dur))
+        segs[0]["target_timerange"] = {"start": emo_start, "duration": emo_dur}
+        _set_segment_speed(draft, segs[0], P.EMOJI_SPEED)
         _set_anim(draft, segs[0], a.emoji_anim, with_lighten=False)
+
+    # seg1 — QR в самый конец: вход «Зум 2» + выход «Осветление».
     if len(segs) >= 2 and a.qr:
         mat = _mat_by_id(draft, segs[1].get("material_id"))
         if mat:
-            _set_video_material(mat, a.qr, int(P.QR_TOTAL_SEC * US))
-        # QR в самый конец
-        qstart = max(dur_us - int(P.QR_TOTAL_SEC * US), 0)
-        segs[1]["target_timerange"] = {"start": qstart,
-                                       "duration": int(P.QR_TOTAL_SEC * US)}
+            _set_video_material(mat, a.qr, qr_us)
+        segs[1]["target_timerange"] = {"start": qstart, "duration": qr_us}
         _set_anim(draft, segs[1], "zoom2", with_lighten=True)
 
 
 def _set_anim(draft: dict, seg: dict, anim_key: str, with_lighten: bool) -> None:
     """Заменить материал sticker_animation у сегмента на выбранный пресет."""
-    preset = P.ANIM.get(anim_key, P.ANIM["zoom1"])
+    preset = P.ANIM.get(anim_key) or P.ANIM["zoom1"]
+    if not preset.get("id"):  # заготовка без ID (отскок) — берём zoom1
+        log.warning("Анимация '%s' пока без ID, использую zoom1.", anim_key)
+        preset = P.ANIM["zoom1"]
     anims = [{
         "id": preset["id"], "type": preset["type"], "start": 0,
         "duration": preset["duration"], "resource_id": preset["id"],
@@ -397,7 +466,7 @@ def _replace_audio(draft: dict, a: CloneAssets, dur_us: int) -> None:
         seg["target_timerange"] = {"start": 0, "duration": dur_us}
         seg["source_timerange"] = {"start": 0, "duration": dur_us}
 
-    # track5 — SFX: swoosh + акценты
+    # track5 — SFX: swoosh (на переходе) + акценты (эмодзи и QR)
     sfx = _find_track(draft, "audio", 1)
     if sfx and sfx.get("segments"):
         segs = sfx["segments"]
@@ -409,18 +478,25 @@ def _replace_audio(draft: dict, a: CloneAssets, dur_us: int) -> None:
             if mat:
                 mat["path"] = str(snd)
                 mat["name"] = snd.name
+        # swoosh — к моменту перехода (конец первой фразы)
+        trans_us = int(min(a.transition_at, a.duration) * US)
+        segs[0]["target_timerange"] = {"start": max(trans_us - int(0.1 * US), 0),
+                                       "duration": segs[0].get("target_timerange", {}).get("duration", int(0.43 * US))}
         # QR-акцент — к концу
         if len(segs) >= 3:
             segs[2]["target_timerange"] = {
                 "start": max(dur_us - int(1.0 * US), 0),
                 "duration": int(0.9 * US)}
 
-    # track6 — музыка (тихо, растянуть/обрезать под длину)
+    # track6 — музыка (громкость из UI, растянуть/обрезать под длину)
     music = _find_track(draft, "audio", 2)
-    if music and music.get("segments") and a.music:
+    if music and music.get("segments"):
         seg = music["segments"][0]
-        mat = _mat_by_id(draft, seg.get("material_id"))
-        if mat:
-            mat["path"] = str(a.music)
-            mat["name"] = a.music.name
+        if a.music:
+            mat = _mat_by_id(draft, seg.get("material_id"))
+            if mat:
+                mat["path"] = str(a.music)
+                mat["name"] = a.music.name
         seg["target_timerange"] = {"start": 0, "duration": dur_us}
+        seg["volume"] = a.music_volume
+        seg["last_nonzero_volume"] = a.music_volume

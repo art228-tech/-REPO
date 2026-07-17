@@ -21,6 +21,8 @@ BLUR_BG_SCALE = 4.2                                         # копия на в
 MAIN_BG_SCALE = 2.33                                        # основной блок
 
 # Комбо-анимации эмодзи (наборы «Зум/Качели/Отскок»).
+# id с пустым значением — пресеты, которых ещё нет в эталоне (отскок 1/2):
+# их реальные ID добавим, когда получим проект, где они применены.
 ANIM = {
     "zoom1": {"id": "6759078592740594184", "name": "Зум 1",
               "category_id": "2037708346", "category_name": "Trending-1",
@@ -31,7 +33,24 @@ ANIM = {
     "swing_down": {"id": "6739338374441603598", "name": "Качели вниз",
                    "category_id": "2037708296", "category_name": "Trending1",
                    "type": "in", "duration": 500000},
+    # заготовки — заполнить реальными ID из проекта с отскоком:
+    "bounce1": {"id": "", "name": "Отскок 1", "category_id": "",
+                "category_name": "", "type": "in", "duration": 500000},
+    "bounce2": {"id": "", "name": "Отскок 2", "category_id": "",
+                "category_name": "", "type": "in", "duration": 500000},
 }
+
+# Скорость проигрывания эмодзи (в эталоне 1.33) — сохраняется при клонировании.
+EMOJI_SPEED = 1.33
+
+# Громкость фоновой музыки по умолчанию (задаётся в интерфейсе при добавлении).
+MUSIC_VOLUME_DEFAULT = 0.15
+
+
+def emoji_anim_choices() -> list[str]:
+    """Доступные комбо-анимации эмодзи (только с известными ID)."""
+    return [k for k in ("zoom1", "zoom2", "bounce1", "bounce2")
+            if ANIM.get(k, {}).get("id")]
 # Выход (для QR): осветление.
 ANIM_OUT_LIGHTEN = {"id": "6798320902548230669", "name": "Осветление",
                     "category_id": "2037708371", "category_name": "Trending-2",

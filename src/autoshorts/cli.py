@@ -33,6 +33,13 @@ def main(argv: list[str] | None = None) -> int:
     p_gui = sub.add_parser("gui", help="запустить десктопный интерфейс")
     p_gui.add_argument("--config", default="config.yaml")
 
+    p_test = sub.add_parser(
+        "test-capcut",
+        help="сгенерировать тестовый черновик CapCut из эталона (для проверки)")
+    p_test.add_argument("--config", default="config.yaml")
+    p_test.add_argument("--text", default=None,
+                        help="текст субтитров для теста")
+
     args = parser.parse_args(argv)
 
     try:
@@ -57,6 +64,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Готово видео: {len(produced)}")
             for path in produced:
                 print(f"  {path}")
+            return 0
+
+        if args.command == "test-capcut":
+            from .montage.capcut_clone import build_test_draft
+            draft_dir = build_test_draft(cfg, test_text=args.text)
+            print("Тестовый черновик собран:")
+            print(f"  {draft_dir}")
+            print("Открой CapCut 8.7.0 — проект 'autoshorts_test' появится в "
+                  "списке. Проверь, что таймлайн и стиль на месте.")
             return 0
     except ConfigError as exc:
         print(f"Ошибка конфига: {exc}", file=sys.stderr)

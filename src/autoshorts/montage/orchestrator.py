@@ -57,6 +57,24 @@ def _words_from_json(data: dict) -> list[Word]:
             for w in data.get("words", [])]
 
 
+def _first_sentence_end(words: list[Word], text: str, fallback: float) -> float:
+    """Момент окончания первой фразы (для перехода/jump-cut и swoosh).
+
+    Ориентируемся по первому предложению текста; если пунктуации нет —
+    берём запасное значение из конфига.
+    """
+    if not words:
+        return fallback
+    import re
+    m = re.search(r"[.!?…]", text or "")
+    if m:
+        first = (text[:m.end()]).strip()
+        n = len([w for w in re.split(r"\s+", first) if w])
+        n = max(1, min(n, len(words)))
+        return float(words[n - 1].end)
+    return fallback
+
+
 def run_montage(cfg: Config, cycles: int, template_path: str = "template.yaml") -> list[str]:
     from ..assets import BackgroundSlicer, build_pools
 
@@ -158,10 +176,16 @@ def _build_one(cfg, template, vo_json, pools, slicer, style, qr_cfg,
     from .capcut_export import export_draft
     accent1 = accent_pool.pick_random() if accent_pool else None
     accent2 = accent_pool.pick_random() if accent_pool else None
+    text = data.get("text", "")
+    transition_at = _first_sentence_end(
+        words, text, fallback=min(2.0, duration * 0.3))
+    music_vol = float(cfg.voice.get("music_volume",
+                                    cfg.montage.get("music_volume", 0.15)))
     clone = CloneAssets(
         background=bg, bg_start=bg_start, bg_length=bg_len, voiceover=audio,
         words=words, emoji=emoji, emoji_anim=emoji_anim, qr=qr, swoosh=swoosh,
         accent_emoji=accent1, accent_qr=accent2, music=music, duration=duration,
+        transition_at=transition_at, music_volume=music_vol,
     )
     draft = build_clone(cfg, out_path, clone, words_per_cue=wpc)
     return export_draft(cfg, draft, out_path)
