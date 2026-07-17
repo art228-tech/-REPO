@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from .config import ConfigError, load_config
 from .logging_setup import setup_logging
@@ -47,7 +48,12 @@ def main(argv: list[str] | None = None) -> int:
             from .ui.app import run_gui
             return run_gui(args.config)
 
-        cfg = load_config(args.config)
+        # Для удобства теста: если config.yaml нет — берём config.example.yaml.
+        config_path = args.config
+        if not Path(config_path).exists() and Path("config.example.yaml").exists():
+            print("config.yaml не найден — использую config.example.yaml")
+            config_path = "config.example.yaml"
+        cfg = load_config(config_path)
         setup_logging(cfg.logs_dir, cfg.logging.get("level", "INFO"),
                       int(cfg.logging.get("keep_files", 20)))
 
