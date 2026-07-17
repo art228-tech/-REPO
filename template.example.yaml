@@ -23,29 +23,43 @@ layers:
     intro_jumpcut_after_sec: 2.0
 
   # Слой 3: субтитры (стиль «Сияние»: белый, свечение, обычно без обводки).
+  #   Шрифт берётся рандомно из файлов assets/fonts, начинающихся на "блок".
   - id: subtitles
     type: subtitles
     style: glow_white          # см. subtitle_styles ниже
     words_per_cue: 2           # сколько слов показывать за раз
     position: center_lower
+    font_prefix: "блок"        # какой префикс имени шрифта брать
+    font_pick: random          # random из подходящих (их 3)
     # тайминги берутся из word-timestamps озвучки
 
-  # Слой 4: эмодзи — вылетают на переходе в начале, с комбо-анимацией.
+  # Слой 4: эмодзи — 1 шт., на переходе в начале, комбо-анимация рандомом.
   - id: emoji_hits
     type: emoji
     source: emojis
+    count: 1
     trigger: on_intro_transition
     animations: [zoom1, zoom2, bounce1, bounce2]   # zoom1/2, отскок1/2
-    animation_pick: sequential  # sequential | random
+    animation_pick: random
+    accent_sound: sounds_accent   # звук перед появлением эмодзи (рандом из папки)
 
-  # Слой 5: swoosh-звук на переходе в начале (3 звука в папке).
+  # Слой 5: swoosh-звук на переходе в начале (рандом из папки sounds_swoosh).
   - id: swoosh
     type: sound
-    source: sounds
+    source: sounds_swoosh
     at: intro_transition
+    pick: random
+
+  # Переход в начале: анимация ввода — рандом из набора (для уникальности видео).
+  - id: intro_transition
+    type: transition
+    animations: [swing1, swing2, swing_left, swing_right, whip_pan,
+                 zoom_punch, shake, roll]   # «качели» и др. — много вариантов
+    animation_pick: random
 
   # Слой 6: QR в конце — по центру, вход zoom1 0.2с, выход осветление 0.2с,
   # общая длительность 1.2с, всё это время лёгкое увеличение.
+  #   Перед появлением QR — тот же акцент-звук из sounds_accent (рандом).
   - id: qr_end
     type: qr_overlay
     source: qr
@@ -54,6 +68,7 @@ layers:
     in_anim: { type: zoom1, sec: 0.2 }
     out_anim: { type: lighten, sec: 0.2 }
     scale_grow: 1.08           # во сколько раз подрастает за 1.2с
+    accent_sound: sounds_accent   # звук перед QR (рандом из папки)
 
 # Стили субтитров (шрифт «блок», белый, свечение как в разделе «Сияние»).
 subtitle_styles:

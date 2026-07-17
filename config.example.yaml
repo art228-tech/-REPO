@@ -33,6 +33,11 @@ voice:
   # Куда складывать готовые mp3.
   output_dir: "assets/voiceovers"
 
+  # Авто-громкость фоновой музыки: софт подбирает уровень так, чтобы музыка
+  # была слышна, но не перебивала голос (нормализация относительно озвучки).
+  music_target_lufs: -26        # целевая громкость музыки (тише голоса)
+  voice_target_lufs: -16        # ориентир громкости голоса
+
   # Сколько голосов создать из промптов за один проход (ты просил 3).
   voices_per_run: 3
 
@@ -76,14 +81,20 @@ folders:
   emojis:
     path: "assets/emojis"             # эмодзи (png)
     mode: "cycle"
-  sounds:
-    path: "assets/sounds"             # swoosh и др. (3 звука)
+  sounds_swoosh:
+    path: "assets/sounds/swoosh"      # звук перехода в начале (берётся рандомно)
+    mode: "cycle"
+  sounds_accent:
+    path: "assets/sounds/accent"      # звук перед эмодзи и QR (рандомно)
     mode: "cycle"
   qr:
     path: "assets/qr"                 # qr-коды
     mode: "cycle"
   music:
-    path: "assets/music"              # фоновая музыка (опционально)
+    path: "assets/music"              # фоновая музыка (рандомно, авто-громкость)
+    mode: "cycle"
+  fonts:
+    path: "assets/fonts"              # шрифты; берутся файлы, начинающиеся на "блок"
     mode: "cycle"
 
 # ------------------------------------------------------------

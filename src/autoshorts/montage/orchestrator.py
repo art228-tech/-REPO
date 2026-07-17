@@ -119,22 +119,30 @@ def _build_one(cfg, template, vo_json, pools, slicer, style, qr_cfg,
         raise RuntimeError("Нет фонов в папке backgrounds.")
     bg, bg_start, bg_len = seg
 
-    # субтитры
-    ass_path = out_dir / f"video_{index:04d}.ass"
-    wpc = 2
+    # параметры слоя субтитров + шрифт (рандом из «блок…»)
+    wpc, font_prefix, font_pick = 2, "блок", "random"
     for layer in template.get("layers", []):
         if layer.get("type") == "subtitles":
             wpc = int(layer.get("words_per_cue", 2))
-    write_ass(words, style, ass_path,
+            font_prefix = layer.get("font_prefix", "блок")
+            font_pick = layer.get("font_pick", "random")
+
+    style_v = _pick_font(style, pools.get("fonts"), font_prefix, font_pick)
+
+    # субтитры
+    ass_path = out_dir / f"video_{index:04d}.ass"
+    write_ass(words, style_v, ass_path,
               play_res=(int(cfg.video.get("width", 1080)),
                         int(cfg.video.get("height", 1920))),
               words_per_cue=wpc)
 
     # материалы
     emoji = pools["emojis"].next() if "emojis" in pools else None
-    swoosh = pools["sounds"].next() if "sounds" in pools else None
     qr = pools["qr"].next() if "qr" in pools else None
-    music = pools["music"].next() if "music" in pools else None
+    # звуки берутся РАНДОМОМ из своих папок
+    swoosh = pools["sounds_swoosh"].pick_random() if "sounds_swoosh" in pools else None
+    accent_pool = pools.get("sounds_accent")
+    music = pools["music"].pick_random() if "music" in pools else None
 
     out_path = out_dir / f"video_{index:04d}.mp4"
 
@@ -143,43 +151,74 @@ def _build_one(cfg, template, vo_json, pools, slicer, style, qr_cfg,
 
     if renderer == "ffmpeg":
         return _render_ffmpeg(cfg, out_path, bg, bg_start, bg_len, audio,
-                              ass_path, music, swoosh, emoji, emoji_anim, qr,
-                              qr_cfg, duration)
+                              ass_path, music, swoosh, accent_pool, emoji,
+                              emoji_anim, qr, qr_cfg, duration)
     # capcut
     from .capcut_draft import build_draft
     from .capcut_export import export_draft
+    accent1 = accent_pool.pick_random() if accent_pool else None
+    accent2 = accent_pool.pick_random() if accent_pool else None
     draft = build_draft(cfg, out_path, bg, bg_start, bg_len, audio, words,
-                        music, swoosh, emoji, emoji_anim, qr, qr_cfg, duration)
+                        music, swoosh, [accent1, accent2], emoji, emoji_anim,
+                        qr, qr_cfg, duration)
     return export_draft(cfg, draft, out_path)
 
 
+def _pick_font(style, fonts_pool, prefix, pick):
+    if fonts_pool is None:
+        return style
+    font = fonts_pool.pick_random(prefix) if pick == "random" else fonts_pool.next()
+    if font is None:
+        return style
+    import dataclasses
+    return dataclasses.replace(style, font=str(font))
+
+
 def _render_ffmpeg(cfg, out_path, bg, bg_start, bg_len, audio, ass_path, music,
-                   swoosh, emoji, emoji_anim, qr, qr_cfg, duration):
-    from .ffmpeg_render import EmojiHit, QrOverlay, VideoSpec, render_video
+                   swoosh, accent_pool, emoji, emoji_anim, qr, qr_cfg, duration):
+    from .ffmpeg_render import (EmojiHit, QrOverlay, SoundHit, VideoSpec,
+                                render_video)
 
     emojis = []
+    sound_hits = []
+    emoji_start = 0.2
     if emoji is not None:
-        emojis.append(EmojiHit(path=str(emoji), start=0.2, duration=1.2,
+        emojis.append(EmojiHit(path=str(emoji), start=emoji_start, duration=1.2,
                                anim=emoji_anim))
+        # акцент-звук чуть раньше появления эмодзи
+        if accent_pool:
+            acc = accent_pool.pick_random()
+            if acc:
+                sound_hits.append(SoundHit(path=str(acc),
+                                           start=max(emoji_start - 0.1, 0.0)))
     qr_overlay = None
     if qr is not None:
         total = float(qr_cfg.get("total_sec", 1.2))
+        qr_start = max(duration - total, 0.0)
         qr_overlay = QrOverlay(
-            path=str(qr), start=max(duration - total, 0.0), total=total,
+            path=str(qr), start=qr_start, total=total,
             in_sec=float((qr_cfg.get("in_anim") or {}).get("sec", 0.2)),
             out_sec=float((qr_cfg.get("out_anim") or {}).get("sec", 0.2)),
             scale_grow=float(qr_cfg.get("scale_grow", 1.08)),
         )
+        # акцент-звук перед QR
+        if accent_pool:
+            acc = accent_pool.pick_random()
+            if acc:
+                sound_hits.append(SoundHit(path=str(acc),
+                                           start=max(qr_start - 0.1, 0.0)))
     spec = VideoSpec(
         out_path=str(out_path), background=str(bg), bg_start=bg_start,
         bg_length=bg_len, voiceover=str(audio), subtitles_ass=str(ass_path),
         music=str(music) if music else None, swoosh=str(swoosh) if swoosh else None,
-        emojis=emojis, qr=qr_overlay,
+        sound_hits=sound_hits, emojis=emojis, qr=qr_overlay,
         width=int(cfg.video.get("width", 1080)),
         height=int(cfg.video.get("height", 1920)),
         fps=int(cfg.video.get("fps", 60)),
         blur=int(cfg.video.get("background_blur", 40)),
         content_aspect=tuple(cfg.video.get("content_aspect", [5, 6])),
         duration=duration,
+        music_target_lufs=float(cfg.voice.get("music_target_lufs", -26)),
+        voice_target_lufs=float(cfg.voice.get("voice_target_lufs", -16)),
     )
     return render_video(spec)

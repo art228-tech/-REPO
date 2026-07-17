@@ -80,8 +80,8 @@ def _segment(material_id: str, start_us: int, dur_us: int,
 
 
 def build_draft(cfg: Config, out_path: Path, bg: Path, bg_start: float,
-                bg_len: float, audio: Path, words, music, swoosh, emoji,
-                emoji_anim, qr, qr_cfg: dict, duration: float) -> Path:
+                bg_len: float, audio: Path, words, music, swoosh, accents,
+                emoji, emoji_anim, qr, qr_cfg: dict, duration: float) -> Path:
     """Собрать папку черновика CapCut и вернуть путь к ней."""
     drafts_dir = _default_drafts_dir(cfg)
     name = out_path.stem or f"autoshorts-{int(time.time())}"
@@ -111,6 +111,25 @@ def build_draft(cfg: Config, out_path: Path, bg: Path, bg_start: float,
         materials["audios"].append(smat)
         audio_segments.append(_segment(smat["id"], 0, int(0.6 * US)))
     tracks.append({"id": _uid(), "type": "audio", "segments": audio_segments})
+
+    # фоновая музыка (рандом, тихо) — отдельная дорожка
+    if music:
+        mmat = _audio_material(Path(music), dur_us)
+        materials["audios"].append(mmat)
+        mseg = _segment(mmat["id"], 0, dur_us)
+        mseg["volume"] = 0.18   # тише голоса; авто-громкость доводится при отладке
+        tracks.append({"id": _uid(), "type": "audio", "segments": [mseg]})
+
+    # акцент-звуки: перед эмодзи (в начале) и перед QR (в конце)
+    accents = [a for a in (accents or []) if a]
+    if accents:
+        acc_segments = []
+        starts = [int(0.1 * US), int(max(duration - 1.3, 0.0) * US)]
+        for a, start in zip(accents, starts):
+            acmat = _audio_material(Path(a), int(0.5 * US))
+            materials["audios"].append(acmat)
+            acc_segments.append(_segment(acmat["id"], start, int(0.5 * US)))
+        tracks.append({"id": _uid(), "type": "audio", "segments": acc_segments})
 
     # текст-дорожка: субтитры по 2 слова
     text_segments = []

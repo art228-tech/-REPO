@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import random
 from pathlib import Path
 
 from .config import FolderRule
@@ -17,15 +18,20 @@ from .state import StateStore
 
 log = get_logger("assets")
 
+_AUDIO = {".mp3", ".wav", ".m4a", ".ogg"}
+
 # Что считаем «файлом-материалом» в каждой категории.
 DEFAULT_EXTS = {
     "voice_prompts": {".txt"},
     "scripts": {".txt"},
     "backgrounds": {".mp4", ".mov", ".mkv", ".webm"},
     "emojis": {".png", ".webp", ".gif"},
-    "sounds": {".mp3", ".wav", ".m4a", ".ogg"},
+    "sounds_swoosh": _AUDIO,
+    "sounds_accent": _AUDIO,
+    "sounds": _AUDIO,
     "qr": {".png", ".jpg", ".jpeg", ".webp"},
-    "music": {".mp3", ".wav", ".m4a", ".ogg"},
+    "music": _AUDIO,
+    "fonts": {".ttf", ".otf"},
 }
 
 
@@ -77,6 +83,19 @@ class AssetPool:
         chosen = files[idx]
         self.state.set(self._cursor_key(), (idx + 1) % len(files))
         return chosen
+
+    def pick_random(self, name_prefix: str | None = None) -> Path | None:
+        """Случайный файл из папки (для звуков и шрифтов).
+
+        name_prefix — фильтр по началу имени (например, 'блок' для шрифтов).
+        """
+        files = self._scan()
+        if name_prefix:
+            files = [f for f in files
+                     if f.name.lower().startswith(name_prefix.lower())]
+        if not files:
+            return None
+        return random.choice(files)
 
     def mark_consumed(self, path: Path) -> None:
         """Для режима consume: удалить использованный файл из папки."""

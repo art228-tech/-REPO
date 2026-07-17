@@ -33,6 +33,13 @@ class EmojiHit:
 
 
 @dataclass
+class SoundHit:
+    """Разовый звук (swoosh на переходе, акцент перед эмодзи/QR)."""
+    path: str
+    start: float = 0.0
+
+
+@dataclass
 class QrOverlay:
     path: str
     start: float             # когда появляется (обычно в конце)
@@ -54,6 +61,7 @@ class VideoSpec:
     music: str | None = None
     music_volume: float = 0.12
     swoosh: str | None = None
+    sound_hits: list[SoundHit] = field(default_factory=list)   # акценты (эмодзи/QR)
     emojis: list[EmojiHit] = field(default_factory=list)
     qr: QrOverlay | None = None
     width: int = 1080
@@ -62,6 +70,9 @@ class VideoSpec:
     blur: int = 40
     content_aspect: tuple[int, int] = (5, 6)
     duration: float = 0.0                 # 0 => по озвучке/фону
+    duck_music: bool = True               # музыка приглушается под голос
+    music_target_lufs: float = -26.0
+    voice_target_lufs: float = -16.0
 
 
 def _content_size(width: int, aspect: tuple[int, int]) -> tuple[int, int]:
@@ -122,17 +133,40 @@ def render_video(spec: VideoSpec) -> Path:
     # --- аудио входы ---
     audio_labels: list[str] = []
     idx = 1
-    if spec.voiceover:
+    voice_present = bool(spec.voiceover)
+    music_present = bool(spec.music and Path(spec.music).exists())
+    duck = spec.duck_music and voice_present and music_present
+
+    if voice_present:
         inputs += ["-i", spec.voiceover]
-        filt.append(f"[{idx}:a]aformat=sample_rates=44100:channel_layouts=stereo[voa]")
-        audio_labels.append("voa")
-        idx += 1
-    if spec.music and Path(spec.music).exists():
-        inputs += ["-stream_loop", "-1", "-i", spec.music]
+        # нормализуем голос к целевой громкости
         filt.append(
             f"[{idx}:a]aformat=sample_rates=44100:channel_layouts=stereo,"
-            f"volume={spec.music_volume},atrim=0:{duration}[mua]"
+            f"loudnorm=I={spec.voice_target_lufs}:TP=-1.5:LRA=11[voa0]"
         )
+        if duck:
+            # копия голоса как сайд-чейн для приглушения музыки
+            filt.append("[voa0]asplit=2[voa][vosc]")
+        else:
+            filt.append("[voa0]anull[voa]")
+        audio_labels.append("voa")
+        idx += 1
+    if music_present:
+        inputs += ["-stream_loop", "-1", "-i", spec.music]
+        # музыку нормализуем к более тихой цели (не громко, но и не тихо)
+        filt.append(
+            f"[{idx}:a]aformat=sample_rates=44100:channel_layouts=stereo,"
+            f"loudnorm=I={spec.music_target_lufs}:TP=-2:LRA=11,"
+            f"atrim=0:{duration}[mua0]"
+        )
+        if duck:
+            # музыка приглушается, когда идёт голос (sidechain compressor)
+            filt.append(
+                "[mua0][vosc]sidechaincompress=threshold=0.03:ratio=8:"
+                "attack=5:release=250[mua]"
+            )
+        else:
+            filt.append("[mua0]anull[mua]")
         audio_labels.append("mua")
         idx += 1
     if spec.swoosh and Path(spec.swoosh).exists():
@@ -142,6 +176,19 @@ def render_video(spec: VideoSpec) -> Path:
             f"adelay=0|0[swa]"
         )
         audio_labels.append("swa")
+        idx += 1
+
+    # акцент-звуки (перед эмодзи и перед QR), каждый со своим сдвигом
+    for hit_i, hit in enumerate(spec.sound_hits):
+        if not Path(hit.path).exists():
+            continue
+        delay_ms = int(max(hit.start, 0.0) * 1000)
+        inputs += ["-i", hit.path]
+        filt.append(
+            f"[{idx}:a]aformat=sample_rates=44100:channel_layouts=stereo,"
+            f"adelay={delay_ms}|{delay_ms}[hit{hit_i}]"
+        )
+        audio_labels.append(f"hit{hit_i}")
         idx += 1
 
     # --- эмодзи (появление «поп» через fade по альфе) ---
