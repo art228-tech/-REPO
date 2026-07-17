@@ -123,10 +123,10 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Main,{Path(style.font).stem or 'Arial'},{style.font_size},{primary},{primary},{outline_col},&H00000000,{bold},0,0,0,100,100,0,0,1,{outline_w},0,{style.align},60,60,{style.margin_v},1
+Style: Main,{style.font},{style.font_size},{primary},{primary},{outline_col},&H00000000,{bold},0,0,0,100,100,0,0,1,{outline_w},0,{style.align},60,60,{style.margin_v},1
 
 [Events]
-Format: Layer, Start, End, Style, MarginL, MarginR, MarginV, Effect, Text
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
     lines = [header]

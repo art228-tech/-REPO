@@ -73,6 +73,7 @@ class VideoSpec:
     duck_music: bool = True               # музыка приглушается под голос
     music_target_lufs: float = -26.0
     voice_target_lufs: float = -16.0
+    fonts_dir: str | None = None          # папка со шрифтами субтитров
 
 
 def _content_size(width: int, aspect: tuple[int, int]) -> tuple[int, int]:
@@ -127,7 +128,11 @@ def render_video(spec: VideoSpec) -> Path:
     # субтитры
     if spec.subtitles_ass and Path(spec.subtitles_ass).exists():
         ass = str(spec.subtitles_ass).replace("\\", "/").replace(":", "\\:")
-        filt.append(f"[{last_v}]ass='{ass}'[vsub]")
+        fonts = ""
+        if spec.fonts_dir:
+            fd = str(spec.fonts_dir).replace("\\", "/").replace(":", "\\:")
+            fonts = f":fontsdir='{fd}'"
+        filt.append(f"[{last_v}]ass='{ass}'{fonts}[vsub]")
         last_v = "vsub"
 
     # --- аудио входы ---
