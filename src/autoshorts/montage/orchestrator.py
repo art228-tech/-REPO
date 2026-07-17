@@ -153,14 +153,17 @@ def _build_one(cfg, template, vo_json, pools, slicer, style, qr_cfg,
         return _render_ffmpeg(cfg, out_path, bg, bg_start, bg_len, audio,
                               ass_path, music, swoosh, accent_pool, emoji,
                               emoji_anim, qr, qr_cfg, duration)
-    # capcut
-    from .capcut_draft import build_draft
+    # capcut — клонируем эталонный проект пользователя и подставляем ассеты
+    from .capcut_clone import CloneAssets, build_clone
     from .capcut_export import export_draft
     accent1 = accent_pool.pick_random() if accent_pool else None
     accent2 = accent_pool.pick_random() if accent_pool else None
-    draft = build_draft(cfg, out_path, bg, bg_start, bg_len, audio, words,
-                        music, swoosh, [accent1, accent2], emoji, emoji_anim,
-                        qr, qr_cfg, duration)
+    clone = CloneAssets(
+        background=bg, bg_start=bg_start, bg_length=bg_len, voiceover=audio,
+        words=words, emoji=emoji, emoji_anim=emoji_anim, qr=qr, swoosh=swoosh,
+        accent_emoji=accent1, accent_qr=accent2, music=music, duration=duration,
+    )
+    draft = build_clone(cfg, out_path, clone, words_per_cue=wpc)
     return export_draft(cfg, draft, out_path)
 
 
