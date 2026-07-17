@@ -169,6 +169,7 @@ def _apply_substitutions(draft: dict, cfg: Config, a: CloneAssets,
     _replace_overlays(draft, a, dur_us)
     _replace_subtitles(draft, a, words_per_cue)
     _replace_audio(draft, a, dur_us)
+    _clear_subtitle_cache(draft)
 
 
 def _resolve_reference_dir(cfg: Config) -> Path | None:
@@ -452,33 +453,54 @@ def _set_anim(draft: dict, seg: dict, anim_key: str, with_lighten: bool) -> None
 
 
 def _build_word_info(group, cue_start_s: float) -> dict:
-    """Собрать word_info (текст + слова с таймингами в мс относительно реплики).
+    """Собрать все представления субтитра: текст, word_info, ranges, words-массив.
 
-    Между словами вставляются пробелы-токены, как в эталоне CapCut.
+    Между словами вставляются пробелы-токены, как в эталоне CapCut. CapCut держит
+    текст сразу в нескольких местах — заполняем их все.
     """
     words = []
     parts = []
     loc = 0
     ranges = []
+    st_arr, en_arr, txt_arr = [], [], []
     for i, w in enumerate(group):
         st = int(round((w.start - cue_start_s) * 1000))
         en = int(round((w.end - cue_start_s) * 1000))
         if i > 0:
-            words.append({"text": " ", "start_time": words[-1]["end_time"],
-                          "end_time": words[-1]["end_time"]})
+            prev_end = words[-1]["end_time"]
+            words.append({"text": " ", "start_time": prev_end, "end_time": prev_end})
             parts.append(" ")
+            st_arr.append(prev_end); en_arr.append(prev_end); txt_arr.append(" ")
             loc += 1
         words.append({"text": w.text, "start_time": st, "end_time": en})
         ranges.append({"location": loc, "length": len(w.text),
                        "source_type": "unknown"})
         parts.append(w.text)
+        st_arr.append(st); en_arr.append(en); txt_arr.append(w.text)
         loc += len(w.text)
     text = "".join(parts)
     end_ms = words[-1]["end_time"] if words else 0
     return {"text": text,
             "info": {"text": text, "start_time": 0, "end_time": end_ms,
                      "words": words},
-            "ranges": ranges}
+            "ranges": ranges,
+            "words_arr": {"start_time": st_arr, "end_time": en_arr, "text": txt_arr}}
+
+
+def _clear_subtitle_cache(draft: dict) -> None:
+    """Сбросить кэш распознавания речи (авто-субтитры), чтобы CapCut взял текст
+    из материалов, а не из кэша."""
+    ei = draft.get("extra_info")
+    if isinstance(ei, dict) and isinstance(ei.get("subtitle_fragment_info_list"), list):
+        ei["subtitle_fragment_info_list"] = []
+    cfgc = draft.get("config")
+    if isinstance(cfgc, dict):
+        for k in ("subtitle_taskinfo", "lyrics_taskinfo"):
+            if isinstance(cfgc.get(k), list):
+                cfgc[k] = []
+        for k in ("subtitle_recognition_id", "lyrics_recognition_id"):
+            if k in cfgc:
+                cfgc[k] = ""
 
 
 def _replace_subtitles(draft: dict, a: CloneAssets, wpc: int = 2) -> None:
@@ -533,6 +555,8 @@ def _replace_subtitles(draft: dict, a: CloneAssets, wpc: int = 2) -> None:
         tpl["origin_word_info"] = copy.deepcopy(info["info"])
         tpl["current_word_info"] = copy.deepcopy(info["info"])
         tpl["material_text_ranges"] = info["ranges"]
+        if "merge_content" in tpl:
+            tpl["merge_content"] = info["text"]
         # переносим связанные текст-материалы, переставляя id
         for tir in tpl.get("text_info_resources", []):
             old_tid = tir.get("text_material_id")
@@ -542,6 +566,10 @@ def _replace_subtitles(draft: dict, a: CloneAssets, wpc: int = 2) -> None:
             new_text = copy.deepcopy(src_text)
             new_text["id"] = _uid()
             _set_text_content(new_text, info["text"])
+            if "recognize_text" in new_text:
+                new_text["recognize_text"] = info["text"]
+            if isinstance(new_text.get("words"), dict):
+                new_text["words"] = info["words_arr"]
             draft["materials"]["texts"].append(new_text)
             tir["text_material_id"] = new_text["id"]
             ai = tir.get("attach_info") or {}

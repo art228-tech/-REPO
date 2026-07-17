@@ -25,31 +25,64 @@ def mat_by_id(draft, mid):
                 return it
     return None
 
-def build_word_info(tokens, dur_ms):
+def build_sub(tokens, dur_ms):
+    """Собрать все представления субтитра: текст, массивы words, word_info, ranges."""
     n = max(len(tokens), 1); step = dur_ms / n
-    words, parts, ranges, loc = [], [], [], 0
+    st, en, txt = [], [], []
+    wi_words, ranges, loc = [], [], 0
     for i, tok in enumerate(tokens):
         if i > 0:
-            words.append({"text": " ", "start_time": words[-1]["end_time"], "end_time": words[-1]["end_time"]})
-            parts.append(" "); loc += 1
-        words.append({"text": tok, "start_time": int(i*step), "end_time": int((i+1)*step)})
-        ranges.append({"location": loc, "length": len(tok), "source_type": "unknown"})
-        parts.append(tok); loc += len(tok)
-    text = "".join(parts)
-    return text, {"text": text, "start_time": 0, "end_time": (words[-1]["end_time"] if words else 0), "words": words}, ranges
+            st.append(en[-1]); en.append(en[-1]); txt.append(" ")
+            wi_words.append({"text": " ", "start_time": en[-1], "end_time": en[-1]}); loc += 1
+        s, e = int(i*step), int((i+1)*step)
+        st.append(s); en.append(e); txt.append(tok)
+        wi_words.append({"text": tok, "start_time": s, "end_time": e})
+        ranges.append({"location": loc, "length": len(tok), "source_type": "unknown"}); loc += len(tok)
+    full = "".join(txt)
+    words_arr = {"start_time": st, "end_time": en, "text": txt}
+    word_info = {"text": full, "start_time": 0, "end_time": (en[-1] if en else 0), "words": wi_words}
+    return full, words_arr, word_info, ranges
 
-def set_text_content(tmat, text):
+def set_content_text(tmat, full):
     try:
-        c = json.loads(tmat.get("content") or "{}"); c["text"] = text
-        for st in c.get("styles", []):
-            st["range"] = [0, len(text)]
+        c = json.loads(tmat.get("content") or "{}"); c["text"] = full
+        for stl in c.get("styles", []):
+            stl["range"] = [0, len(full)]
         tmat["content"] = json.dumps(c, ensure_ascii=False)
     except Exception:
         pass
 
+def apply_cue(draft, tpl, tokens, dur_ms):
+    full, words_arr, word_info, ranges = build_sub(tokens, dur_ms)
+    # шаблон
+    if "current_word_info" in tpl: tpl["current_word_info"] = copy.deepcopy(word_info)
+    if "origin_word_info" in tpl: tpl["origin_word_info"] = copy.deepcopy(word_info)
+    if "material_text_ranges" in tpl: tpl["material_text_ranges"] = ranges
+    if "merge_content" in tpl: tpl["merge_content"] = full
+    # связанные текст-материалы (тут реально лежит отображаемый текст)
+    for tir in tpl.get("text_info_resources", []):
+        tm = mat_by_id(draft, tir.get("text_material_id"))
+        if not tm:
+            continue
+        set_content_text(tm, full)
+        if "recognize_text" in tm: tm["recognize_text"] = full
+        if "words" in tm and isinstance(tm["words"], dict): tm["words"] = words_arr
+
+def clear_subtitle_cache(draft):
+    """Убрать кэш распознавания речи, чтобы CapCut взял текст из материалов."""
+    ei = draft.get("extra_info")
+    if isinstance(ei, dict) and isinstance(ei.get("subtitle_fragment_info_list"), list):
+        ei["subtitle_fragment_info_list"] = []
+    cfgc = draft.get("config")
+    if isinstance(cfgc, dict):
+        for k in ("subtitle_taskinfo", "lyrics_taskinfo"):
+            if isinstance(cfgc.get(k), list): cfgc[k] = []
+        for k in ("subtitle_recognition_id", "lyrics_recognition_id"):
+            if k in cfgc: cfgc[k] = ""
+
 def edit_subtitles(draft):
-    phrases = ["test caption one", "captions change", "glow style ok", "works fine",
-               "ready to go", "line five", "line six", "line seven", "line eight"]
+    phrases = ["ТЕСТ работает", "субтитры МЕНЯЮТСЯ", "стиль СИЯНИЕ", "всё СУПЕР",
+               "готово К бою", "строка ПЯТЬ", "строка ШЕСТЬ", "строка СЕМЬ"]
     changed = 0
     for tr in draft.get("tracks", []):
         if tr.get("type") != "text" or not tr.get("segments"):
@@ -59,14 +92,9 @@ def edit_subtitles(draft):
             if not tpl:
                 continue
             dur_ms = int(seg.get("target_timerange", {}).get("duration", 1000000) / 1000)
-            text, info, ranges = build_word_info(phrases[i % len(phrases)].split(), dur_ms)
-            if "current_word_info" in tpl: tpl["current_word_info"] = copy.deepcopy(info)
-            if "origin_word_info" in tpl: tpl["origin_word_info"] = copy.deepcopy(info)
-            if "material_text_ranges" in tpl: tpl["material_text_ranges"] = ranges
-            for tir in tpl.get("text_info_resources", []):
-                tm = mat_by_id(draft, tir.get("text_material_id"))
-                if tm: set_text_content(tm, text)
+            apply_cue(draft, tpl, phrases[i % len(phrases)].split(), dur_ms)
             changed += 1
+    clear_subtitle_cache(draft)
     return changed
 
 def edit_all_timeline_files(folder, new_id):
