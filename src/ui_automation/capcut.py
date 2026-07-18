@@ -1,10 +1,20 @@
-"""Управление CapCut через интерфейс: запуск, открытие проекта, автосубтитры,
-стиль/шрифт/шаблон субтитров, экспорт.
+"""Управление CapCut через интерфейс (калибровано по скриншотам пользователя).
 
-Все «что кликать» задаётся эталонными скриншотами кнопок в папке
-«Интерфейс (скриншоты кнопок)». Это позволяет настроить автоматизацию под
-конкретную сборку/тему CapCut без изменения кода. Список нужных скриншотов —
-в REFERENCES ниже и в README.
+Реальный процесс (CapCut 9.0.0, русский интерфейс):
+  1. Главный экран → двойной клик по плитке проекта.
+  2. Верхнее меню «Субтитры» → язык «Русский» (по умолчанию) → зелёная «Создать».
+  3. Дождаться окна «Генерация субтитров… %».
+  4. Панель справа «Текст», галочка «Применить ко всем» (вкл. по умолчанию):
+       - вкладка «Основн.»: выбрать ШРИФТ (поиск «блок» → один из Блок-hv/Rg/Блоки);
+       - выбрать СТИЛЬ без чёрных краёв (белый пресет в «Стиль по пресету»);
+       - вкладка «Шаблоны»: выбрать ШАБЛОН из «Избранное»;
+       - (опционально) «Трансформация»: масштаб/позиция.
+  5. Ctrl+S.
+  6. «Экспорт» (справа вверху) → имя файла → 1080P (по умолч.) → битрейт «Выше»
+     (по умолч.) → частота кадров 60fps → зелёная «Экспорт» → дождаться конца.
+
+Порядок и все «что кликать» задаются эталонными скриншотами кнопок в папке
+«Интерфейс (скриншоты кнопок)».
 """
 
 from __future__ import annotations
@@ -22,51 +32,50 @@ logger = get_logger()
 
 # role -> (имя файла, описание что заскриншотить)
 REFERENCES: dict[str, tuple[str, str]] = {
-    "project_tile": ("project_tile.png", "Плитка вашего проекта на главном экране CapCut"),
-    "editor_ready": ("editor_ready.png", "Любой заметный элемент, когда редактор открыт (напр. кнопка «Экспорт»)"),
-    "menu_text": ("menu_text.png", "Вкладка/кнопка «Текст» в верхнем меню"),
-    "auto_captions": ("auto_captions.png", "Пункт «Автоматические субтитры»"),
-    "captions_generate": ("captions_generate.png", "Кнопка запуска распознавания (напр. «Создать»/«Начать»)"),
-    "captions_progress": ("captions_progress.png", "Индикатор процесса распознавания (чтобы дождаться конца)"),
-    "batch_edit": ("batch_edit.png", "Кнопка пакетного редактирования субтитров (если есть)"),
-    "template_button": ("template_button.png", "Вкладка «Шаблоны» в панели текста"),
-    "template_target": ("template_target.png", "Нужный шаблон субтитров (миниатюра)"),
-    "style_button": ("style_button.png", "Вкладка «Стиль» в панели текста"),
-    "style_white": ("style_white.png", "Стиль без чёрных краёв (белый)"),
-    "font_search": ("font_search.png", "Поле поиска шрифта"),
-    "font_blok_1": ("font_blok_1.png", "1-й шрифт из списка на «Блок…»"),
-    "font_blok_2": ("font_blok_2.png", "2-й шрифт на «Блок…» (если есть)"),
-    "font_blok_3": ("font_blok_3.png", "3-й шрифт на «Блок…» (если есть)"),
-    "export_button": ("export_button.png", "Кнопка «Экспорт» в редакторе"),
-    "export_name_field": ("export_name_field.png", "Поле имени файла в окне экспорта"),
-    "export_resolution": ("export_resolution.png", "Выпадающий список разрешения"),
-    "export_res_1080": ("export_res_1080.png", "Пункт «1080p»"),
-    "export_fps": ("export_fps.png", "Выпадающий список частоты кадров"),
-    "export_fps_60": ("export_fps_60.png", "Пункт «60»"),
-    "export_bitrate": ("export_bitrate.png", "Выпадающий список битрейта"),
-    "export_bitrate_high": ("export_bitrate_high.png", "Пункт «Выше»"),
-    "export_confirm": ("export_confirm.png", "Кнопка запуска экспорта в окне экспорта"),
-    "export_progress": ("export_progress.png", "Индикатор процесса экспорта"),
+    "project_tile": ("project_tile.png", "Плитка вашего проекта на главном экране («тестовик»)"),
+    "menu_captions": ("menu_captions.png", "Кнопка «Субтитры» в верхнем меню редактора"),
+    "captions_generate": ("captions_generate.png", "Зелёная кнопка «Создать» (запуск распознавания)"),
+    "captions_progress": ("captions_progress.png", "Окно «Генерация субтитров…» (для ожидания конца)"),
+    "tab_basic": ("tab_basic.png", "Под-вкладка «Основн.» в панели текста"),
+    "font_dropdown": ("font_dropdown.png", "Поле «Шрифт» (значение, напр. «Система»)"),
+    "font_search": ("font_search.png", "Поле поиска шрифта («Поиск текста»)"),
+    "font_blok_1": ("font_blok_1.png", "Шрифт «Блок-hv» в списке"),
+    "font_blok_2": ("font_blok_2.png", "Шрифт «Блок-Rg» в списке"),
+    "font_blok_3": ("font_blok_3.png", "Шрифт «Блоки» в списке"),
+    "style_white": ("style_white.png", "Белый пресет без чёрных краёв в «Стиль по пресету»"),
+    "tab_template": ("tab_template.png", "Под-вкладка «Шаблоны» в панели текста"),
+    "template_favorite": ("template_favorite.png", "Ваш шаблон в разделе «Избранное»"),
+    "export_button": ("export_button.png", "Кнопка «Экспорт» справа вверху"),
+    "export_name_field": ("export_name_field.png", "Поле «Имя» в окне экспорта"),
+    "export_fps": ("export_fps.png", "Выпадающий список «Частота кадров»"),
+    "export_fps_60": ("export_fps_60.png", "Пункт «60fps» в списке частоты кадров"),
+    "export_confirm": ("export_confirm.png", "Зелёная кнопка «Экспорт» в окне экспорта"),
+    "export_progress": ("export_progress.png", "Индикатор процесса экспорта (%)"),
+    # опциональные — 1080P и «Выше» обычно стоят по умолчанию
+    "export_resolution": ("export_resolution.png", "Список «Разрешение» (опц.)"),
+    "export_res_1080": ("export_res_1080.png", "Пункт «1080P» (опц.)"),
+    "export_bitrate": ("export_bitrate.png", "Список «Битрейт» (опц.)"),
+    "export_bitrate_high": ("export_bitrate_high.png", "Пункт «Выше» (опц.)"),
 }
 
 FONT_ROLES = ["font_blok_1", "font_blok_2", "font_blok_3"]
 
+# Обязательные эталоны (без них шаг не выполнить).
+REQUIRED = [
+    "project_tile", "menu_captions", "captions_generate",
+    "tab_basic", "font_dropdown", "font_search", "font_blok_1",
+    "style_white", "tab_template", "template_favorite",
+    "export_button", "export_name_field", "export_fps", "export_fps_60",
+    "export_confirm",
+]
+
 
 def missing_references(references_dir: Path) -> list[str]:
-    """Возвращает список отсутствующих обязательных скриншотов (кроме опциональных)."""
-    optional = {"batch_edit", "captions_progress", "export_progress",
-                "font_blok_2", "font_blok_3", "editor_ready"}
-    missing = []
-    for role, (fname, _desc) in REFERENCES.items():
-        if role in optional:
-            continue
-        if not (references_dir / fname).exists():
-            missing.append(fname)
-    return missing
+    return [REFERENCES[r][0] for r in REQUIRED
+            if not (references_dir / REFERENCES[r][0]).exists()]
 
 
 def find_capcut_exe(explicit: str = "") -> Path:
-    """Ищет CapCut.exe. Сначала явный путь, затем типичные места установки."""
     if explicit:
         p = Path(explicit)
         if p.exists():
@@ -77,7 +86,6 @@ def find_capcut_exe(explicit: str = "") -> Path:
         candidates.append(Path(local) / "Programs" / "CapCut" / "CapCut.exe")
         apps = Path(local) / "CapCut" / "Apps"
         if apps.exists():
-            # Берём самую свежую версию из подпапок.
             for sub in sorted(apps.iterdir(), reverse=True):
                 candidates.append(sub / "CapCut.exe")
     for c in candidates:
@@ -100,18 +108,18 @@ class CapCutController:
             subprocess.Popen([str(exe)])
         except OSError as e:
             raise UiError(f"Не удалось запустить CapCut: {e}") from e
-        time.sleep(6.0)
+        time.sleep(7.0)
 
     def focus_window(self) -> bool:
         try:
             import pygetwindow as gw  # type: ignore
         except Exception:  # noqa: BLE001
             return False
-        wins = [w for w in gw.getAllTitles() if "capcut" in w.lower()]
-        if not wins:
+        titles = [t for t in gw.getAllTitles() if "capcut" in t.lower() or "сарсut" in t.lower()]
+        if not titles:
             return False
         try:
-            win = gw.getWindowsWithTitle(wins[0])[0]
+            win = gw.getWindowsWithTitle(titles[0])[0]
             if win.isMinimized:
                 win.restore()
             win.activate()
@@ -131,52 +139,63 @@ class CapCutController:
         logger.info("Шаг: открываю проект в CapCut…")
         self.launch()
         self.focus_window()
-        # Двойной клик по плитке проекта на главном экране.
         self.s.double_click("project_tile", timeout=60)
-        time.sleep(3.0)
-        if self.s.exists("editor_ready", timeout=30):
-            logger.info("Редактор открыт.")
-        else:
-            logger.info("Проект открыт (индикатор редактора не задан).")
+        time.sleep(4.0)
+        logger.info("Проект открыт.")
 
     def generate_captions(self) -> None:
         logger.info("Шаг: автосубтитры (распознавание речи)…")
-        self.s.click("menu_text", timeout=30)
-        self.s.click("auto_captions", timeout=20)
+        self.s.click("menu_captions", timeout=30)
+        time.sleep(1.0)
+        # Язык «Русский» и вкладка «Автоматические субтитры» — по умолчанию.
         self.s.click("captions_generate", timeout=20)
         # Ждём завершения распознавания.
         if self.s.exists("captions_progress", timeout=8):
             self.s.wait_vanish("captions_progress", timeout=600)
         else:
-            logger.info("Индикатор прогресса не задан — жду фиксированную паузу.")
-            time.sleep(20)
+            logger.info("Окно прогресса не задано — жду фиксированную паузу.")
+            time.sleep(25)
+        time.sleep(2.0)
         logger.info("Субтитры сгенерированы.")
 
     def apply_caption_style(self, font_rng: random.Random | None = None) -> None:
-        logger.info("Шаг: стиль/шрифт/шаблон субтитров…")
+        logger.info("Шаг: шрифт → стиль → шаблон…")
         rng = font_rng or random
-        # Пакетное редактирование всех субтитров, если есть такая кнопка.
-        if self.s.exists("batch_edit", timeout=3):
-            self.s.click("batch_edit")
-        # Шаблон.
-        self.s.click("template_button", timeout=20)
-        self.s.click("template_target", timeout=20)
-        # Стиль без чёрных краёв.
-        self.s.click("style_button", timeout=20)
-        self.s.click("style_white", timeout=20)
-        # Случайный шрифт из доступных «Блок…».
+
+        # Вкладка «Основн.».
+        self.s.click("tab_basic", timeout=20)
+        time.sleep(0.5)
+
+        # Шрифт: открыть список, найти «блок», выбрать случайный из доступных.
         available = [r for r in FONT_ROLES
                      if (self.s.references_dir / REFERENCES[r][0]).exists()]
         if available:
-            self.s.click("font_search", timeout=20)
+            self.s.click("font_dropdown", timeout=15)
+            time.sleep(0.7)
+            self.s.click("font_search", timeout=10)
             self.s.hotkey("ctrl", "a")
-            self.s.type_text("Блок")
-            time.sleep(1.0)
+            self.s.type_text("блок")
+            time.sleep(1.2)
             chosen = rng.choice(available)
             self.s.click(chosen, timeout=15)
             logger.info("Выбран шрифт: %s", REFERENCES[chosen][0])
+            self.s.press("escape")
+            time.sleep(0.5)
         else:
             logger.warning("Нет скриншотов шрифтов «Блок» — шаг шрифта пропущен.")
+
+        # Стиль без чёрных краёв (белый пресет).
+        self.s.click("tab_basic", timeout=10)
+        time.sleep(0.3)
+        self.s.click("style_white", timeout=15)
+        logger.info("Выбран белый стиль без чёрных краёв.")
+
+        # Шаблон из «Избранного».
+        self.s.click("tab_template", timeout=15)
+        time.sleep(0.5)
+        self.s.click("template_favorite", timeout=15)
+        logger.info("Применён шаблон из «Избранного».")
+        time.sleep(1.0)
 
     def save_project(self) -> None:
         self.s.hotkey("ctrl", "s")
@@ -186,29 +205,38 @@ class CapCutController:
     def export(self, filename: str, resolution: str, fps: int, bitrate: str) -> None:
         logger.info("Шаг: экспорт (%s / %dfps / битрейт %s)…", resolution, fps, bitrate)
         self.s.click("export_button", timeout=30)
-        time.sleep(2.0)
+        time.sleep(2.5)
         # Имя файла.
-        if self.s.exists("export_name_field", timeout=10):
-            self.s.click("export_name_field")
-            self.s.hotkey("ctrl", "a")
-            self.s.type_text(filename)
-        # Разрешение / FPS / битрейт.
-        self._select("export_resolution", "export_res_1080")
+        self.s.click("export_name_field", timeout=15)
+        self.s.hotkey("ctrl", "a")
+        self.s.type_text(filename)
+        time.sleep(0.3)
+        # Разрешение и битрейт обычно уже 1080P / «Выше» — задаём, если есть эталоны.
+        self._select_optional("export_resolution", "export_res_1080")
+        self._select_optional("export_bitrate", "export_bitrate_high")
+        # Частоту кадров меняем на 60.
         self._select("export_fps", "export_fps_60")
-        self._select("export_bitrate", "export_bitrate_high")
         # Запуск экспорта.
         self.s.click("export_confirm", timeout=15)
+        # Ждём завершения.
         if self.s.exists("export_progress", timeout=10):
             self.s.wait_vanish("export_progress", timeout=1800)
         else:
             logger.info("Индикатор экспорта не задан — жду фиксированную паузу.")
-            time.sleep(60)
+            time.sleep(90)
+        time.sleep(2.0)
         logger.info("Экспорт завершён: %s", filename)
 
     def _select(self, dropdown_ref: str, option_ref: str) -> None:
+        self.s.click(dropdown_ref, timeout=10)
+        time.sleep(0.6)
+        self.s.click(option_ref, timeout=10)
+
+    def _select_optional(self, dropdown_ref: str, option_ref: str) -> None:
+        refs = self.s.references_dir
+        if not (refs / REFERENCES[dropdown_ref][0]).exists():
+            return
         try:
-            self.s.click(dropdown_ref, timeout=8)
-            time.sleep(0.5)
-            self.s.click(option_ref, timeout=8)
+            self._select(dropdown_ref, option_ref)
         except UiError as e:
-            logger.warning("Пропускаю выбор %s: %s", option_ref, e)
+            logger.warning("Пропускаю %s: %s", option_ref, e)

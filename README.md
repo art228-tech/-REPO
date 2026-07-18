@@ -143,18 +143,28 @@ git clone -b cursor/capcut-automator-scaffold-e2ac <URL репозитория>
    имя файла = `номер_дата`.
 
 ### Нужные скриншоты (папка «Интерфейс (скриншоты кнопок)»)
-Обязательные: `project_tile.png` (плитка проекта), `menu_text.png` (кнопка
-«Текст»), `auto_captions.png` («Автоматические субтитры»), `captions_generate.png`
-(кнопка запуска распознавания), `template_button.png` («Шаблоны»),
-`template_target.png` (нужный шаблон), `style_button.png` («Стиль»),
-`style_white.png` (стиль без чёрных краёв), `font_search.png` (поиск шрифта),
-`font_blok_1.png` (шрифт на «Блок»), `export_button.png` («Экспорт»),
-`export_name_field.png`, `export_resolution.png`, `export_res_1080.png`,
-`export_fps.png`, `export_fps_60.png`, `export_bitrate.png`,
-`export_bitrate_high.png`, `export_confirm.png`.
+Порядок автоматизации: открыть проект → «Субтитры» → «Создать» →
+шрифт «Блок» → белый стиль → шаблон из «Избранного» → экспорт (1080P/«Выше»/60fps).
 
-Необязательные (улучшают надёжность): `editor_ready.png`, `captions_progress.png`,
-`batch_edit.png`, `font_blok_2.png`, `font_blok_3.png`, `export_progress.png`.
+Обязательные (обрежьте кнопку/элемент как есть на экране):
+`project_tile.png` (плитка проекта на главном), `menu_captions.png` (кнопка
+«Субтитры» вверху), `captions_generate.png` (зелёная «Создать»),
+`tab_basic.png` (под-вкладка «Основн.»), `font_dropdown.png` (поле «Шрифт»),
+`font_search.png` (поле поиска шрифта), `font_blok_1.png` (шрифт «Блок-hv»),
+`style_white.png` (белый пресет в «Стиль по пресету»), `tab_template.png`
+(под-вкладка «Шаблоны»), `template_favorite.png` (ваш шаблон в «Избранное»),
+`export_button.png` («Экспорт» справа вверху), `export_name_field.png` (поле
+«Имя»), `export_fps.png` (список «Частота кадров»), `export_fps_60.png`
+(пункт «60fps»), `export_confirm.png` (зелёная «Экспорт» в окне).
+
+Необязательные: `font_blok_2.png` (Блок-Rg), `font_blok_3.png` (Блоки) —
+чтобы шрифт выбирался случайно из трёх; `captions_progress.png` и
+`export_progress.png` — чтобы точно ждать окончания; `export_resolution.png` +
+`export_res_1080.png`, `export_bitrate.png` + `export_bitrate_high.png` — если
+1080P/«Выше» не стоят по умолчанию.
+
+Поиск кнопок — многомасштабный (OpenCV): эталон не обязан идеально совпадать
+по разрешению экрана, но обрезайте аккуратно, без лишнего фона.
 
 При сбое софт сохраняет скриншот экрана в `logs\screenshots` и пишет понятное
 сообщение в «Отстук» — по нему легко понять, на какой кнопке застряло.

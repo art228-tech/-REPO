@@ -71,6 +71,48 @@ class Screen:
             p = p.with_suffix(".png")
         return p
 
+    # Масштабы для многомасштабного поиска: эталон-скриншот не обязан идеально
+    # совпадать по разрешению с экраном (другой монитор/масштаб/DPI).
+    _SCALES = [1.0, 0.9, 1.1, 0.8, 1.2, 0.7, 1.3, 0.6, 0.5, 1.5]
+
+    def _match_multiscale(self, ref_path: Path, conf: float):
+        """Ищет эталон на экране в нескольких масштабах через OpenCV.
+        Возвращает (x, y) центра лучшего совпадения или None."""
+        try:
+            import cv2  # type: ignore
+            import numpy as np  # type: ignore
+        except Exception:
+            return self._match_pyautogui(ref_path, conf)
+
+        shot = self.pg.screenshot()
+        screen = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2GRAY)
+        templ0 = cv2.imread(str(ref_path), cv2.IMREAD_GRAYSCALE)
+        if templ0 is None:
+            return None
+        best_val, best_xy = -1.0, None
+        sh, sw = screen.shape[:2]
+        for scale in self._SCALES:
+            tw = max(8, int(templ0.shape[1] * scale))
+            th = max(8, int(templ0.shape[0] * scale))
+            if tw >= sw or th >= sh:
+                continue
+            templ = cv2.resize(templ0, (tw, th), interpolation=cv2.INTER_AREA)
+            res = cv2.matchTemplate(screen, templ, cv2.TM_CCOEFF_NORMED)
+            _min, maxv, _minl, maxl = cv2.minMaxLoc(res)
+            if maxv > best_val:
+                best_val = maxv
+                best_xy = (maxl[0] + tw // 2, maxl[1] + th // 2)
+        if best_xy is not None and best_val >= conf:
+            return best_xy
+        return None
+
+    def _match_pyautogui(self, ref_path: Path, conf: float):
+        try:
+            loc = self.pg.locateCenterOnScreen(str(ref_path), confidence=conf)
+            return (int(loc.x), int(loc.y)) if loc is not None else None
+        except Exception:  # noqa: BLE001
+            return None
+
     def locate(self, ref: str, timeout: float | None = None,
                confidence: float | None = None):
         """Ждёт появления эталона на экране и возвращает его центр (x, y)."""
@@ -81,21 +123,16 @@ class Screen:
         timeout = self.default_timeout if timeout is None else timeout
         conf = self.confidence if confidence is None else confidence
         deadline = time.time() + timeout
-        last_err: Exception | None = None
         while time.time() < deadline:
-            try:
-                loc = self.pg.locateCenterOnScreen(str(ref_path), confidence=conf)
-                if loc is not None:
-                    return loc
-            except Exception as e:  # noqa: BLE001 — pyautogui бросает при отсутствии
-                last_err = e
+            xy = self._match_multiscale(ref_path, conf)
+            if xy is not None:
+                return xy
             time.sleep(0.5)
         self.capture(f"not_found_{ref_path.stem}")
         raise UiError(
             f"Не нашёл на экране «{ref_path.name}» за {timeout:.0f}с. "
             f"Скриншот экрана сохранён в logs/screenshots. "
             f"Проверьте, что кнопка видна и скриншот-эталон актуален."
-            + (f" ({last_err})" if last_err else "")
         )
 
     def exists(self, ref: str, timeout: float = 2.0,
