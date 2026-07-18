@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Сборка PyInstaller
+build/
+dist/
+*.spec
+
+# Локальные данные приложения (создаются при запуске рядом с софтом)
+/config.json
+/logs/
+/Ассеты/
+
+# ОС
+.DS_Store
+Thumbs.db

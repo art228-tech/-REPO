@@ -1,0 +1,14 @@
+# GUI
+PyQt6==6.7.1
+
+# UI-автоматизация CapCut (Windows): субтитры и экспорт
+pywinauto==0.6.8 ; sys_platform == "win32"
+pyautogui==0.9.54
+pygetwindow==0.0.9 ; sys_platform == "win32"
+
+# Работа с медиа-длительностями (без перекодирования)
+# ffprobe идёт вместе с imageio-ffmpeg, отдельная установка ffmpeg не нужна
+imageio-ffmpeg==0.5.1
+
+# Сборка в один .exe
+pyinstaller==6.10.0 ; sys_platform == "win32"
