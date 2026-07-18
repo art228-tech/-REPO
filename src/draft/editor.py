@@ -161,6 +161,27 @@ class DraftEditor:
         logger.info("Синхронизировано под озвучку: длина ролика %.2fs.", V / 1e6)
         return V
 
+    def clamp_segments_to_total(self) -> None:
+        """Обрезает хвосты всех сегментов, выходящие за конец ролика, чтобы
+        ничего не уходило дальше видео (иначе в конце появляется чёрный фон)."""
+        V = self.doc.total_duration
+        for track in self.doc.tracks:
+            for seg in track.get("segments", []):
+                s, d = _target(seg)
+                end = s + d
+                if end <= V:
+                    continue
+                new_d = V - s
+                if new_d <= 0:
+                    logger.warning("Сегмент начинается за концом ролика — пропускаю.")
+                    continue
+                _set_target(seg, s, new_d)
+                src = seg.get("source_timerange")
+                if src is not None:
+                    _set_source(seg, int(src.get("start", 0)),
+                                int(round(new_d * _speed(seg))))
+                logger.info("Обрезан хвост за концом ролика: -%.2fs", (end - V) / 1e6)
+
     def _resize_video_to(self, seg: dict, start: int, dur: int) -> None:
         """Растягивает/обрезает видео-сегмент до нужной длины (по требованию —
         «просто удлинить/расширить ролик»)."""

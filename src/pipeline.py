@@ -139,6 +139,8 @@ class Pipeline:
             self.config.overlay.window_start_percent,
             self.config.overlay.window_end_percent,
         )
+        # Ничто не должно уходить дальше конца видео (иначе чёрный фон в конце).
+        ed.clamp_segments_to_total()
 
         # Удаляем старые субтитры (новые сгенерирует ASR в интерфейсе).
         ed.delete_subtitles()

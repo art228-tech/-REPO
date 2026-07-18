@@ -20,5 +20,5 @@ class UiAutomationNotReadyError(NotImplementedError):
 def generate_captions_and_export() -> None:
     raise UiAutomationNotReadyError(
         "Автосубтитры и экспорт выполняются через интерфейс CapCut и требуют "
-        "настройки на вашей машине (Windows, русский CapCut 8.7.0)."
+        "настройки на вашей машине (Windows, русский CapCut 9.0.0)."
     )
