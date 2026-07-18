@@ -51,6 +51,17 @@ class OverlaySettings:
 
 
 @dataclass
+class UiSettings:
+    """UI-автоматизация CapCut (автосубтитры + экспорт через интерфейс)."""
+
+    enabled: bool = False           # пока не откалибровано скриншотами — выключено
+    capcut_exe: str = ""            # путь к CapCut.exe (пусто = найти автоматически)
+    asr_language: str = "Русский"
+    confidence: float = 0.85        # порог совпадения скриншотов кнопок
+    default_timeout: float = 30.0   # ожидание появления элемента, сек
+
+
+@dataclass
 class AppConfig:
     # Имя проекта CapCut (как в списке проектов). Папку draft находим по нему.
     capcut_project_name: str = ""
@@ -58,10 +69,13 @@ class AppConfig:
     capcut_drafts_dir: str = ""
     # Сколько роликов монтировать за один запуск.
     cycles: int = 1
+    # Сквозной номер для имени экспортируемого файла (номер + дата).
+    output_counter: int = 1
 
     subtitles: SubtitleSettings = field(default_factory=SubtitleSettings)
     export: ExportSettings = field(default_factory=ExportSettings)
     overlay: OverlaySettings = field(default_factory=OverlaySettings)
+    ui: UiSettings = field(default_factory=UiSettings)
 
     # ---- сериализация ----
 
@@ -74,9 +88,11 @@ class AppConfig:
             capcut_project_name=data.get("capcut_project_name", ""),
             capcut_drafts_dir=data.get("capcut_drafts_dir", ""),
             cycles=int(data.get("cycles", 1)),
+            output_counter=int(data.get("output_counter", 1)),
             subtitles=SubtitleSettings(**data.get("subtitles", {})),
             export=ExportSettings(**data.get("export", {})),
             overlay=OverlaySettings(**data.get("overlay", {})),
+            ui=UiSettings(**data.get("ui", {})),
         )
 
     def save(self, path: Path | None = None) -> None:

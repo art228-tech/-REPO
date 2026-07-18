@@ -18,8 +18,9 @@ def main() -> int:
     # Создаём папки-ассеты сразу, чтобы пользователь мог наполнять их из проводника.
     try:
         AssetManager(paths.assets_dir()).ensure_folders()
+        paths.references_dir().mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        logger.error("Не удалось создать папки-ассеты: %s", e)
+        logger.error("Не удалось создать рабочие папки: %s", e)
 
     config = AppConfig.load()
 

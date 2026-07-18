@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -21,7 +22,7 @@ from .draft import DraftDocument, DraftEditor
 from .draft.layout import LayoutError
 from .draft.probe import ProbeError, probe_duration_us
 from .logging_setup import get_logger
-from .ui_automation import UiAutomationNotReadyError, generate_captions_and_export
+from .ui_automation import UiAutomationNotReadyError, UiError, run_captions_and_export
 
 logger = get_logger()
 
@@ -148,15 +149,28 @@ class Pipeline:
         saved = doc.save(dc_path, backup=True)
         logger.info("Проект сохранён (резервная копия .bak рядом): %s", saved)
 
-        # Дальше — только интерфейс CapCut.
+        # Дальше — только интерфейс CapCut (автосубтитры + экспорт).
+        output_name = f"{self.config.output_counter:03d}_{datetime.now():%Y-%m-%d}"
         try:
-            generate_captions_and_export()
+            run_captions_and_export(self.config, output_name)
         except UiAutomationNotReadyError as e:
             return CycleResult(
                 index=index, ok=False, picked=picked_names, edited_project=str(dc_path),
                 error=f"Правка проекта выполнена и сохранена. Остаётся интерфейсный шаг: {e}",
             )
+        except UiError as e:
+            return CycleResult(
+                index=index, ok=False, picked=picked_names, edited_project=str(dc_path),
+                error=f"Сбой UI-автоматизации: {e}",
+            )
 
+        # Успех — увеличиваем сквозной номер для имени файла.
+        self.config.output_counter += 1
+        try:
+            self.config.save()
+        except OSError:
+            pass
+        logger.info("Ролик готов: %s", output_name)
         return CycleResult(index=index, ok=True, picked=picked_names, edited_project=str(dc_path))
 
     def _select_assets(self) -> dict[str, Path]:

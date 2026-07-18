@@ -28,5 +28,15 @@ def logs_dir() -> Path:
     return app_dir() / "logs"
 
 
+def references_dir() -> Path:
+    """Папка со скриншотами кнопок CapCut для UI-автоматизации."""
+    return app_dir() / "Интерфейс (скриншоты кнопок)"
+
+
+def ui_shots_dir() -> Path:
+    """Куда сохраняются скриншоты экрана при сбоях UI-автоматизации."""
+    return logs_dir() / "screenshots"
+
+
 def config_path() -> Path:
     return app_dir() / "config.json"

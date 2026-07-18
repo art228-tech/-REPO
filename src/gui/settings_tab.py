@@ -5,6 +5,7 @@ from __future__ import annotations
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
@@ -70,6 +71,23 @@ class SettingsTab(QWidget):
         folders_row.addWidget(self.btn_open_assets)
         folders_row.addWidget(self.btn_open_result)
 
+        # --- UI-автоматизация (автосубтитры + экспорт) ---
+        ui_box = QGroupBox("Автосубтитры и экспорт (интерфейс CapCut)")
+        ui_form = QFormLayout(ui_box)
+        self.ui_enabled = QCheckBox("Включить автосубтитры и экспорт")
+        self.ui_enabled.setChecked(config.ui.enabled)
+        self.ui_enabled.setToolTip(
+            "Включайте только после того, как положите скриншоты кнопок CapCut "
+            "в папку «Интерфейс (скриншоты кнопок)»."
+        )
+        self.capcut_exe = QLineEdit(config.ui.capcut_exe)
+        self.capcut_exe.setPlaceholderText("Пусто = найти CapCut.exe автоматически")
+        self.btn_open_refs = QPushButton("Открыть папку со скриншотами кнопок")
+        self.btn_open_refs.clicked.connect(self._open_refs)
+        ui_form.addRow(self.ui_enabled)
+        ui_form.addRow("CapCut.exe:", self.capcut_exe)
+        ui_form.addRow(self.btn_open_refs)
+
         # --- Кнопки ---
         self.btn_save = QPushButton("Сохранить настройки")
         self.btn_save.clicked.connect(self._save)
@@ -80,6 +98,7 @@ class SettingsTab(QWidget):
         layout.addWidget(project_box)
         layout.addWidget(subs_box)
         layout.addWidget(folders_box)
+        layout.addWidget(ui_box)
         layout.addWidget(self.btn_save)
         layout.addWidget(self.hint)
         layout.addStretch(1)
@@ -97,11 +116,18 @@ class SettingsTab(QWidget):
     def _open_result(self) -> None:
         self._open_folder(AssetManager(paths.assets_dir()).result_path())
 
+    def _open_refs(self) -> None:
+        refs = paths.references_dir()
+        refs.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(refs)))
+
     def _save(self) -> None:
         self.config.capcut_project_name = self.project_name.text().strip()
         self.config.capcut_drafts_dir = self.drafts_dir.text().strip()
         self.config.subtitles.vertical_offset_percent = self.sub_offset.value()
         self.config.subtitles.scale_percent = self.sub_scale.value()
+        self.config.ui.enabled = self.ui_enabled.isChecked()
+        self.config.ui.capcut_exe = self.capcut_exe.text().strip()
         try:
             self.config.save()
             QMessageBox.information(self, "Сохранено", "Настройки сохранены.")
