@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from PyQt6.QtCore import QUrl
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -14,6 +17,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..assets import AssetManager
 from ..config import AppConfig
 from .. import paths
 
@@ -56,6 +60,16 @@ class SettingsTab(QWidget):
         subs_form.addRow(QLabel("Шрифт: случайный из тех, что начинаются на «Блок». "
                                 "Стиль без чёрных краёв и шаблон берутся из проекта."))
 
+        # --- Папки ---
+        folders_box = QGroupBox("Папки с файлами")
+        self.btn_open_assets = QPushButton("Открыть папку «Ассеты» (сюда класть файлы)")
+        self.btn_open_result = QPushButton("Открыть папку «Результат»")
+        self.btn_open_assets.clicked.connect(self._open_assets)
+        self.btn_open_result.clicked.connect(self._open_result)
+        folders_row = QHBoxLayout(folders_box)
+        folders_row.addWidget(self.btn_open_assets)
+        folders_row.addWidget(self.btn_open_result)
+
         # --- Кнопки ---
         self.btn_save = QPushButton("Сохранить настройки")
         self.btn_save.clicked.connect(self._save)
@@ -65,9 +79,23 @@ class SettingsTab(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(project_box)
         layout.addWidget(subs_box)
+        layout.addWidget(folders_box)
         layout.addWidget(self.btn_save)
         layout.addWidget(self.hint)
         layout.addStretch(1)
+
+    def _open_folder(self, path) -> None:
+        try:
+            AssetManager(paths.assets_dir()).ensure_folders()
+        except OSError:
+            pass
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def _open_assets(self) -> None:
+        self._open_folder(paths.assets_dir())
+
+    def _open_result(self) -> None:
+        self._open_folder(AssetManager(paths.assets_dir()).result_path())
 
     def _save(self) -> None:
         self.config.capcut_project_name = self.project_name.text().strip()
