@@ -30,6 +30,7 @@ echo Building .exe ^(may take several minutes^)...
 pyinstaller --noconfirm --onefile --windowed ^
     --name "CapCut Automontazh" ^
     --collect-all imageio_ffmpeg ^
+    --add-data "src/ui_automation/reference_defaults;reference_defaults" ^
     main.py
 
 if errorlevel 1 (

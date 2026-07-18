@@ -18,7 +18,9 @@ def main() -> int:
     # Создаём папки-ассеты сразу, чтобы пользователь мог наполнять их из проводника.
     try:
         AssetManager(paths.assets_dir()).ensure_folders()
-        paths.references_dir().mkdir(parents=True, exist_ok=True)
+        # Кладём встроенные эталоны кнопок в папку пользователя (для просмотра/замены).
+        from src.ui_automation.capcut import ensure_references
+        ensure_references(paths.references_dir(), paths.reference_defaults_dir())
     except OSError as e:
         logger.error("Не удалось создать рабочие папки: %s", e)
 

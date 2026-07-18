@@ -27,8 +27,10 @@ class UiError(Exception):
 
 class Screen:
     def __init__(self, references_dir: Path, shots_dir: Path,
-                 confidence: float = 0.85, default_timeout: float = 30.0) -> None:
+                 confidence: float = 0.85, default_timeout: float = 30.0,
+                 defaults_dir: Path | None = None) -> None:
         self.references_dir = Path(references_dir)
+        self.defaults_dir = Path(defaults_dir) if defaults_dir else None
         self.shots_dir = Path(shots_dir)
         self.confidence = confidence
         self.default_timeout = default_timeout
@@ -66,10 +68,18 @@ class Screen:
     # ---- поиск эталонов ----
 
     def _ref_path(self, ref: str) -> Path:
-        p = self.references_dir / ref
-        if not p.suffix:
-            p = p.with_suffix(".png")
-        return p
+        name = ref if ref.endswith(".png") else ref + ".png"
+        user = self.references_dir / name
+        if user.exists():
+            return user
+        if self.defaults_dir is not None:
+            d = self.defaults_dir / name
+            if d.exists():
+                return d
+        return user  # для понятной ошибки «нет скриншота»
+
+    def has_ref(self, ref: str) -> bool:
+        return self._ref_path(ref).exists()
 
     # Масштабы для многомасштабного поиска: эталон-скриншот не обязан идеально
     # совпадать по разрешению с экраном (другой монитор/масштаб/DPI).
@@ -146,10 +156,11 @@ class Screen:
     # ---- действия ----
 
     def click(self, ref: str, timeout: float | None = None,
-              confidence: float | None = None, clicks: int = 1) -> None:
+              confidence: float | None = None, clicks: int = 1,
+              dx: int = 0, dy: int = 0) -> None:
         x, y = self.locate(ref, timeout=timeout, confidence=confidence)
-        self.pg.click(x, y, clicks=clicks)
-        logger.info("Клик по «%s» в (%d, %d)%s", ref, x, y,
+        self.pg.click(x + dx, y + dy, clicks=clicks)
+        logger.info("Клик по «%s» в (%d, %d)%s", ref, x + dx, y + dy,
                     " x2" if clicks == 2 else "")
 
     def double_click(self, ref: str, **kw) -> None:
@@ -157,6 +168,26 @@ class Screen:
 
     def click_xy(self, x: int, y: int) -> None:
         self.pg.click(x, y)
+
+    def scroll(self, x: int, y: int, amount: int) -> None:
+        """Прокрутка колесом в точке (x, y). amount<0 — вниз."""
+        self.pg.moveTo(x, y)
+        self.pg.scroll(amount)
+
+    def locate_scrolling(self, ref: str, scroll_x: int, scroll_y: int,
+                         step: int = -400, attempts: int = 6,
+                         confidence: float | None = None):
+        """Ищет эталон, при необходимости прокручивая панель (для элементов
+        ниже видимой области, например пресетов стиля)."""
+        for i in range(attempts):
+            xy = self._match_multiscale(self._ref_path(ref),
+                                        confidence or self.confidence)
+            if xy is not None:
+                return xy
+            self.scroll(scroll_x, scroll_y, step)
+            time.sleep(0.6)
+        # финальная попытка со скриншотом ошибки
+        return self.locate(ref, timeout=3, confidence=confidence)
 
     def wait_vanish(self, ref: str, timeout: float = 300.0) -> None:
         """Ждёт, пока эталон исчезнет с экрана (например, индикатор прогресса)."""

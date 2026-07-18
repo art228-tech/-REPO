@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import os
 import random
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -29,6 +30,13 @@ from ..logging_setup import get_logger
 from .framework import Screen, UiError
 
 logger = get_logger()
+
+# Точка прокрутки правой панели (в пределах панели свойств субтитров).
+PANEL_SCROLL_XY = (1690, 250)
+# Смещение от ⊘ («без стиля») до первого белого пресета «Aa» без чёрных краёв.
+STYLE_WHITE_DX = 50
+# Смещение от метки «Имя» до поля ввода имени файла в окне экспорта.
+NAME_FIELD_DX = 260
 
 # role -> (имя файла, описание что заскриншотить)
 REFERENCES: dict[str, tuple[str, str]] = {
@@ -42,11 +50,11 @@ REFERENCES: dict[str, tuple[str, str]] = {
     "font_blok_1": ("font_blok_1.png", "Шрифт «Блок-hv» в списке"),
     "font_blok_2": ("font_blok_2.png", "Шрифт «Блок-Rg» в списке"),
     "font_blok_3": ("font_blok_3.png", "Шрифт «Блоки» в списке"),
-    "style_white": ("style_white.png", "Белый пресет без чёрных краёв в «Стиль по пресету»"),
+    "style_none": ("style_none.png", "Пресет «без стиля» (⊘) в «Стиль по пресету» — якорь"),
     "tab_template": ("tab_template.png", "Под-вкладка «Шаблоны» в панели текста"),
     "template_favorite": ("template_favorite.png", "Ваш шаблон в разделе «Избранное»"),
     "export_button": ("export_button.png", "Кнопка «Экспорт» справа вверху"),
-    "export_name_field": ("export_name_field.png", "Поле «Имя» в окне экспорта"),
+    "export_name_label": ("export_name_label.png", "Метка «Имя» в окне экспорта — якорь"),
     "export_fps": ("export_fps.png", "Выпадающий список «Частота кадров»"),
     "export_fps_60": ("export_fps_60.png", "Пункт «60fps» в списке частоты кадров"),
     "export_confirm": ("export_confirm.png", "Зелёная кнопка «Экспорт» в окне экспорта"),
@@ -64,15 +72,38 @@ FONT_ROLES = ["font_blok_1", "font_blok_2", "font_blok_3"]
 REQUIRED = [
     "project_tile", "menu_captions", "captions_generate",
     "tab_basic", "font_dropdown", "font_search", "font_blok_1",
-    "style_white", "tab_template", "template_favorite",
-    "export_button", "export_name_field", "export_fps", "export_fps_60",
+    "style_none", "tab_template", "template_favorite",
+    "export_button", "export_name_label", "export_fps", "export_fps_60",
     "export_confirm",
 ]
 
 
-def missing_references(references_dir: Path) -> list[str]:
-    return [REFERENCES[r][0] for r in REQUIRED
-            if not (references_dir / REFERENCES[r][0]).exists()]
+def missing_references(references_dir: Path, defaults_dir: Path | None = None) -> list[str]:
+    """Отсутствующие обязательные эталоны (с учётом встроенных по умолчанию)."""
+    missing = []
+    for r in REQUIRED:
+        fname = REFERENCES[r][0]
+        if (references_dir / fname).exists():
+            continue
+        if defaults_dir and (defaults_dir / fname).exists():
+            continue
+        missing.append(fname)
+    return missing
+
+
+def ensure_references(references_dir: Path, defaults_dir: Path) -> None:
+    """Копирует встроенные эталоны в папку пользователя (если их там ещё нет),
+    чтобы всё работало из коробки, но пользователь мог заменить любой скриншот."""
+    references_dir.mkdir(parents=True, exist_ok=True)
+    if not defaults_dir.exists():
+        return
+    for src in defaults_dir.glob("*.png"):
+        dst = references_dir / src.name
+        if not dst.exists():
+            try:
+                shutil.copy2(src, dst)
+            except OSError as e:  # noqa: BLE001
+                logger.warning("Не удалось скопировать эталон %s: %s", src.name, e)
 
 
 def find_capcut_exe(explicit: str = "") -> Path:
@@ -167,8 +198,7 @@ class CapCutController:
         time.sleep(0.5)
 
         # Шрифт: открыть список, найти «блок», выбрать случайный из доступных.
-        available = [r for r in FONT_ROLES
-                     if (self.s.references_dir / REFERENCES[r][0]).exists()]
+        available = [r for r in FONT_ROLES if self.s.has_ref(REFERENCES[r][0])]
         if available:
             self.s.click("font_dropdown", timeout=15)
             time.sleep(0.7)
@@ -184,15 +214,19 @@ class CapCutController:
         else:
             logger.warning("Нет скриншотов шрифтов «Блок» — шаг шрифта пропущен.")
 
-        # Стиль без чёрных краёв (белый пресет).
+        # Стиль без чёрных краёв (белый пресет). Он ниже — прокручиваем панель
+        # и кликаем по первому пресету справа от ⊘ («без стиля»).
         self.s.click("tab_basic", timeout=10)
         time.sleep(0.3)
-        self.s.click("style_white", timeout=15)
-        logger.info("Выбран белый стиль без чёрных краёв.")
-
-        # Шаблон из «Избранного».
-        self.s.click("tab_template", timeout=15)
+        sx, sy = PANEL_SCROLL_XY
+        x, y = self.s.locate_scrolling("style_none", sx, sy, step=-400, attempts=6)
+        self.s.pg.click(x + STYLE_WHITE_DX, y)
+        logger.info("Выбран белый стиль без чёрных краёв (⊘+%d).", STYLE_WHITE_DX)
         time.sleep(0.5)
+
+        # Шаблон из «Избранного» (под-вкладка «Шаблоны» вверху панели).
+        self.s.click("tab_template", timeout=15)
+        time.sleep(0.6)
         self.s.click("template_favorite", timeout=15)
         logger.info("Применён шаблон из «Избранного».")
         time.sleep(1.0)
@@ -206,8 +240,8 @@ class CapCutController:
         logger.info("Шаг: экспорт (%s / %dfps / битрейт %s)…", resolution, fps, bitrate)
         self.s.click("export_button", timeout=30)
         time.sleep(2.5)
-        # Имя файла.
-        self.s.click("export_name_field", timeout=15)
+        # Имя файла: кликаем в поле правее метки «Имя».
+        self.s.click("export_name_label", timeout=15, dx=NAME_FIELD_DX)
         self.s.hotkey("ctrl", "a")
         self.s.type_text(filename)
         time.sleep(0.3)
@@ -233,8 +267,7 @@ class CapCutController:
         self.s.click(option_ref, timeout=10)
 
     def _select_optional(self, dropdown_ref: str, option_ref: str) -> None:
-        refs = self.s.references_dir
-        if not (refs / REFERENCES[dropdown_ref][0]).exists():
+        if not self.s.has_ref(REFERENCES[dropdown_ref][0]):
             return
         try:
             self._select(dropdown_ref, option_ref)

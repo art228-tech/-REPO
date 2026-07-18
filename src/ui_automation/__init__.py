@@ -29,22 +29,22 @@ def run_captions_and_export(config, output_filename: str) -> None:
     шаблон → сохранить → экспорт. Бросает UiAutomationNotReadyError, если UI
     выключен или не готовы скриншоты."""
     from .. import paths
-    from .capcut import CapCutController, missing_references
+    from .capcut import CapCutController, ensure_references, missing_references
     from .framework import Screen
 
     if not getattr(config, "ui", None) or not config.ui.enabled:
         raise UiAutomationNotReadyError(
-            "UI-автоматизация выключена. Включите её в «Настройках» после того, "
-            "как добавите скриншоты кнопок CapCut."
+            "UI-автоматизация выключена. Включите её в «Настройках»."
         )
 
     refs = paths.references_dir()
-    refs.mkdir(parents=True, exist_ok=True)
-    missing = missing_references(refs)
+    defaults = paths.reference_defaults_dir()
+    # Встроенные эталоны копируем пользователю (работает из коробки, можно заменить).
+    ensure_references(refs, defaults)
+    missing = missing_references(refs, defaults)
     if missing:
         raise UiAutomationNotReadyError(
-            "Не хватает скриншотов кнопок в «" + refs.name + "»: "
-            + ", ".join(missing)
+            "Не хватает эталонов кнопок: " + ", ".join(missing)
         )
 
     screen = Screen(
@@ -52,6 +52,7 @@ def run_captions_and_export(config, output_filename: str) -> None:
         shots_dir=paths.ui_shots_dir(),
         confidence=config.ui.confidence,
         default_timeout=config.ui.default_timeout,
+        defaults_dir=defaults,
     )
     ctrl = CapCutController(screen, config.ui.capcut_exe)
     ctrl.open_project(config.capcut_project_name)

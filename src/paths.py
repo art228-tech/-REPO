@@ -33,6 +33,14 @@ def references_dir() -> Path:
     return app_dir() / "Интерфейс (скриншоты кнопок)"
 
 
+def reference_defaults_dir() -> Path:
+    """Встроенные (готовые) эталоны кнопок, поставляемые с софтом."""
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+        return base / "reference_defaults"
+    return Path(__file__).resolve().parent / "ui_automation" / "reference_defaults"
+
+
 def ui_shots_dir() -> Path:
     """Куда сохраняются скриншоты экрана при сбоях UI-автоматизации."""
     return logs_dir() / "screenshots"
