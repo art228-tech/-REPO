@@ -1,37 +1,84 @@
-"""Работа с проектом CapCut (draft-файлы).
+"""Работа с проектом CapCut (прямая правка draft-файлов).
 
-ВАЖНО: точная структура draft-файлов CapCut 8.7.0 будет откалибрована по
-реальному примеру проекта пользователя (папка draft со всеми .json).
-До этого здесь — задокументированный интерфейс и заглушки.
+Калибровано по реальному проекту пользователя: CapCut 9.0.0 (Windows), 9:16,
+1080x1920. Структура таймлайна распознаётся семантически (см. layout.py).
 
-Планируемые возможности (через прямую правку draft JSON, без перекодирования):
-  * найти проект по имени в каталоге проектов CapCut;
-  * определить сегменты по порядку/позиции на дорожках (фон 1, фон 2, размытый
-    фон, музыка 1, музыка 2, озвучка, фоновая музыка, видео-наложение, фото);
-  * ЗАМЕНИТЬ материал сегмента, сохранив скорость/громкость/эффекты
-    (аналог кнопки «Заменить» в CapCut);
-  * синхронизировать конец: подрезать фон/размытый фон/фоновую музыку под конец
-    озвучки (при коротком) или удлинить (при длинном — способ уточняется);
-  * переставить видео-наложение в случайную позицию в окне 40–60% длины ролика,
-    не выходя за его границы (клип не обрезается);
-  * удалить существующие субтитры перед генерацией новых.
+Через правку draft-файла делается: замена медиа с сохранением свойств,
+синхронизация конца под озвучку, перестановка наложения, удаление субтитров,
+применение позиции/масштаба субтитров. Автосубтитры и экспорт — через интерфейс
+(см. src/ui_automation).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from .document import DraftDocument
+from .editor import DraftEditor, SubtitleBaseline
+from .layout import LayoutError, TimelineLayout
 
-class DraftNotCalibratedError(NotImplementedError):
-    """Модуль ещё не откалиброван под формат проекта пользователя."""
+__all__ = [
+    "DraftDocument",
+    "DraftEditor",
+    "SubtitleBaseline",
+    "TimelineLayout",
+    "LayoutError",
+    "find_project_dir",
+    "default_drafts_dir",
+    "draft_content_path",
+]
 
 
-def find_project_dir(drafts_dir: Path, project_name: str) -> Path:
-    """Возвращает путь к папке draft проекта по его имени.
+def default_drafts_dir() -> Path:
+    r"""Стандартный каталог проектов CapCut на Windows:
+    %LOCALAPPDATA%\CapCut\User Data\Projects\com.lveditor.draft"""
+    import os
 
-    Реализация будет добавлена после получения примера проекта.
-    """
-    raise DraftNotCalibratedError(
-        "Правка проекта CapCut ожидает калибровки по примеру проекта "
-        "(папке draft со всеми .json). Пришлите её, чтобы включить этот шаг."
-    )
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        return Path(local) / "CapCut" / "User Data" / "Projects" / "com.lveditor.draft"
+    return Path.home() / "AppData" / "Local" / "CapCut" / "User Data" / "Projects" / "com.lveditor.draft"
+
+
+def find_project_dir(project_name: str, drafts_dir: Path | None = None) -> Path:
+    """Находит папку проекта по имени. Если имя не задано или не найдено —
+    берёт самый недавно изменённый проект."""
+    base = Path(drafts_dir) if drafts_dir else default_drafts_dir()
+    if not base.exists():
+        raise FileNotFoundError(f"Каталог проектов CapCut не найден: {base}")
+
+    candidates = [p for p in base.iterdir() if p.is_dir() and not p.name.startswith(".")]
+    if not candidates:
+        raise FileNotFoundError(f"В каталоге нет проектов: {base}")
+
+    if project_name:
+        exact = base / project_name
+        if exact.is_dir():
+            return exact
+        for p in candidates:
+            if p.name.lower() == project_name.lower():
+                return p
+
+    # Фолбэк — самый свежий проект (по времени изменения draft_content.json).
+    def mtime(p: Path) -> float:
+        dc = p / "draft_content.json"
+        return dc.stat().st_mtime if dc.exists() else p.stat().st_mtime
+
+    latest = max(candidates, key=mtime)
+    return latest
+
+
+def draft_content_path(project_dir: Path) -> Path:
+    """Путь к основному файлу проекта (учитывая вложенную папку Timelines)."""
+    project_dir = Path(project_dir)
+    root = project_dir / "draft_content.json"
+    if root.exists():
+        return root
+    # В новых версиях основной контент бывает во вложенной папке Timelines/<uuid>/.
+    timelines = project_dir / "Timelines"
+    if timelines.exists():
+        for sub in timelines.iterdir():
+            dc = sub / "draft_content.json"
+            if dc.exists():
+                return dc
+    return root

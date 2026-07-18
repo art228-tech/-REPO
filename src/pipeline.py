@@ -1,9 +1,11 @@
 """Оркестратор автомонтажа: один цикл = один ролик; батч = несколько роликов.
 
-Сейчас полностью работают: валидация папок, выбор/расход файлов, логирование.
-Шаги правки проекта CapCut и экспорта помечены как ожидающие калибровки
-(см. src/draft и src/ui_automation) — они не выполняются вслепую, а честно
-сообщают в лог, что ждут примера проекта и настройки на машине пользователя.
+Работают: валидация папок, выбор/расход файлов, правка проекта CapCut
+(замена медиа, синхронизация конца под озвучку, перестановка наложения,
+удаление субтитров, фиксация шаблона субтитров), сохранение проекта.
+
+Автосубтитры (ASR), выбор стиля/шрифта/шаблона кнопками и экспорт выполняются
+через интерфейс CapCut (src/ui_automation) и подключаются на машине пользователя.
 """
 
 from __future__ import annotations
@@ -12,21 +14,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from . import draft
 from .assets import AssetError, AssetManager
 from .config import AppConfig
+from .draft import DraftDocument, DraftEditor
+from .draft.layout import LayoutError
+from .draft.probe import ProbeError, probe_duration_us
 from .logging_setup import get_logger
+from .ui_automation import UiAutomationNotReadyError, generate_captions_and_export
 
 logger = get_logger()
-
-# Порядок замены изменяемых элементов на таймлайне.
-REPLACE_ORDER = [
-    "music_transition",   # музыка 1
-    "background_intro",   # фон 1
-    "background_main",    # фон 2
-    "music_overlay",      # музыка 2
-    "voiceover",          # озвучка (музыка 3) — задаёт длину
-    "overlay_video",      # видео-наложение (видео 2)
-]
 
 
 @dataclass
@@ -34,6 +31,7 @@ class CycleResult:
     index: int
     ok: bool
     picked: dict[str, str] = field(default_factory=dict)
+    edited_project: str = ""
     error: str = ""
 
 
@@ -59,7 +57,6 @@ class Pipeline:
 
         self.assets.ensure_folders()
 
-        # Проверяем заранее, чтобы не начинать и не расходовать файлы зря.
         try:
             self.assets.validate_for_cycles(cycles)
         except AssetError as e:
@@ -77,7 +74,7 @@ class Pipeline:
             if self.progress_cb:
                 self.progress_cb(i, cycles)
             if not result.ok:
-                logger.error("Цикл %d завершился с ошибкой: %s", i, result.error)
+                logger.error("Цикл %d остановлен: %s", i, result.error)
                 logger.error("Останавливаю батч и сообщаю об ошибке.")
                 break
 
@@ -86,31 +83,100 @@ class Pipeline:
         logger.info("Готово. Успешно: %d, с ошибкой: %d", ok_count, len(results) - ok_count)
         return results
 
+    # ---- один цикл ----
+
     def _run_one_cycle(self, index: int) -> CycleResult:
         try:
             picked = self._select_assets()
         except AssetError as e:
             return CycleResult(index=index, ok=False, error=str(e))
 
-        # --- Шаги, ожидающие калибровки по примеру проекта CapCut ---
-        logger.info("Правка проекта CapCut (замена медиа, синхронизация конца, "
-                    "перестановка наложения, удаление субтитров) — ожидает примера проекта.")
-        logger.info("Автосубтитры и экспорт (1080p/60fps/битрейт «Выше») — "
-                    "ожидают настройки UI-автоматизации на вашей машине.")
-
-        # Пока эти шаги не реализованы, честно помечаем цикл как незавершённый,
-        # но НЕ роняем приложение — файлы уже выбраны и залогированы.
         picked_names = {k: Path(v).name for k, v in picked.items()}
-        return CycleResult(
-            index=index,
-            ok=False,
-            picked=picked_names,
-            error="Шаги монтажа/экспорта ещё не активированы (нужен пример проекта "
-                  "и настройка UI на вашей машине).",
+
+        try:
+            durs = {k: probe_duration_us(v) for k, v in picked.items()}
+        except ProbeError as e:
+            return CycleResult(index=index, ok=False, picked=picked_names, error=str(e))
+
+        # Находим проект и правим draft-файл.
+        try:
+            project_dir = draft.find_project_dir(
+                self.config.capcut_project_name,
+                Path(self.config.capcut_drafts_dir) if self.config.capcut_drafts_dir else None,
+            )
+        except FileNotFoundError as e:
+            return CycleResult(index=index, ok=False, picked=picked_names, error=str(e))
+
+        dc_path = draft.draft_content_path(project_dir)
+        logger.info("Проект: %s", project_dir.name)
+        logger.info("Файл проекта: %s", dc_path)
+
+        try:
+            doc = DraftDocument.load(dc_path)
+            ed = DraftEditor(doc)
+        except (OSError, ValueError, LayoutError) as e:
+            return CycleResult(index=index, ok=False, picked=picked_names,
+                               error=f"Не удалось разобрать проект: {e}")
+
+        # Фиксируем шаблон субтитров один раз (пока проект в исходном виде).
+        baseline = ed.capture_subtitle_baseline()
+        self._persist_template(baseline)
+
+        # Замена всех изменяемых элементов по порядку.
+        ed.replace_transition_sound(str(picked["music_transition"]), durs["music_transition"])
+        ed.replace_background_intro(str(picked["background_intro"]), durs["background_intro"])
+        ed.replace_background_main(str(picked["background_main"]), durs["background_main"])
+        ed.replace_overlay_sounds(
+            str(picked["music_overlay_a"]), durs["music_overlay_a"],
+            str(picked["music_overlay_b"]), durs["music_overlay_b"],
+        )
+        ed.replace_voiceover(str(picked["voiceover"]), durs["voiceover"])
+        ed.replace_overlay_video(str(picked["overlay_video"]), durs["overlay_video"])
+
+        # Синхронизация конца под озвучку и перестановка наложения.
+        ed.sync_to_voiceover()
+        ed.reposition_overlay(
+            self.config.overlay.window_start_percent,
+            self.config.overlay.window_end_percent,
         )
 
+        # Удаляем старые субтитры (новые сгенерирует ASR в интерфейсе).
+        ed.delete_subtitles()
+
+        saved = doc.save(dc_path, backup=True)
+        logger.info("Проект сохранён (резервная копия .bak рядом): %s", saved)
+
+        # Дальше — только интерфейс CapCut.
+        try:
+            generate_captions_and_export()
+        except UiAutomationNotReadyError as e:
+            return CycleResult(
+                index=index, ok=False, picked=picked_names, edited_project=str(dc_path),
+                error=f"Правка проекта выполнена и сохранена. Остаётся интерфейсный шаг: {e}",
+            )
+
+        return CycleResult(index=index, ok=True, picked=picked_names, edited_project=str(dc_path))
+
     def _select_assets(self) -> dict[str, Path]:
-        picked: dict[str, Path] = {}
-        for key in REPLACE_ORDER:
-            picked[key] = self.assets.pick(key)
+        keys = [
+            "music_transition", "background_intro", "background_main",
+            "voiceover", "overlay_video",
+        ]
+        picked: dict[str, Path] = {k: self.assets.pick(k) for k in keys}
+        # «Музыка 2» используется дважды (перед наложением и перед фото) —
+        # два независимых случайных выбора из одной папки.
+        picked["music_overlay_a"] = self.assets.pick("music_overlay")
+        picked["music_overlay_b"] = self.assets.pick("music_overlay")
         return picked
+
+    def _persist_template(self, baseline) -> None:
+        subs = self.config.subtitles
+        if not subs.template_id and baseline.template_id:
+            subs.template_id = baseline.template_id
+            subs.captured_scale = baseline.scale_x
+            subs.captured_transform_y = baseline.transform_y
+            try:
+                self.config.save()
+                logger.info("Зафиксирован шаблон субтитров: %s", baseline.template_id[:8])
+            except OSError:
+                pass
