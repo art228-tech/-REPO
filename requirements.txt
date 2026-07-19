@@ -1,18 +1,20 @@
 # GUI
-PyQt6==6.7.1
+PyQt6>=6.7.1
 
 # UI-автоматизация CapCut (Windows): субтитры и экспорт
-pywinauto==0.6.8 ; sys_platform == "win32"
-pyautogui==0.9.54
-pygetwindow==0.0.9 ; sys_platform == "win32"
+pywinauto>=0.6.8 ; sys_platform == "win32"
+pyautogui>=0.9.54
+pygetwindow>=0.0.9 ; sys_platform == "win32"
 # Поиск кнопок по эталонным скриншотам (многомасштабный, устойчив к разрешению)
-opencv-python==4.10.0.84
-numpy==1.26.4
-Pillow==10.4.0
+# Версии не закрепляем жёстко — чтобы pip ставил готовые wheel'ы под вашу
+# версию Python (иначе на Python 3.13 numpy пытается собираться из исходников).
+opencv-python>=4.10
+numpy>=1.26
+Pillow>=10.4
 
 # Работа с медиа-длительностями (без перекодирования)
 # ffprobe идёт вместе с imageio-ffmpeg, отдельная установка ffmpeg не нужна
-imageio-ffmpeg==0.5.1
+imageio-ffmpeg>=0.5.1
 
-# Сборка в один .exe
-pyinstaller==6.10.0 ; sys_platform == "win32"
+# Примечание: PyInstaller ставится отдельно в build_exe.bat (нужен только для
+# сборки .exe), поэтому в общих зависимостях его нет.
