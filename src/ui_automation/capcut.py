@@ -37,10 +37,12 @@ PANEL_SCROLL_XY = (1690, 250)
 STYLE_WHITE_DX = 50
 # Смещение от метки «Имя» до поля ввода имени файла в окне экспорта.
 NAME_FIELD_DX = 260
+# Смещение от названия проекта вверх к превью (по превью и кликаем, чтобы открыть).
+PROJECT_TILE_DY = -80
 
 # role -> (имя файла, описание что заскриншотить)
 REFERENCES: dict[str, tuple[str, str]] = {
-    "project_tile": ("project_tile.png", "Плитка вашего проекта на главном экране («тестовик»)"),
+    "project_tile": ("project_tile.png", "Название проекта на главном экране («тестовик») — по нему находим плитку"),
     "menu_captions": ("menu_captions.png", "Кнопка «Субтитры» в верхнем меню редактора"),
     "captions_generate": ("captions_generate.png", "Зелёная кнопка «Создать» (запуск распознавания)"),
     "captions_progress": ("captions_progress.png", "Окно «Генерация субтитров…» (для ожидания конца)"),
@@ -91,19 +93,33 @@ def missing_references(references_dir: Path, defaults_dir: Path | None = None) -
     return missing
 
 
+# Версия набора встроенных эталонов. При изменении — обновления перезапишут
+# устаревшие копии в папке пользователя (иначе старые эталоны залипают).
+REFS_VERSION = "2"
+
+
 def ensure_references(references_dir: Path, defaults_dir: Path) -> None:
-    """Копирует встроенные эталоны в папку пользователя (если их там ещё нет),
-    чтобы всё работало из коробки, но пользователь мог заменить любой скриншот."""
+    """Копирует встроенные эталоны в папку пользователя. При смене версии набора
+    перезаписывает их (чтобы применялись исправления), иначе — копирует только
+    недостающие, сохраняя возможные правки пользователя."""
     references_dir.mkdir(parents=True, exist_ok=True)
     if not defaults_dir.exists():
         return
+    marker = references_dir / ".refs_version"
+    current = marker.read_text(encoding="utf-8").strip() if marker.exists() else ""
+    overwrite = current != REFS_VERSION
     for src in defaults_dir.glob("*.png"):
         dst = references_dir / src.name
-        if not dst.exists():
+        if overwrite or not dst.exists():
             try:
                 shutil.copy2(src, dst)
             except OSError as e:  # noqa: BLE001
                 logger.warning("Не удалось скопировать эталон %s: %s", src.name, e)
+    if overwrite:
+        try:
+            marker.write_text(REFS_VERSION, encoding="utf-8")
+        except OSError:
+            pass
 
 
 def find_capcut_exe(explicit: str = "") -> Path:
@@ -141,12 +157,27 @@ class CapCutController:
             raise UiError(f"Не удалось запустить CapCut: {e}") from e
         time.sleep(7.0)
 
+    def minimize_own_window(self) -> None:
+        """Сворачивает окно самого софта, чтобы оно не перекрывало CapCut."""
+        try:
+            import pygetwindow as gw  # type: ignore
+        except Exception:  # noqa: BLE001
+            return
+        for t in list(gw.getAllTitles()):
+            if "автомонтаж" in t.lower():
+                try:
+                    gw.getWindowsWithTitle(t)[0].minimize()
+                except Exception:  # noqa: BLE001
+                    pass
+
     def focus_window(self) -> bool:
         try:
             import pygetwindow as gw  # type: ignore
         except Exception:  # noqa: BLE001
             return False
-        titles = [t for t in gw.getAllTitles() if "capcut" in t.lower() or "сарсut" in t.lower()]
+        titles = [t for t in gw.getAllTitles()
+                  if ("capcut" in t.lower() or "сарсut" in t.lower())
+                  and "автомонтаж" not in t.lower()]
         if not titles:
             return False
         try:
@@ -168,10 +199,15 @@ class CapCutController:
 
     def open_project(self, project_name: str = "") -> None:
         logger.info("Шаг: открываю проект в CapCut…")
+        self.minimize_own_window()
         self.launch()
         self.focus_window()
-        self.s.double_click("project_tile", timeout=60)
-        time.sleep(4.0)
+        time.sleep(1.0)
+        # Ищем проект по названию, кликаем дважды по превью над названием.
+        x, y = self.s.locate("project_tile", timeout=60)
+        self.s.pg.doubleClick(x, y + PROJECT_TILE_DY)
+        logger.info("Открываю проект двойным кликом по превью (%d, %d).", x, y + PROJECT_TILE_DY)
+        time.sleep(5.0)
         logger.info("Проект открыт.")
 
     def generate_captions(self) -> None:
