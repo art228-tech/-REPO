@@ -39,9 +39,14 @@ STYLE_WHITE_DX = 50
 NAME_FIELD_DX = 260
 # Смещение от названия проекта вверх к превью (по превью и кликаем, чтобы открыть).
 PROJECT_TILE_DY = -80
+# Координаты центра превью первой плитки проекта на главном экране (1920x1080,
+# развёрнутое окно CapCut). Запасной способ открыть проект, если поиск по
+# названию не сработал.
+FIRST_TILE_XY = (365, 725)
 
 # role -> (имя файла, описание что заскриншотить)
 REFERENCES: dict[str, tuple[str, str]] = {
+    "home_create": ("home_create.png", "Кнопка «Создать проект» на главном экране — подтверждение главного экрана"),
     "project_tile": ("project_tile.png", "Название проекта на главном экране («тестовик») — по нему находим плитку"),
     "menu_captions": ("menu_captions.png", "Кнопка «Субтитры» в верхнем меню редактора"),
     "captions_generate": ("captions_generate.png", "Зелёная кнопка «Создать» (запуск распознавания)"),
@@ -95,7 +100,7 @@ def missing_references(references_dir: Path, defaults_dir: Path | None = None) -
 
 # Версия набора встроенных эталонов. При изменении — обновления перезапишут
 # устаревшие копии в папке пользователя (иначе старые эталоны залипают).
-REFS_VERSION = "2"
+REFS_VERSION = "3"
 
 
 def ensure_references(references_dir: Path, defaults_dir: Path) -> None:
@@ -202,11 +207,23 @@ class CapCutController:
         self.minimize_own_window()
         self.launch()
         self.focus_window()
-        time.sleep(1.0)
-        # Ищем проект по названию, кликаем дважды по превью над названием.
-        x, y = self.s.locate("project_tile", timeout=60)
-        self.s.pg.doubleClick(x, y + PROJECT_TILE_DY)
-        logger.info("Открываю проект двойным кликом по превью (%d, %d).", x, y + PROJECT_TILE_DY)
+        time.sleep(1.5)
+
+        # Подтверждаем, что видим главный экран (кнопка «Создать проект»).
+        if self.s.exists("home_create", timeout=40):
+            logger.info("Главный экран CapCut открыт.")
+        else:
+            logger.warning("Не вижу кнопку «Создать проект» — возможно, другой экран.")
+
+        # Основной способ: найти проект по названию и кликнуть по превью над ним.
+        try:
+            x, y = self.s.locate("project_tile", timeout=10, confidence=0.75)
+            self.s.pg.doubleClick(x, y + PROJECT_TILE_DY)
+            logger.info("Открываю проект по названию: двойной клик (%d, %d).", x, y + PROJECT_TILE_DY)
+        except UiError:
+            fx, fy = FIRST_TILE_XY
+            logger.warning("Название не найдено — открываю первую плитку по координатам (%d, %d).", fx, fy)
+            self.s.pg.doubleClick(fx, fy)
         time.sleep(5.0)
         logger.info("Проект открыт.")
 
