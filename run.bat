@@ -1,17 +1,21 @@
 @echo off
 rem ============================================================
-rem  CapCut Automontazh - launch by double click (Windows)
-rem  First run installs dependencies, next runs are fast.
-rem  IMPORTANT: EXTRACT the ZIP first, run this from a real
-rem  folder in Explorer - NOT from inside the archive (WinRAR).
+rem  CapCut Automontazh - launch (Windows), with logging.
+rem  Everything is written to run_log.txt next to this file,
+rem  so even if the window closes you can send me that log.
+rem  IMPORTANT: EXTRACT the ZIP first, run from a real folder
+rem  in Explorer - NOT from inside the archive (WinRAR).
 rem ============================================================
 setlocal
 chcp 65001 >nul
 cd /d "%~dp0"
+set "LOG=%~dp0run_log.txt"
+echo ==== run.bat start %date% %time% ==== > "%LOG%"
 
 echo(
 echo ==================================================
 echo   CapCut Automontazh
+echo   (log is saved to run_log.txt)
 echo ==================================================
 echo(
 
@@ -21,37 +25,53 @@ where py >nul 2>nul && set "PY=py"
 if not defined PY ( where python >nul 2>nul && set "PY=python" )
 
 if not defined PY (
-    echo [ERROR] Python not found.
+    echo [ERROR] Python not found. >> "%LOG%"
+    echo [ERROR] Python NOT found.
     echo Install Python 3.11+ from https://www.python.org/downloads/
-    echo During install CHECK the box "Add Python to PATH".
+    echo During install CHECK the box "Add Python to PATH", then run again.
     echo(
+    echo === Send me the file run_log.txt if unclear ===
     pause
     exit /b 1
 )
+echo Using Python: %PY% >> "%LOG%"
+%PY% --version >> "%LOG%" 2>&1
 
 if not exist ".venv" (
     echo Creating virtual environment ^(one time^)...
-    %PY% -m venv .venv
+    %PY% -m venv .venv >> "%LOG%" 2>&1
+    if errorlevel 1 (
+        echo [ERROR] Could not create venv. See run_log.txt
+        type "%LOG%"
+        pause
+        exit /b 1
+    )
 )
 
 call ".venv\Scripts\activate.bat"
 
-echo Installing / checking dependencies ^(may take a few minutes on first run^)...
-echo(
-python -m pip install --disable-pip-version-check -r requirements.txt
+echo Installing / checking dependencies ^(first run takes a few minutes^)...
+python -m pip install --disable-pip-version-check -r requirements.txt >> "%LOG%" 2>&1
 if errorlevel 1 (
+    echo [ERROR] Failed to install dependencies. Sending log below:
+    type "%LOG%"
     echo(
-    echo [ERROR] Failed to install dependencies. Copy the text above.
+    echo === Please send the file run_log.txt ===
     pause
     exit /b 1
 )
 
-echo(
 echo Starting the app...
-python main.py
+echo ---- launching main.py ---- >> "%LOG%"
+python main.py >> "%LOG%" 2>&1
 if errorlevel 1 (
+    echo [ERROR] App exited with an error. Log below:
+    type "%LOG%"
     echo(
-    echo [ERROR] App exited with an error. Copy the text above.
+    echo === Please send the file run_log.txt ===
     pause
+    exit /b 1
 )
+
+echo App closed normally.
 endlocal
