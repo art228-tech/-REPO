@@ -200,7 +200,59 @@ class Screen:
         raise UiError(f"«{ref}» так и не исчез за {timeout:.0f}с (операция не завершилась?).")
 
     def type_text(self, text: str, interval: float = 0.02) -> None:
-        self.pg.typewrite(text, interval=interval)
+        """Ввод текста. Для кириллицы (и любого не-ASCII) pyautogui.typewrite
+        не работает — печатает пустоту/мусор. Поэтому такой текст вводим через
+        буфер обмена (надёжно для русского «блок» и т.п.)."""
+        if text.isascii():
+            self.pg.typewrite(text, interval=interval)
+            return
+        self.paste_text(text)
+
+    def paste_text(self, text: str) -> None:
+        """Кладёт текст в буфер обмена и вставляет его (Ctrl+V). Единственный
+        надёжный способ ввести кириллицу в CapCut через автоматизацию."""
+        if self._set_clipboard(text):
+            self.pg.hotkey("ctrl", "v")
+            logger.info("Вставлен текст из буфера: %r", text)
+            time.sleep(0.2)
+            return
+        # Крайний случай: пробуем посимвольно (сработает только для ASCII).
+        logger.warning("Буфер обмена недоступен — печатаю посимвольно (кириллица может не ввестись).")
+        self.pg.typewrite(text, interval=0.03)
+
+    @staticmethod
+    def _set_clipboard(text: str) -> bool:
+        try:
+            import pyperclip  # type: ignore
+
+            pyperclip.copy(text)
+            return True
+        except Exception:  # noqa: BLE001
+            pass
+        # Fallback: буфер обмена Windows через ctypes (без внешних пакетов).
+        try:
+            import ctypes
+
+            CF_UNICODETEXT = 13
+            GMEM_MOVEABLE = 0x0002
+            user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            if not user32.OpenClipboard(0):
+                return False
+            try:
+                user32.EmptyClipboard()
+                buf = text + "\x00"
+                size = len(buf) * 2
+                h = kernel32.GlobalAlloc(GMEM_MOVEABLE, size)
+                lock = kernel32.GlobalLock(h)
+                ctypes.memmove(lock, ctypes.create_unicode_buffer(buf), size)
+                kernel32.GlobalUnlock(h)
+                user32.SetClipboardData(CF_UNICODETEXT, h)
+            finally:
+                user32.CloseClipboard()
+            return True
+        except Exception:  # noqa: BLE001
+            return False
 
     def hotkey(self, *keys: str) -> None:
         self.pg.hotkey(*keys)
