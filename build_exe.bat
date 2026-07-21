@@ -24,12 +24,17 @@ call ".venv\Scripts\activate.bat"
 echo Installing dependencies and PyInstaller...
 python -m pip install --disable-pip-version-check -r requirements.txt
 python -m pip install --disable-pip-version-check pyinstaller
+rem OCR is optional (search buttons by text). Soft install - do not fail build.
+python -m pip install --disable-pip-version-check -r requirements-ocr.txt
+set "OCR_COLLECT="
+python -c "import rapidocr" 2>nul && set "OCR_COLLECT=--collect-all rapidocr"
 
 echo(
 echo Building .exe ^(may take several minutes^)...
 pyinstaller --noconfirm --onefile --windowed ^
     --name "CapCut Automontazh" ^
     --collect-all imageio_ffmpeg ^
+    %OCR_COLLECT% ^
     --add-data "src/ui_automation/reference_defaults;reference_defaults" ^
     main.py
 

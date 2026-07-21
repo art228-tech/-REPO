@@ -61,6 +61,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem OCR (search buttons by text) is OPTIONAL: install softly, DO NOT abort the
+rem app if it fails (e.g. on the newest Python). Without OCR the app still runs
+rem and falls back to image templates.
+echo Installing OCR ^(optional, for reliable button search^)...
+echo ---- optional OCR install ---- >> "%LOG%"
+python -m pip install --disable-pip-version-check -r requirements-ocr.txt >> "%LOG%" 2>&1
+if errorlevel 1 (
+    echo [WARN] OCR not installed - app will use image templates. >> "%LOG%"
+    echo [WARN] OCR not installed - continuing without it.
+)
+
 echo Starting the app...
 echo ---- launching main.py ---- >> "%LOG%"
 python main.py >> "%LOG%" 2>&1
