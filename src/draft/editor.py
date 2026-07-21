@@ -47,13 +47,16 @@ class SubtitleBaseline:
 
     template_id: str = ""
     template_resource_id: str = ""
+    template_effect_id: str = ""
     font_name: str = ""
     font_id: str = ""
+    font_resource_id: str = ""
     style_name: str = ""
     scale_x: float = 1.0
     scale_y: float = 1.0
     transform_y: float = 0.0
     transform_x: float = 0.0
+    found: bool = False
 
 
 class DraftEditor:
@@ -245,6 +248,7 @@ class DraftEditor:
         segs = self.layout.text_segments
         if not segs:
             return base
+        base.found = True
         seg = segs[0]
         clip = seg.get("clip", {}) or {}
         scale = clip.get("scale", {}) or {}
@@ -254,23 +258,68 @@ class DraftEditor:
         base.transform_x = float(transform.get("x", 0.0))
         base.transform_y = float(transform.get("y", 0.0))
 
-        # Шаблон субтитров.
-        for mid in seg.get("extra_material_refs", []) + [seg.get("material_id", "")]:
+        # Шаблон субтитров (в проекте пользователя это material_id сегмента).
+        for mid in [seg.get("material_id", "")] + seg.get("extra_material_refs", []):
             found = self.doc.material(mid)
             if found and found[0] == "text_templates":
                 base.template_id = found[1].get("id", "")
                 base.template_resource_id = found[1].get("resource_id", "")
-        # Шрифт/стиль из текстового материала.
-        for cat in ("texts",):
-            for o in self.doc.materials.get(cat, []):
-                if o.get("font_name"):
-                    base.font_name = o.get("font_name", "")
-                    base.font_id = o.get("font_id", "")
-                    base.style_name = o.get("style_name", "")
-                    break
-        logger.info("Снят шаблон субтитров: template=%s font=%r scale=%.2f y=%.3f",
-                    base.template_id[:8], base.font_name, base.scale_x, base.transform_y)
+                base.template_effect_id = found[1].get("effect_id", "")
+        # Шрифт/стиль из текстового материала (font_name может быть пустым —
+        # тогда шрифт задаётся через font_resource_id / font_path).
+        for o in self.doc.materials.get("texts", []):
+            rid = o.get("font_resource_id") or o.get("font_id") or o.get("font_name")
+            if rid:
+                base.font_name = o.get("font_name", "")
+                base.font_id = o.get("font_id", "")
+                base.font_resource_id = o.get("font_resource_id", "")
+                base.style_name = o.get("style_name", "")
+                break
+        logger.info(
+            "Снят шаблон субтитров: template=%s font_res=%s scale=%.2f y=%.3f",
+            (base.template_id or "—")[:8], base.font_resource_id or "—",
+            base.scale_x, base.transform_y,
+        )
         return base
+
+    def apply_subtitle_layout(self, vertical_offset_percent: float,
+                              scale_percent: float) -> int:
+        """Применяет позицию/масштаб ко ВСЕМ сегментам субтитров, ОТНОСИТЕЛЬНО
+        их текущих значений (то есть относительно того, что задал шаблон/ASR).
+
+        vertical_offset_percent: + ниже, - выше; в процентах от высоты кадра
+            (1% высоты кадра = 0.02 в нормированных координатах CapCut, где полная
+            высота кадра = 2.0). 0 = не двигать.
+        scale_percent: множитель масштаба в процентах. 100 = не менять.
+
+        Возвращает число обработанных сегментов. Работает независимо от шаблона —
+        позиция и масштаб живут в clip самого сегмента, поэтому это надёжно.
+        """
+        segs = self.layout.text_segments
+        if not segs:
+            logger.warning("Нет сегментов субтитров для позиции/масштаба.")
+            return 0
+
+        scale_ratio = float(scale_percent) / 100.0
+        # + процент = ниже = более отрицательный y; полная высота кадра = 2.0.
+        dy = -(float(vertical_offset_percent) / 100.0) * 2.0
+
+        changed = 0
+        for seg in segs:
+            clip = seg.setdefault("clip", {})
+            if abs(scale_ratio - 1.0) > 1e-6:
+                sc = clip.setdefault("scale", {"x": 1.0, "y": 1.0})
+                sc["x"] = float(sc.get("x", 1.0)) * scale_ratio
+                sc["y"] = float(sc.get("y", 1.0)) * scale_ratio
+            if abs(dy) > 1e-9:
+                tr = clip.setdefault("transform", {"x": 0.0, "y": 0.0})
+                tr["y"] = float(tr.get("y", 0.0)) + dy
+            changed += 1
+        logger.info(
+            "Позиция/масштаб субтитров применены к %d сегм.: масштаб %.0f%%, сдвиг %+.1f%% (dy=%+.3f).",
+            changed, scale_percent, vertical_offset_percent, dy,
+        )
+        return changed
 
     def delete_subtitles(self) -> int:
         """Удаляет все субтитры (сегменты текст-дорожки и связанные материалы).

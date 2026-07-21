@@ -175,6 +175,35 @@ class CapCutController:
                 except Exception:  # noqa: BLE001
                     pass
 
+    def close(self) -> None:
+        """Полностью закрывает CapCut и ждёт выхода процесса, чтобы draft-файл
+        был освобождён и его можно было безопасно править извне."""
+        logger.info("Шаг: закрываю CapCut (для правки субтитров в файле)…")
+        exe_name = "CapCut.exe"
+        try:
+            exe_name = find_capcut_exe(self.exe_path).name
+        except UiError:
+            pass
+        killed = False
+        try:
+            subprocess.run(["taskkill", "/IM", exe_name, "/F", "/T"],
+                           capture_output=True, timeout=30)
+            killed = True
+        except Exception as e:  # noqa: BLE001
+            logger.warning("taskkill не сработал (%s), пробую закрыть окно.", e)
+        if not killed:
+            try:
+                import pygetwindow as gw  # type: ignore
+
+                for t in list(gw.getAllTitles()):
+                    if ("capcut" in t.lower() or "сарсut" in t.lower()) and "автомонтаж" not in t.lower():
+                        gw.getWindowsWithTitle(t)[0].close()
+            except Exception:  # noqa: BLE001
+                pass
+        # Ждём, пока процесс действительно завершится и отпустит файл.
+        time.sleep(5.0)
+        logger.info("CapCut закрыт.")
+
     def focus_window(self) -> bool:
         try:
             import pygetwindow as gw  # type: ignore
@@ -229,6 +258,7 @@ class CapCutController:
 
     def generate_captions(self) -> None:
         logger.info("Шаг: автосубтитры (распознавание речи)…")
+        self.s.capture("before_captions")
         self.s.click("menu_captions", timeout=30)
         time.sleep(1.0)
         # Язык «Русский» и вкладка «Автоматические субтитры» — по умолчанию.
@@ -240,6 +270,7 @@ class CapCutController:
             logger.info("Окно прогресса не задано — жду фиксированную паузу.")
             time.sleep(25)
         time.sleep(2.0)
+        self.s.capture("after_captions")
         logger.info("Субтитры сгенерированы.")
 
     def apply_caption_style(self, font_rng: random.Random | None = None) -> None:
@@ -283,6 +314,7 @@ class CapCutController:
         self.s.click("template_favorite", timeout=15)
         logger.info("Применён шаблон из «Избранного».")
         time.sleep(1.0)
+        self.s.capture("after_style")
 
     def save_project(self) -> None:
         self.s.hotkey("ctrl", "s")
@@ -293,6 +325,7 @@ class CapCutController:
         logger.info("Шаг: экспорт (%s / %dfps / битрейт %s)…", resolution, fps, bitrate)
         self.s.click("export_button", timeout=30)
         time.sleep(2.5)
+        self.s.capture("export_dialog")
         # Имя файла: кликаем в поле правее метки «Имя».
         self.s.click("export_name_label", timeout=15, dx=NAME_FIELD_DX)
         self.s.hotkey("ctrl", "a")

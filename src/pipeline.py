@@ -151,8 +151,9 @@ class Pipeline:
 
         # Дальше — только интерфейс CapCut (автосубтитры + экспорт).
         output_name = f"{self.config.output_counter:03d}_{datetime.now():%Y-%m-%d}"
+        layout_cb = self._make_layout_callback(dc_path)
         try:
-            run_captions_and_export(self.config, output_name)
+            run_captions_and_export(self.config, output_name, layout_callback=layout_cb)
         except UiAutomationNotReadyError as e:
             return CycleResult(
                 index=index, ok=False, picked=picked_names, edited_project=str(dc_path),
@@ -184,6 +185,33 @@ class Pipeline:
         picked["music_overlay_a"] = self.assets.pick("music_overlay")
         picked["music_overlay_b"] = self.assets.pick("music_overlay")
         return picked
+
+    def _make_layout_callback(self, dc_path):
+        """Возвращает функцию, которая (пока CapCut закрыт) перечитывает проект
+        с уже сгенерированными субтитрами и применяет к ним позицию/масштаб
+        правкой draft-файла. Если правка через JSON выключена или проценты
+        нулевые — возвращает None (тогда шаг пропускается)."""
+        subs = self.config.subtitles
+        if not subs.apply_layout_via_json:
+            return None
+        if abs(subs.vertical_offset_percent) < 1e-6 and abs(subs.scale_percent - 100.0) < 1e-6:
+            logger.info("Позиция/масштаб субтитров = как в проекте — правка JSON не нужна.")
+            return None
+
+        def _apply() -> None:
+            logger.info("Правлю позицию/масштаб субтитров в файле проекта…")
+            doc2 = DraftDocument.load(dc_path)
+            ed2 = DraftEditor(doc2)
+            n = ed2.apply_subtitle_layout(
+                subs.vertical_offset_percent, subs.scale_percent,
+            )
+            if n:
+                doc2.save(dc_path, backup=False)
+                logger.info("Позиция/масштаб субтитров сохранены (%d сегм.).", n)
+            else:
+                logger.warning("Субтитры не найдены при правке позиции/масштаба.")
+
+        return _apply
 
     def _persist_template(self, baseline) -> None:
         subs = self.config.subtitles
