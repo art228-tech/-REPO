@@ -112,6 +112,16 @@ class Pipeline:
         logger.info("Проект: %s", project_dir.name)
         logger.info("Файл проекта: %s", dc_path)
 
+        # Если включена автоматизация — CapCut мог остаться открытым и затрёт
+        # нашу правку файла. Закрываем его ПЕРЕД правкой draft.
+        if getattr(self.config.ui, "enabled", False):
+            try:
+                from .ui_automation.capcut import close_capcut_process
+                close_capcut_process(self.config.ui.capcut_exe)
+                logger.info("CapCut закрыт перед правкой проекта (чтобы не затёр изменения).")
+            except Exception as e:  # noqa: BLE001
+                logger.info("Не удалось закрыть CapCut перед правкой (возможно, не запущен): %s", e)
+
         try:
             doc = DraftDocument.load(dc_path)
             ed = DraftEditor(doc)

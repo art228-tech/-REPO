@@ -44,6 +44,15 @@ PROJECT_TILE_DY = -80
 # названию не сработал.
 FIRST_TILE_XY = (365, 725)
 
+# Координаты кнопок как ДОЛИ от размера экрана (последний запасной способ, если
+# не сработали ни OCR по тексту, ни поиск по картинке). Сняты по интерфейсу
+# CapCut 9.0 (русский), развёрнутое окно. Доли не зависят от разрешения.
+COORD_FRAC = {
+    "menu_captions": (0.258, 0.065),   # «Субтитры» в верхнем меню
+    "export_button": (0.955, 0.020),   # «Экспорт» справа вверху
+    "captions_generate": (0.86, 0.60), # зелёная «Создать» в панели субтитров
+}
+
 # role -> (имя файла, описание что заскриншотить)
 REFERENCES: dict[str, tuple[str, str]] = {
     "home_create": ("home_create.png", "Кнопка «Создать проект» на главном экране — подтверждение главного экрана"),
@@ -125,6 +134,22 @@ def ensure_references(references_dir: Path, defaults_dir: Path) -> None:
             marker.write_text(REFS_VERSION, encoding="utf-8")
         except OSError:
             pass
+
+
+def close_capcut_process(exe_path: str = "") -> None:
+    """Закрывает CapCut (taskkill), чтобы правка draft-файла не была затёрта
+    уже открытым редактором. Безопасно вызывать, даже если CapCut не запущен."""
+    exe_name = "CapCut.exe"
+    try:
+        exe_name = find_capcut_exe(exe_path).name
+    except UiError:
+        pass
+    try:
+        subprocess.run(["taskkill", "/IM", exe_name, "/F", "/T"],
+                       capture_output=True, timeout=30)
+    except Exception:  # noqa: BLE001
+        pass
+    time.sleep(3.0)
 
 
 def find_capcut_exe(explicit: str = "") -> Path:
@@ -314,21 +339,37 @@ class CapCutController:
         logger.info("Шаг: автосубтитры (распознавание речи)…")
         self.s.capture("before_captions")
 
-        # 1) Кнопка «Субтитры» в верхнем меню (по тексту, с фолбэком на картинку).
-        if not self._click_text_or_ref(["Субтитры", "Субтитр"], "menu_captions",
-                                       region=self.region_top_menu(), timeout=30):
-            raise UiError("Не найдена кнопка «Субтитры» (ни текстом, ни по картинке).")
-        time.sleep(1.5)
+        # 1) Кнопка «Субтитры» в верхнем меню. Несколько способов + проверка,
+        #    что открылась панель субтитров (виден язык/«Создать»/«Автоматические»).
+        def captions_panel_open():
+            return self.s.text_exists(
+                ["Создать", "Автоматические субтитры", "Язык", "Русский",
+                 "Распознавание"], timeout=4, min_score=0.6)
 
-        # 2) Иногда есть под-пункт «Автоматические субтитры» — кликаем, если виден.
-        if self.s.text_exists(["Автоматические субтитры", "Авто субтитры"], timeout=3):
+        if not self._click_button("menu_captions", texts=["Субтитры", "Субтитр"],
+                                  ref="menu_captions", region=self.region_top_menu(),
+                                  timeout=30, verify=captions_panel_open,
+                                  verify_timeout=8):
+            raise UiError("Не удалось открыть «Субтитры» ни одним способом "
+                          "(OCR/картинка/координаты). См. скриншоты в logs/screenshots.")
+        time.sleep(1.2)
+
+        # 2) Иногда нужно выбрать под-пункт «Автоматические субтитры».
+        if self.s.ocr_available() and self.s.text_exists(
+                ["Автоматические субтитры", "Авто субтитры"], timeout=3):
             self.s.click_text(["Автоматические субтитры", "Авто субтитры"], timeout=5)
             time.sleep(1.0)
 
         # 3) Зелёная «Создать» (запуск распознавания). Язык «Русский» по умолчанию.
-        if not self._click_text_or_ref(["Создать", "Начать"], "captions_generate",
-                                       timeout=20):
-            raise UiError("Не найдена кнопка «Создать» для запуска субтитров.")
+        def captions_started():
+            return (self.s.text_exists(["Генерация", "Распознавание", "%", "Отмена"],
+                                       timeout=4, min_score=0.6)
+                    or not self.s.text_exists(["Создать"], timeout=2, min_score=0.7))
+
+        if not self._click_button("captions_generate", texts=["Создать", "Начать"],
+                                  ref="captions_generate", timeout=20,
+                                  verify=captions_started, verify_timeout=6):
+            raise UiError("Не удалось нажать «Создать» для запуска субтитров.")
 
         # 4) Ждём завершения распознавания.
         self.s.capture("captions_running")
@@ -346,21 +387,89 @@ class CapCutController:
 
     def _click_text_or_ref(self, texts, ref: str, region=None,
                            timeout: float = 20.0, min_score: float = 0.68) -> bool:
-        """Пробует кликнуть по тексту (OCR); если не вышло — по картинке-эталону.
-        Возвращает True при успехе."""
-        if self.s.ocr_available():
+        """Совместимость: обёртка над мультистратегийным кликом."""
+        return self._click_button(ref, texts=texts, ref=ref, region=region,
+                                   timeout=timeout, min_score=min_score)
+
+    def _click_button(self, name: str, texts=None, ref: str | None = None,
+                      region=None, timeout: float = 20.0, min_score: float = 0.68,
+                      coord_key: str | None = None, verify=None,
+                      verify_timeout: float = 6.0, double: bool = False) -> bool:
+        """Пробует НЕСКОЛЬКО способов нажать кнопку и берёт первый рабочий:
+          1) по тексту (OCR);
+          2) по картинке-эталону;
+          3) по координатам (доли экрана).
+        Если задан `verify` — после клика проверяет, что нужный результат
+        появился (например, открылась панель). Если результата нет — пробует
+        следующий способ. Так один сбой не останавливает работу.
+
+        Возвращает True, если клик подтверждён (или verify не задан, но способ
+        отработал)."""
+        strategies: list[tuple[str, callable]] = []
+        if texts and self.s.ocr_available():
+            strategies.append(("текст(OCR)",
+                               lambda: self._do_click_text(texts, region, min_score, timeout, double)))
+        if ref and self.s.has_ref(ref):
+            strategies.append(("картинка",
+                               lambda: self._do_click_ref(ref, min(timeout, 15), double)))
+        ck = coord_key or (name if name in COORD_FRAC else None)
+        if ck and ck in COORD_FRAC:
+            strategies.append(("координаты", lambda: self._do_click_frac(COORD_FRAC[ck], double)))
+
+        if not strategies:
+            logger.warning("Кнопка «%s»: нет ни одного способа нажать (нет OCR/эталона/координат).", name)
+            return False
+
+        # Без OCR проверить результат по тексту нельзя — тогда считаем клик
+        # выполненным (иначе рабочий способ будет ошибочно отброшен).
+        use_verify = verify if self.s.ocr_available() else None
+
+        for label, action in strategies:
             try:
-                self.s.click_text(texts, region=region, timeout=timeout, min_score=min_score)
-                return True
+                clicked = action()
             except UiError:
-                logger.info("Текст %s не найден — пробую картинку-эталон %s.", texts[0], ref)
-        if self.s.has_ref(ref):
-            try:
-                self.s.click(ref, timeout=min(timeout, 15))
+                clicked = False
+            if not clicked:
+                logger.info("Кнопка «%s»: способ [%s] не нашёл цель.", name, label)
+                continue
+            if use_verify is None:
+                logger.info("Кнопка «%s»: нажата способом [%s].", name, label)
                 return True
-            except UiError:
-                return False
+            if self._verify(use_verify, verify_timeout):
+                logger.info("Кнопка «%s»: сработал способ [%s] (результат подтверждён).", name, label)
+                return True
+            logger.info("Кнопка «%s»: способ [%s] не дал результата — пробую следующий.", name, label)
+        logger.warning("Кнопка «%s»: ни один способ не сработал.", name)
         return False
+
+    def _verify(self, verify, timeout: float) -> bool:
+        try:
+            return bool(verify())
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _do_click_text(self, texts, region, min_score, timeout, double) -> bool:
+        try:
+            x, y = self.s.find_text(texts, region=region, min_score=min_score, timeout=timeout)
+        except UiError:
+            return False
+        self.s.pg.click(x, y, clicks=2 if double else 1)
+        return True
+
+    def _do_click_ref(self, ref, timeout, double) -> bool:
+        try:
+            x, y = self.s.locate(ref, timeout=timeout, confidence=0.7)
+        except UiError:
+            return False
+        self.s.pg.click(x, y, clicks=2 if double else 1)
+        return True
+
+    def _do_click_frac(self, frac, double) -> bool:
+        w, h = self._screen_size()
+        x, y = int(w * frac[0]), int(h * frac[1])
+        logger.info("Клик по координатам-долям %.3f×%.3f → (%d, %d).", frac[0], frac[1], x, y)
+        self.s.pg.click(x, y, clicks=2 if double else 1)
+        return True
 
     def apply_caption_style(self, font_rng: random.Random | None = None) -> None:
         logger.info("Шаг: шрифт → стиль → шаблон…")
@@ -469,11 +578,19 @@ class CapCutController:
 
     def export(self, filename: str, resolution: str, fps: int, bitrate: str) -> None:
         logger.info("Шаг: экспорт (%s / %dfps / битрейт %s)…", resolution, fps, bitrate)
-        # Кнопка «Экспорт» справа вверху (текст — надёжно).
-        if not self._click_text_or_ref(["Экспорт", "Export"], "export_button",
-                                       region=self.region_top_right(), timeout=30):
-            raise UiError("Не найдена кнопка «Экспорт».")
-        time.sleep(2.8)
+        # Кнопка «Экспорт» справа вверху. Несколько способов + проверка, что
+        # открылось окно экспорта (виден «Имя»/«Разрешение»/«Частота кадров»).
+        def export_dialog_open():
+            return self.s.text_exists(
+                ["Имя", "Название", "Разрешение", "Частота кадров", "Экспортировать в"],
+                timeout=4, min_score=0.6)
+
+        if not self._click_button("export_button", texts=["Экспорт", "Export"],
+                                  ref="export_button", region=self.region_top_right(),
+                                  timeout=30, coord_key="export_button",
+                                  verify=export_dialog_open, verify_timeout=8):
+            raise UiError("Не удалось открыть окно экспорта ни одним способом.")
+        time.sleep(2.0)
         self.s.capture("export_dialog")
 
         # Имя файла: кликаем в поле правее метки «Имя»/«Название».
