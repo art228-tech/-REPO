@@ -66,6 +66,7 @@ def run_captions_and_export(
         confidence=config.ui.confidence,
         default_timeout=config.ui.default_timeout,
         defaults_dir=defaults,
+        use_ocr=getattr(config.ui, "use_ocr", True),
     )
     ctrl = CapCutController(screen, config.ui.capcut_exe)
     ctrl.open_project(config.capcut_project_name)

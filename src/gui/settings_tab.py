@@ -80,11 +80,18 @@ class SettingsTab(QWidget):
             "Включайте только после того, как положите скриншоты кнопок CapCut "
             "в папку «Интерфейс (скриншоты кнопок)»."
         )
+        self.ui_use_ocr = QCheckBox("Искать кнопки по тексту (OCR) — надёжнее")
+        self.ui_use_ocr.setChecked(getattr(config.ui, "use_ocr", True))
+        self.ui_use_ocr.setToolTip(
+            "Находит кнопки CapCut по их подписи («Субтитры», «Экспорт» и т.д.). "
+            "Устойчиво к разрешению и теме. Картинки-эталоны — запасной вариант."
+        )
         self.capcut_exe = QLineEdit(config.ui.capcut_exe)
         self.capcut_exe.setPlaceholderText("Пусто = найти CapCut.exe автоматически")
         self.btn_open_refs = QPushButton("Открыть папку со скриншотами кнопок")
         self.btn_open_refs.clicked.connect(self._open_refs)
         ui_form.addRow(self.ui_enabled)
+        ui_form.addRow(self.ui_use_ocr)
         ui_form.addRow("CapCut.exe:", self.capcut_exe)
         ui_form.addRow(self.btn_open_refs)
 
@@ -127,6 +134,7 @@ class SettingsTab(QWidget):
         self.config.subtitles.vertical_offset_percent = self.sub_offset.value()
         self.config.subtitles.scale_percent = self.sub_scale.value()
         self.config.ui.enabled = self.ui_enabled.isChecked()
+        self.config.ui.use_ocr = self.ui_use_ocr.isChecked()
         self.config.ui.capcut_exe = self.capcut_exe.text().strip()
         try:
             self.config.save()

@@ -229,7 +229,33 @@ class CapCutController:
             logger.warning("Не удалось активировать окно CapCut: %s", e)
             return False
 
+    # ---- области экрана (доли от размера экрана, разрешение-независимо) ----
+
+    def _screen_size(self) -> tuple[int, int]:
+        try:
+            sz = self.s.pg.size()
+            return int(sz.width), int(sz.height)
+        except Exception:  # noqa: BLE001
+            return 1920, 1080
+
+    def region_top_menu(self):
+        w, h = self._screen_size()
+        return (0, 0, w, int(h * 0.09))
+
+    def region_top_right(self):
+        w, h = self._screen_size()
+        return (int(w * 0.60), 0, int(w * 0.40), int(h * 0.09))
+
+    def region_right_panel(self):
+        w, h = self._screen_size()
+        return (int(w * 0.66), int(h * 0.05), int(w * 0.34), int(h * 0.9))
+
     # ---- шаги ----
+
+    def _in_editor(self, timeout: float = 5.0) -> bool:
+        """Мы в редакторе, если в верхнем меню виден текст «Субтитры»/«Текст»."""
+        return self.s.text_exists(["Субтитры", "Текст", "Эффекты"],
+                                  region=self.region_top_menu(), timeout=timeout)
 
     def open_project(self, project_name: str = "") -> None:
         logger.info("Шаг: открываю проект в CapCut…")
@@ -238,83 +264,203 @@ class CapCutController:
         self.focus_window()
         time.sleep(1.5)
 
-        # Подтверждаем, что видим главный экран (кнопка «Создать проект»).
-        if self.s.exists("home_create", timeout=40):
-            logger.info("Главный экран CapCut открыт.")
-        else:
-            logger.warning("Не вижу кнопку «Создать проект» — возможно, другой экран.")
+        # Если проект уже открыт в редакторе — ничего не делаем.
+        if self._in_editor(timeout=6):
+            logger.info("Проект уже открыт в редакторе.")
+            return
 
-        # Основной способ: найти проект по названию и кликнуть по превью над ним.
-        try:
-            x, y = self.s.locate("project_tile", timeout=10, confidence=0.75)
-            self.s.pg.doubleClick(x, y + PROJECT_TILE_DY)
-            logger.info("Открываю проект по названию: двойной клик (%d, %d).", x, y + PROJECT_TILE_DY)
-        except UiError:
-            fx, fy = FIRST_TILE_XY
-            logger.warning("Название не найдено — открываю первую плитку по координатам (%d, %d).", fx, fy)
-            self.s.pg.doubleClick(fx, fy)
-        time.sleep(5.0)
-        logger.info("Проект открыт.")
+        # Ждём главный экран: кнопка «Создать проект» (по тексту — надёжно).
+        if self.s.ocr_available():
+            if self.s.text_exists(["Создать проект", "Новый проект", "Create project"],
+                                  timeout=40):
+                logger.info("Главный экран CapCut открыт.")
+            else:
+                logger.warning("Не вижу «Создать проект» — возможно, другой экран.")
+        elif self.s.exists("home_create", timeout=40):
+            logger.info("Главный экран CapCut открыт (по картинке).")
+
+        # Открываем проект по НАЗВАНИЮ (текст плитки) — кликаем по превью над ним.
+        opened = False
+        name = project_name or "тестовик"
+        if self.s.ocr_available():
+            try:
+                x, y = self.s.find_text([name], timeout=12, min_score=0.6)
+                # превью — над подписью; двойной клик по превью открывает проект
+                self.s.pg.doubleClick(x, y + PROJECT_TILE_DY)
+                logger.info("Открываю проект «%s»: двойной клик по превью (%d, %d).",
+                            name, x, y + PROJECT_TILE_DY)
+                opened = True
+            except UiError:
+                logger.warning("Название проекта не распознано текстом.")
+        if not opened:
+            try:
+                x, y = self.s.locate("project_tile", timeout=8, confidence=0.7)
+                self.s.pg.doubleClick(x, y + PROJECT_TILE_DY)
+                opened = True
+            except UiError:
+                fx, fy = FIRST_TILE_XY
+                logger.warning("Открываю первую плитку по координатам (%d, %d).", fx, fy)
+                self.s.pg.doubleClick(fx, fy)
+
+        # Ждём, пока откроется редактор (появится верхнее меню).
+        for _ in range(6):
+            time.sleep(3.0)
+            if self._in_editor(timeout=3):
+                logger.info("Проект открыт — редактор загружен.")
+                return
+        logger.warning("Редактор не подтверждён по меню — продолжаю, надеясь на лучшее.")
 
     def generate_captions(self) -> None:
         logger.info("Шаг: автосубтитры (распознавание речи)…")
         self.s.capture("before_captions")
-        self.s.click("menu_captions", timeout=30)
-        time.sleep(1.0)
-        # Язык «Русский» и вкладка «Автоматические субтитры» — по умолчанию.
-        self.s.click("captions_generate", timeout=20)
-        # Ждём завершения распознавания.
-        if self.s.exists("captions_progress", timeout=8):
+
+        # 1) Кнопка «Субтитры» в верхнем меню (по тексту, с фолбэком на картинку).
+        if not self._click_text_or_ref(["Субтитры", "Субтитр"], "menu_captions",
+                                       region=self.region_top_menu(), timeout=30):
+            raise UiError("Не найдена кнопка «Субтитры» (ни текстом, ни по картинке).")
+        time.sleep(1.5)
+
+        # 2) Иногда есть под-пункт «Автоматические субтитры» — кликаем, если виден.
+        if self.s.text_exists(["Автоматические субтитры", "Авто субтитры"], timeout=3):
+            self.s.click_text(["Автоматические субтитры", "Авто субтитры"], timeout=5)
+            time.sleep(1.0)
+
+        # 3) Зелёная «Создать» (запуск распознавания). Язык «Русский» по умолчанию.
+        if not self._click_text_or_ref(["Создать", "Начать"], "captions_generate",
+                                       timeout=20):
+            raise UiError("Не найдена кнопка «Создать» для запуска субтитров.")
+
+        # 4) Ждём завершения распознавания.
+        self.s.capture("captions_running")
+        if self.s.has_ref("captions_progress") and self.s.exists("captions_progress", timeout=8):
             self.s.wait_vanish("captions_progress", timeout=600)
+        elif self.s.ocr_available() and self.s.text_exists(
+                ["Генерация", "Распознавание", "%"], timeout=8):
+            self.s.wait_text_vanish(["Генерация", "Распознавание"], timeout=600)
         else:
-            logger.info("Окно прогресса не задано — жду фиксированную паузу.")
-            time.sleep(25)
+            logger.info("Индикатор прогресса не виден — жду фиксированную паузу 30с.")
+            time.sleep(30)
         time.sleep(2.0)
         self.s.capture("after_captions")
         logger.info("Субтитры сгенерированы.")
 
+    def _click_text_or_ref(self, texts, ref: str, region=None,
+                           timeout: float = 20.0, min_score: float = 0.68) -> bool:
+        """Пробует кликнуть по тексту (OCR); если не вышло — по картинке-эталону.
+        Возвращает True при успехе."""
+        if self.s.ocr_available():
+            try:
+                self.s.click_text(texts, region=region, timeout=timeout, min_score=min_score)
+                return True
+            except UiError:
+                logger.info("Текст %s не найден — пробую картинку-эталон %s.", texts[0], ref)
+        if self.s.has_ref(ref):
+            try:
+                self.s.click(ref, timeout=min(timeout, 15))
+                return True
+            except UiError:
+                return False
+        return False
+
     def apply_caption_style(self, font_rng: random.Random | None = None) -> None:
         logger.info("Шаг: шрифт → стиль → шаблон…")
         rng = font_rng or random
+        panel = self.region_right_panel()
 
-        # Вкладка «Основн.».
-        self.s.click("tab_basic", timeout=20)
-        time.sleep(0.5)
+        # Выделяем субтитр, чтобы справа открылась панель свойств текста.
+        self._select_first_subtitle()
 
-        # Шрифт: открыть список, найти «блок», выбрать случайный из доступных.
-        available = [r for r in FONT_ROLES if self.s.has_ref(REFERENCES[r][0])]
-        if available:
-            self.s.click("font_dropdown", timeout=15)
-            time.sleep(0.7)
-            self.s.click("font_search", timeout=10)
-            self.s.hotkey("ctrl", "a")
-            self.s.type_text("блок")
-            time.sleep(1.2)
-            chosen = rng.choice(available)
-            self.s.click(chosen, timeout=15)
-            logger.info("Выбран шрифт: %s", REFERENCES[chosen][0])
-            self.s.press("escape")
-            time.sleep(0.5)
-        else:
-            logger.warning("Нет скриншотов шрифтов «Блок» — шаг шрифта пропущен.")
-
-        # Стиль без чёрных краёв (белый пресет). Он ниже — прокручиваем панель
-        # и кликаем по первому пресету справа от ⊘ («без стиля»).
-        self.s.click("tab_basic", timeout=10)
-        time.sleep(0.3)
-        sx, sy = PANEL_SCROLL_XY
-        x, y = self.s.locate_scrolling("style_none", sx, sy, step=-400, attempts=6)
-        self.s.pg.click(x + STYLE_WHITE_DX, y)
-        logger.info("Выбран белый стиль без чёрных краёв (⊘+%d).", STYLE_WHITE_DX)
-        time.sleep(0.5)
-
-        # Шаблон из «Избранного» (под-вкладка «Шаблоны» вверху панели).
-        self.s.click("tab_template", timeout=15)
+        # Вкладка «Основн.» (по тексту, фолбэк на картинку).
+        self._click_text_or_ref(["Основн", "Основные"], "tab_basic",
+                                region=panel, timeout=15)
         time.sleep(0.6)
-        self.s.click("template_favorite", timeout=15)
-        logger.info("Применён шаблон из «Избранного».")
+
+        # Шрифт: открыть список «Шрифт», найти «блок», выбрать один из трёх.
+        self._choose_font(rng, panel)
+
+        # Стиль без чёрных краёв (белый пресет — иконка, без подписи).
+        self._choose_white_style(panel)
+
+        # Шаблон из «Избранного» (под-вкладка «Шаблоны»).
+        self._click_text_or_ref(["Шаблоны", "Шаблон"], "tab_template",
+                                region=panel, timeout=15)
+        time.sleep(0.8)
+        if self.s.has_ref("template_favorite"):
+            try:
+                self.s.click("template_favorite", timeout=12)
+                logger.info("Применён шаблон из «Избранного».")
+            except UiError:
+                logger.warning("Шаблон из «Избранного» не найден по картинке — пропущен.")
+        else:
+            logger.warning("Нет эталона шаблона (template_favorite) — шаг шаблона пропущен.")
         time.sleep(1.0)
         self.s.capture("after_style")
+
+    def _select_first_subtitle(self) -> None:
+        """Кликает по первому субтитру на текст-дорожке, чтобы открыть его
+        свойства. Субтитр в самом начале ролика у левого края таймлайна."""
+        w, h = self._screen_size()
+        # Текст-дорожка обычно верхняя среди дорожек; кликаем ближе к началу.
+        x = int(w * 0.11)
+        y = int(h * 0.66)
+        try:
+            self.s.pg.click(x, y)
+            time.sleep(0.6)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _choose_font(self, rng, panel) -> None:
+        available = [r for r in FONT_ROLES if self.s.has_ref(REFERENCES[r][0])]
+        # Открываем поле «Шрифт».
+        if not self._click_text_or_ref(["Шрифт"], "font_dropdown", region=panel, timeout=12):
+            logger.warning("Поле «Шрифт» не найдено — шаг шрифта пропущен.")
+            return
+        time.sleep(0.8)
+        # Поле поиска шрифта.
+        if not self._click_text_or_ref(["Поиск", "Search"], "font_search",
+                                       region=panel, timeout=8):
+            logger.info("Поле поиска шрифта не найдено — пробую печатать сразу.")
+        self.s.hotkey("ctrl", "a")
+        self.s.type_text("блок")  # ввод кириллицы через буфер обмена
+        time.sleep(1.3)
+        # Выбор одного из шрифтов «Блок». Сначала пробуем по тексту.
+        variants = [["Блок-hv", "Блок hv"], ["Блок-Rg", "Блок Rg"], ["Блоки", "Блок"]]
+        idx = rng.randrange(len(variants))
+        if self.s.ocr_available():
+            try:
+                self.s.click_text(variants[idx], region=panel, timeout=8, min_score=0.6)
+                logger.info("Выбран шрифт: %s", variants[idx][0])
+                self.s.press("escape")
+                time.sleep(0.4)
+                return
+            except UiError:
+                logger.info("Шрифт %s не распознан текстом — пробую картинку.", variants[idx][0])
+        if available:
+            chosen = rng.choice(available)
+            try:
+                self.s.click(chosen, timeout=10)
+                logger.info("Выбран шрифт по картинке: %s", REFERENCES[chosen][0])
+            except UiError:
+                logger.warning("Шрифт не выбран (нет совпадения).")
+        else:
+            logger.warning("Шрифт «Блок» не выбран — ни текст, ни картинки не подошли.")
+        self.s.press("escape")
+        time.sleep(0.4)
+
+    def _choose_white_style(self, panel) -> None:
+        """Белый пресет без чёрных краёв. Это иконка без подписи, поэтому
+        ищем якорь ⊘ («без стиля») и кликаем правее (первый белый пресет)."""
+        if not self.s.has_ref("style_none"):
+            logger.warning("Нет эталона ⊘ (style_none) — стиль без краёв пропущен.")
+            return
+        try:
+            sx, sy = PANEL_SCROLL_XY
+            x, y = self.s.locate_scrolling("style_none", sx, sy, step=-400, attempts=6)
+            self.s.pg.click(x + STYLE_WHITE_DX, y)
+            logger.info("Выбран белый стиль без чёрных краёв (⊘+%d).", STYLE_WHITE_DX)
+            time.sleep(0.5)
+        except UiError:
+            logger.warning("Пресет стиля не найден — стиль без краёв пропущен.")
 
     def save_project(self) -> None:
         self.s.hotkey("ctrl", "s")
@@ -323,39 +469,87 @@ class CapCutController:
 
     def export(self, filename: str, resolution: str, fps: int, bitrate: str) -> None:
         logger.info("Шаг: экспорт (%s / %dfps / битрейт %s)…", resolution, fps, bitrate)
-        self.s.click("export_button", timeout=30)
-        time.sleep(2.5)
+        # Кнопка «Экспорт» справа вверху (текст — надёжно).
+        if not self._click_text_or_ref(["Экспорт", "Export"], "export_button",
+                                       region=self.region_top_right(), timeout=30):
+            raise UiError("Не найдена кнопка «Экспорт».")
+        time.sleep(2.8)
         self.s.capture("export_dialog")
-        # Имя файла: кликаем в поле правее метки «Имя».
-        self.s.click("export_name_label", timeout=15, dx=NAME_FIELD_DX)
-        self.s.hotkey("ctrl", "a")
-        self.s.type_text(filename)
-        time.sleep(0.3)
-        # Разрешение и битрейт обычно уже 1080P / «Выше» — задаём, если есть эталоны.
-        self._select_optional("export_resolution", "export_res_1080")
-        self._select_optional("export_bitrate", "export_bitrate_high")
-        # Частоту кадров меняем на 60.
-        self._select("export_fps", "export_fps_60")
-        # Запуск экспорта.
-        self.s.click("export_confirm", timeout=15)
+
+        # Имя файла: кликаем в поле правее метки «Имя»/«Название».
+        named = False
+        if self.s.ocr_available():
+            try:
+                self.s.click_text(["Имя", "Название"], timeout=10, dx=NAME_FIELD_DX)
+                named = True
+            except UiError:
+                pass
+        if not named and self.s.has_ref("export_name_label"):
+            try:
+                self.s.click("export_name_label", timeout=10, dx=NAME_FIELD_DX)
+                named = True
+            except UiError:
+                pass
+        if named:
+            self.s.hotkey("ctrl", "a")
+            self.s.type_text(filename)
+            time.sleep(0.3)
+        else:
+            logger.warning("Поле имени файла не найдено — экспорт с именем по умолчанию.")
+
+        # Разрешение/битрейт: обычно уже 1080P / «Выше». Ставим по тексту/эталону.
+        self._select_dropdown(["Разрешение"], "1080P", "export_resolution", "export_res_1080")
+        self._select_dropdown(["Битрейт", "Скорость передачи"], "Выше",
+                              "export_bitrate", "export_bitrate_high")
+        # Частота кадров -> 60fps.
+        self._select_dropdown(["Частота кадров", "Кадр"], "60fps",
+                              "export_fps", "export_fps_60")
+
+        # Запуск экспорта (зелёная кнопка «Экспорт» в самом окне).
+        if not self._click_text_or_ref(["Экспорт", "Export"], "export_confirm", timeout=15):
+            raise UiError("Не найдена кнопка запуска экспорта в окне.")
         # Ждём завершения.
-        if self.s.exists("export_progress", timeout=10):
+        if self.s.has_ref("export_progress") and self.s.exists("export_progress", timeout=10):
             self.s.wait_vanish("export_progress", timeout=1800)
+        elif self.s.ocr_available() and self.s.text_exists(
+                ["Экспорт завершён", "Успешно", "Готово", "Открыть папку"], timeout=1800):
+            logger.info("Экспорт завершён (подтверждён по тексту).")
         else:
             logger.info("Индикатор экспорта не задан — жду фиксированную паузу.")
             time.sleep(90)
         time.sleep(2.0)
         logger.info("Экспорт завершён: %s", filename)
 
-    def _select(self, dropdown_ref: str, option_ref: str) -> None:
-        self.s.click(dropdown_ref, timeout=10)
-        time.sleep(0.6)
-        self.s.click(option_ref, timeout=10)
-
-    def _select_optional(self, dropdown_ref: str, option_ref: str) -> None:
-        if not self.s.has_ref(REFERENCES[dropdown_ref][0]):
+    def _select_dropdown(self, dropdown_texts, option_text: str,
+                         dropdown_ref: str, option_ref: str) -> None:
+        """Выбирает пункт `option_text` в выпадающем списке. Сначала проверяет,
+        не выбран ли он уже (тогда ничего не делаем); иначе открывает список
+        (по подписи/эталону) и кликает по пункту (по тексту/эталону)."""
+        panel = self.region_top_right() if False else None  # окно экспорта — весь экран
+        # Уже выбран? (текст пункта виден на экране)
+        if self.s.ocr_available() and self.s.text_exists([option_text], timeout=1, min_score=0.75):
+            # видно и без раскрытия — но это может быть и сам список. Всё равно попробуем.
+            pass
+        # Открыть список.
+        opened = self._click_text_or_ref(dropdown_texts, dropdown_ref, timeout=6, min_score=0.7)
+        if not opened:
+            logger.info("Список %s не найден — пропускаю (возможно, уже задан).", dropdown_texts[0])
             return
-        try:
-            self._select(dropdown_ref, option_ref)
-        except UiError as e:
-            logger.warning("Пропускаю %s: %s", option_ref, e)
+        time.sleep(0.6)
+        # Выбрать пункт.
+        if self.s.ocr_available():
+            try:
+                self.s.click_text([option_text], timeout=6, min_score=0.7)
+                logger.info("Выбрано: %s", option_text)
+                time.sleep(0.4)
+                return
+            except UiError:
+                pass
+        if self.s.has_ref(option_ref):
+            try:
+                self.s.click(option_ref, timeout=6)
+                logger.info("Выбрано по картинке: %s", option_text)
+            except UiError:
+                logger.warning("Пункт %s не найден — оставляю как есть.", option_text)
+        else:
+            logger.warning("Пункт %s не выбран (нет текста/эталона).", option_text)
