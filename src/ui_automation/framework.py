@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..logging_setup import get_logger
+from .ocr import OcrEngine, best_match
 
 logger = get_logger()
 
@@ -28,13 +29,15 @@ class UiError(Exception):
 class Screen:
     def __init__(self, references_dir: Path, shots_dir: Path,
                  confidence: float = 0.85, default_timeout: float = 30.0,
-                 defaults_dir: Path | None = None) -> None:
+                 defaults_dir: Path | None = None, use_ocr: bool = True) -> None:
         self.references_dir = Path(references_dir)
         self.defaults_dir = Path(defaults_dir) if defaults_dir else None
         self.shots_dir = Path(shots_dir)
         self.confidence = confidence
         self.default_timeout = default_timeout
+        self.use_ocr = use_ocr
         self._pg = None
+        self._ocr = OcrEngine()
 
     # ---- ленивый доступ к pyautogui ----
 
@@ -188,6 +191,79 @@ class Screen:
             time.sleep(0.6)
         # финальная попытка со скриншотом ошибки
         return self.locate(ref, timeout=3, confidence=confidence)
+
+    # ---- поиск по ТЕКСТУ (OCR) — основной, надёжный способ ----
+
+    def ocr_available(self) -> bool:
+        return self.use_ocr and self._ocr.available()
+
+    def _ocr_boxes(self, region: tuple[int, int, int, int] | None = None):
+        """OCR всего экрана (или области region=(left,top,w,h)). Координаты
+        боксов возвращаются в СИСТЕМЕ ЭКРАНА (со смещением region)."""
+        shot = self.pg.screenshot()
+        left = top = 0
+        if region is not None:
+            left, top, w, h = region
+            shot = shot.crop((left, top, left + w, top + h))
+        boxes = self._ocr.read(shot)
+        for b in boxes:
+            b.cx += left
+            b.cy += top
+        return boxes
+
+    def find_text(self, targets, region=None, min_score: float = 0.7,
+                  timeout: float | None = None):
+        """Ждёт, пока на экране появится текст из `targets`, и возвращает центр
+        (x, y) лучшего совпадения. targets — строка или список строк-синонимов."""
+        if isinstance(targets, str):
+            targets = [targets]
+        timeout = self.default_timeout if timeout is None else timeout
+        deadline = time.time() + timeout
+        last_boxes = []
+        while time.time() < deadline:
+            last_boxes = self._ocr_boxes(region)
+            m = best_match(targets, last_boxes, min_score)
+            if m is not None:
+                box, sc = m
+                logger.info("Текст %s найден: %r (score %.2f) в (%d, %d)",
+                            targets[0], box.text, sc, int(box.cx), int(box.cy))
+                return int(box.cx), int(box.cy)
+            time.sleep(0.5)
+        slug = "".join(ch for ch in targets[0].lower() if ch.isalnum())[:20] or "text"
+        self.capture(f"text_not_found_{slug}")
+        seen = ", ".join(sorted({b.text for b in last_boxes})[:25])
+        raise UiError(
+            f"Не нашёл на экране текст «{targets[0]}» за {timeout:.0f}с. "
+            f"Скриншот в logs/screenshots. Распознано на экране: {seen or '—'}"
+        )
+
+    def text_exists(self, targets, region=None, min_score: float = 0.7,
+                    timeout: float = 2.0) -> bool:
+        try:
+            self.find_text(targets, region=region, min_score=min_score, timeout=timeout)
+            return True
+        except UiError:
+            return False
+
+    def click_text(self, targets, region=None, min_score: float = 0.7,
+                   timeout: float | None = None, dx: int = 0, dy: int = 0,
+                   clicks: int = 1) -> tuple[int, int]:
+        x, y = self.find_text(targets, region=region, min_score=min_score, timeout=timeout)
+        self.pg.click(x + dx, y + dy, clicks=clicks)
+        logger.info("Клик по тексту %s в (%d, %d)%s",
+                    targets if isinstance(targets, str) else targets[0],
+                    x + dx, y + dy, " x2" if clicks == 2 else "")
+        return x, y
+
+    def wait_text_vanish(self, targets, region=None, min_score: float = 0.7,
+                         timeout: float = 600.0) -> None:
+        """Ждёт, пока текст исчезнет (например, окно «Генерация субтитров…»)."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if not self.text_exists(targets, region=region, min_score=min_score, timeout=1.0):
+                return
+            time.sleep(1.5)
+        logger.warning("Текст %s не исчез за %.0fс — продолжаю.", targets, timeout)
 
     def wait_vanish(self, ref: str, timeout: float = 300.0) -> None:
         """Ждёт, пока эталон исчезнет с экрана (например, индикатор прогресса)."""
