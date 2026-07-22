@@ -112,8 +112,16 @@ export class DolphinRemoteApi {
     return String(id);
   }
 
-  /** Удаляет профиль по id. */
+  /** Удаляет профиль по id. Отсутствующий профиль (404) считается удалённым. */
   async deleteProfile(profileId: string): Promise<void> {
-    await this.request("DELETE", `/browser_profiles/${encodeURIComponent(profileId)}`);
+    try {
+      await this.request("DELETE", `/browser_profiles/${encodeURIComponent(profileId)}`);
+    } catch (error) {
+      if (error instanceof DolphinHttpError && error.status === 404) {
+        this.logger.debug("dolphin.remote", "Профиль уже отсутствует (404) — считаю удалённым", { profileId });
+        return;
+      }
+      throw error;
+    }
   }
 }

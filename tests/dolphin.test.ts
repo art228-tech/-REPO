@@ -92,6 +92,23 @@ describe("DolphinRemoteApi.createProfile", () => {
   });
 });
 
+describe("DolphinRemoteApi.deleteProfile", () => {
+  it("успех при 200", async () => {
+    const api = new DolphinRemoteApi("https://api", "tok", logger);
+    vi.stubGlobal("fetch", vi.fn(async () => mockResponse({ success: true })) as unknown as typeof fetch);
+    await expect(api.deleteProfile("1")).resolves.toBeUndefined();
+  });
+
+  it("не бросает при 404 (профиль уже удалён)", async () => {
+    const api = new DolphinRemoteApi("https://api", "tok", logger);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => mockResponse({ success: false, error: { code: "E_BROWSER_PROFILE_NOT_FOUND" } }, false, 404)) as unknown as typeof fetch,
+    );
+    await expect(api.deleteProfile("1")).resolves.toBeUndefined();
+  });
+});
+
 describe("DolphinLocalApi.startProfile", () => {
   it("парсит port и wsEndpoint", async () => {
     const api = new DolphinLocalApi("http://localhost:3001", logger);

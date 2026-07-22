@@ -110,6 +110,37 @@ describe("Orchestrator (dry-run с симуляторами)", () => {
     expect(status.filesDone).toBe(1);
   });
 
+  it("НЕ удаляет профиль при ошибке (оставляет для диагностики)", async () => {
+    const { promptsDir, textsDir, downloadDir } = await setupDirs(1);
+    const logger = makeLogger();
+    const dolphin = new SimulatedDolphinService(logger);
+    // Симулятор ElevenLabs, падающий на входе через Google.
+    const failingEl = {
+      async connect() {},
+      async loginWithGoogle() {
+        throw new Error("login boom");
+      },
+      async getRemainingCredits() {
+        return Number.POSITIVE_INFINITY;
+      },
+      async designVoice() {
+        throw new Error("nope");
+      },
+      async synthesize() {
+        throw new Error("nope");
+      },
+      async close() {},
+    };
+    const orch = new Orchestrator(logger);
+    const cfg = baseConfig({ promptsDir, textsDir, downloadDir, deleteProfileOnFinish: true });
+    const status = await orch.run(cfg, { dolphin, elevenlabs: failingEl as any });
+
+    expect(status.state).toBe("error");
+    expect(dolphin.created.length).toBe(1);
+    expect(dolphin.stopped.length).toBe(1);
+    expect(dolphin.deleted.length).toBe(0); // профиль оставлен
+  });
+
   it("не удаляет профиль, если deleteProfileOnFinish=false", async () => {
     const { promptsDir, textsDir, downloadDir } = await setupDirs(1);
     const logger = makeLogger();

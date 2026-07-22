@@ -27,32 +27,30 @@ export async function loginWithGoogle(
     return;
   }
 
-  // Ловим возможный popup Google.
-  const popupPromise = new Promise<Page | null>((resolve) => {
-    const timer = setTimeout(() => resolve(null), 8000);
-    browser.once("targetcreated", async (target) => {
-      clearTimeout(timer);
-      const p = await target.page().catch(() => null);
-      resolve(p);
-    });
-  });
-
   const clickedText = await clickByText(page, ELEVENLABS_SELECTORS.googleSignInText, 10_000);
   const clicked = clickedText || (await clickSelector(page, ELEVENLABS_SELECTORS.googleSignInButton, 5000));
   if (!clicked) {
     throw new Error("Не нашёл кнопку входа через Google на странице ElevenLabs");
   }
 
-  const popup = await popupPromise;
-  const googlePage = popup ?? page;
-  await sleep(1500);
+  // Вход Google может открыться в отдельном окне (popup) или тем же табом
+  // (редирект). Надёжно находим нужную страницу по адресу accounts.google.com.
+  const googlePage = await findGoogleAuthPage(browser, page, 25_000, logger);
+  if (!googlePage) {
+    throw new Error(
+      "После клика по «Continue with Google» не открылось окно входа Google (popup/редирект не обнаружен)",
+    );
+  }
+  const isPopup = googlePage !== page;
+  logger.info("elevenlabs.login", `Открыто окно входа Google`, { url: safeUrl(googlePage), popup: isPopup });
+  await sleep(1000);
 
   await performGoogleAuth(googlePage, account, logger);
 
   // Если был popup — дождаться его закрытия; иначе вернуться в приложение.
-  if (popup) {
+  if (isPopup) {
     const closeStart = Date.now();
-    while (!popup.isClosed() && Date.now() - closeStart < 30_000) {
+    while (!googlePage.isClosed() && Date.now() - closeStart < 30_000) {
       await sleep(500);
     }
   }
@@ -65,11 +63,61 @@ export async function loginWithGoogle(
   logger.success("elevenlabs.login", "Успешный вход в ElevenLabs через Google");
 }
 
+/** URL страницы без падения, если контекст уже закрыт. */
+function safeUrl(page: Page): string {
+  try {
+    return page.url();
+  } catch {
+    return "";
+  }
+}
+
+/** Признак страницы аутентификации Google. */
+function isGoogleAuthUrl(url: string): boolean {
+  return /accounts\.google\.|\/signin\/|oauth2|\/gsi\/|myaccount\.google\./i.test(url);
+}
+
+/**
+ * Находит страницу входа Google среди всех вкладок браузера (popup) или
+ * определяет редирект в том же табе. Периодически опрашивает список вкладок.
+ */
+async function findGoogleAuthPage(
+  browser: Browser,
+  originalPage: Page,
+  timeout: number,
+  logger: Logger,
+): Promise<Page | null> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    if (isGoogleAuthUrl(safeUrl(originalPage))) return originalPage;
+    const pages = await browser.pages().catch(() => [] as Page[]);
+    for (const p of pages) {
+      if (p.isClosed?.()) continue;
+      if (isGoogleAuthUrl(safeUrl(p))) {
+        await p.bringToFront().catch(() => undefined);
+        return p;
+      }
+    }
+    await sleep(500);
+  }
+  logger.warn("elevenlabs.login", "Окно входа Google не найдено по URL за отведённое время");
+  return null;
+}
+
 /** Проходит форму Google: email → пароль → (опционально) 2FA → согласие. */
 async function performGoogleAuth(page: Page, account: GoogleAccount, logger: Logger): Promise<void> {
+  // Если Google показал выбор аккаунта — жмём «Использовать другой аккаунт».
+  await clickByText(
+    page,
+    ["Use another account", "Add account", "Другой аккаунт", "Добавить аккаунт", "Использовать другой"],
+    3000,
+  ).catch(() => undefined);
+
   logger.info("elevenlabs.login", "Ввожу email Google", { email: account.email });
   const emailTyped = await typeInto(page, GOOGLE_SELECTORS.emailInput, account.email);
-  if (!emailTyped) throw new Error("Не нашёл поле email Google");
+  if (!emailTyped) {
+    throw new Error(`Не нашёл поле email Google (страница: ${safeUrl(page) || "неизвестно"})`);
+  }
   await sleep(500);
   await clickByText(page, GOOGLE_SELECTORS.emailNextText, 8000);
 

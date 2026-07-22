@@ -374,10 +374,17 @@ export class Orchestrator extends EventEmitter {
       await dolphin
         .stopProfile(profileId)
         .catch((e) => this.logger.warn("orchestrator", "Ошибка остановки профиля", { error: String(e) }));
-      if (config.deleteProfileOnFinish) {
+
+      // При ошибке профиль НЕ удаляем — оставляем для диагностики.
+      const endedWithError = this.status.state === "error";
+      if (config.deleteProfileOnFinish && !endedWithError) {
         await dolphin
           .deleteProfile(profileId)
           .catch((e) => this.logger.warn("orchestrator", "Ошибка удаления профиля", { error: String(e) }));
+      } else if (endedWithError) {
+        this.logger.warn("orchestrator", "Профиль НЕ удалён из-за ошибки — оставлен для диагностики", {
+          profileId,
+        });
       }
     }
   }
