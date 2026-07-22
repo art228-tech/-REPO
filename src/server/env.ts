@@ -1,5 +1,8 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+
+const APP_DIR_NAME = "elevenlabs-auto-voiceover";
 
 /** Читает .env (простой парсер) в process.env, не перезаписывая заданные значения. */
 export function loadDotEnv(root: string): void {
@@ -35,20 +38,65 @@ export function baseDir(projectRoot: string): string {
   return isPackaged() ? path.dirname(process.execPath) : projectRoot;
 }
 
+/**
+ * Постоянная пользовательская директория для настроек/логов (не зависит от
+ * того, где лежит .exe и какая версия):
+ *  - Windows: %APPDATA%\elevenlabs-auto-voiceover
+ *  - macOS:   ~/Library/Application Support/elevenlabs-auto-voiceover
+ *  - Linux:   $XDG_CONFIG_HOME|~/.config/elevenlabs-auto-voiceover
+ */
+export function userDataDir(): string {
+  const home = os.homedir();
+  if (process.platform === "win32") {
+    const appData = process.env.APPDATA || path.join(home, "AppData", "Roaming");
+    return path.join(appData, APP_DIR_NAME);
+  }
+  if (process.platform === "darwin") {
+    return path.join(home, "Library", "Application Support", APP_DIR_NAME);
+  }
+  const xdg = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
+  return path.join(xdg, APP_DIR_NAME);
+}
+
 export interface AppPaths {
   root: string;
   publicDir: string;
   dataDir: string;
   logDir: string;
+  /** Устаревшее расположение данных рядом с .exe (для миграции). */
+  legacyDataDir: string;
 }
 
 export function resolvePaths(projectRoot: string): AppPaths {
   const root = baseDir(projectRoot);
   const publicDir = path.join(root, "public");
-  const dataDir = process.env.DATA_DIR
-    ? path.resolve(root, process.env.DATA_DIR)
-    : path.join(root, "data");
+  const legacyDataDir = path.join(root, "data");
+
+  let dataDir: string;
+  if (process.env.DATA_DIR) {
+    dataDir = path.resolve(root, process.env.DATA_DIR);
+  } else if (isPackaged()) {
+    // В бинарнике — стабильная пользовательская папка, чтобы настройки
+    // сохранялись между обновлениями и не зависели от папки с .exe.
+    dataDir = userDataDir();
+  } else {
+    dataDir = legacyDataDir;
+  }
+
   const logDir = path.join(dataDir, "logs");
   fs.mkdirSync(logDir, { recursive: true });
-  return { root, publicDir, dataDir, logDir };
+
+  // Миграция настроек из старого места (рядом с .exe), если они там есть,
+  // а в новом ещё нет.
+  try {
+    const newCfg = path.join(dataDir, "config.json");
+    const oldCfg = path.join(legacyDataDir, "config.json");
+    if (dataDir !== legacyDataDir && !fs.existsSync(newCfg) && fs.existsSync(oldCfg)) {
+      fs.copyFileSync(oldCfg, newCfg);
+    }
+  } catch {
+    // не критично
+  }
+
+  return { root, publicDir, dataDir, logDir, legacyDataDir };
 }
