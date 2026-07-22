@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import express from "express";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -10,11 +11,20 @@ import { defaultConfig, validateConfig } from "../config/schema.js";
 import { Orchestrator } from "../core/orchestrator.js";
 import { Logger } from "../logging/logger.js";
 import { isDirectory } from "../util/fsUtils.js";
-import { loadDotEnv, resolvePaths } from "./env.js";
+import { baseDir, isPackaged, loadDotEnv, resolvePaths } from "./env.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(__dirname, "..", "..");
-loadDotEnv(projectRoot);
+/** Корень проекта, устойчиво к запуску из ESM (tsx) и из CJS-бандла (pkg). */
+function computeProjectRoot(): string {
+  try {
+    const modulePath = fileURLToPath(import.meta.url);
+    return path.resolve(path.dirname(modulePath), "..", "..");
+  } catch {
+    return process.cwd();
+  }
+}
+
+const projectRoot = computeProjectRoot();
+loadDotEnv(baseDir(projectRoot));
 const paths = resolvePaths(projectRoot);
 
 const logger = new Logger({ logDir: paths.logDir, minLevel: "debug", console: true });
@@ -23,7 +33,7 @@ const orchestrator = new Orchestrator(logger);
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
-app.use(express.static(path.join(projectRoot, "public")));
+app.use(express.static(paths.publicDir));
 
 // ---- Config ----
 app.get("/api/config", async (_req, res) => {
@@ -123,6 +133,23 @@ wss.on("connection", (socket) => {
 
 const port = Number(process.env.PORT ?? 4599);
 server.listen(port, () => {
-  logger.info("server", `UI доступен на http://localhost:${port}`);
+  const url = `http://localhost:${port}`;
+  logger.info("server", `UI доступен на ${url}`);
   logger.info("server", `Данные и логи: ${paths.dataDir}`);
+  // В собранном бинарнике автоматически открываем панель в браузере.
+  if (isPackaged() && process.env.NO_OPEN !== "1") {
+    openBrowser(url);
+  }
 });
+
+/** Открывает URL в браузере по умолчанию (кроссплатформенно). */
+function openBrowser(url: string): void {
+  try {
+    const cmd =
+      process.platform === "win32" ? "cmd" : process.platform === "darwin" ? "open" : "xdg-open";
+    const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+    spawn(cmd, args, { detached: true, stdio: "ignore" }).unref();
+  } catch {
+    // не критично — пользователь откроет ссылку вручную
+  }
+}

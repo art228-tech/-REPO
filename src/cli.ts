@@ -4,16 +4,20 @@ import { ConfigStore } from "./config/store.js";
 import { validateConfig } from "./config/schema.js";
 import { Orchestrator } from "./core/orchestrator.js";
 import { Logger } from "./logging/logger.js";
-import { loadDotEnv, resolvePaths } from "./server/env.js";
+import { baseDir, loadDotEnv, resolvePaths } from "./server/env.js";
 
 /**
  * CLI-режим: запускает сценарий по сохранённому конфигу без веб-интерфейса.
  * Флаг --dry-run форсирует симуляцию.
  */
 async function main(): Promise<void> {
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const root = path.resolve(__dirname, "..");
-  loadDotEnv(root);
+  let root: string;
+  try {
+    root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  } catch {
+    root = process.cwd();
+  }
+  loadDotEnv(baseDir(root));
   const paths = resolvePaths(root);
 
   const logger = new Logger({ logDir: paths.logDir, console: true });

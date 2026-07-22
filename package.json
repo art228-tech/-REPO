@@ -14,8 +14,13 @@
     "cli": "tsx src/cli.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bundle": "npm run build && esbuild dist/server/index.js --bundle --platform=node --format=cjs --target=node20 --outfile=build/bundle.cjs",
+    "package:win": "npm run bundle && npx -y @yao-pkg/pkg build/bundle.cjs --targets node20-win-x64 --output release/win/elevenlabs-auto-voiceover.exe && node scripts/copy-assets.mjs win",
+    "package:mac": "npm run bundle && npx -y @yao-pkg/pkg build/bundle.cjs --targets node20-macos-x64 --output release/mac/elevenlabs-auto-voiceover && node scripts/copy-assets.mjs mac",
+    "package:linux": "npm run bundle && npx -y @yao-pkg/pkg build/bundle.cjs --targets node20-linux-x64 --output release/linux/elevenlabs-auto-voiceover && node scripts/copy-assets.mjs linux"
   },
+  "bin": "build/bundle.cjs",
   "dependencies": {
     "express": "^4.19.2",
     "puppeteer-core": "^23.6.0",
@@ -26,6 +31,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^20.14.0",
     "@types/ws": "^8.5.12",
+    "esbuild": "^0.28.1",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2",
     "vitest": "^2.1.1"

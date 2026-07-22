@@ -20,17 +20,35 @@ export function loadDotEnv(root: string): void {
   }
 }
 
+/** true, если приложение запущено как собранный бинарник (pkg). */
+export function isPackaged(): boolean {
+  return Boolean((process as unknown as { pkg?: unknown }).pkg);
+}
+
+/**
+ * Базовая директория приложения.
+ * - В обычном режиме (Node): корень проекта.
+ * - В собранном бинарнике: папка рядом с исполняемым файлом (туда пишутся
+ *   data/логи и оттуда читается public).
+ */
+export function baseDir(projectRoot: string): string {
+  return isPackaged() ? path.dirname(process.execPath) : projectRoot;
+}
+
 export interface AppPaths {
   root: string;
+  publicDir: string;
   dataDir: string;
   logDir: string;
 }
 
-export function resolvePaths(root: string): AppPaths {
+export function resolvePaths(projectRoot: string): AppPaths {
+  const root = baseDir(projectRoot);
+  const publicDir = path.join(root, "public");
   const dataDir = process.env.DATA_DIR
     ? path.resolve(root, process.env.DATA_DIR)
     : path.join(root, "data");
   const logDir = path.join(dataDir, "logs");
   fs.mkdirSync(logDir, { recursive: true });
-  return { root, dataDir, logDir };
+  return { root, publicDir, dataDir, logDir };
 }
