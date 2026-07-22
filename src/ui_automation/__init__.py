@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import random
+from typing import Callable
 
 from .framework import UiError
 
@@ -24,10 +25,22 @@ class UiAutomationNotReadyError(Exception):
     """UI-автоматизация выключена или не хватает скриншотов кнопок."""
 
 
-def run_captions_and_export(config, output_filename: str) -> None:
-    """Полный интерфейсный цикл: открыть проект → автосубтитры → стиль/шрифт/
-    шаблон → сохранить → экспорт. Бросает UiAutomationNotReadyError, если UI
-    выключен или не готовы скриншоты."""
+def run_captions_and_export(
+    config,
+    output_filename: str,
+    layout_callback: Callable[[], None] | None = None,
+) -> None:
+    """Полный интерфейсный цикл:
+        открыть проект → автосубтитры (ASR) → шрифт/стиль/шаблон → сохранить →
+        [если задан layout_callback: закрыть CapCut → правка JSON (позиция/
+         масштаб) → открыть снова] → экспорт.
+
+    `layout_callback` вызывается, пока CapCut ЗАКРЫТ (чтобы правка draft-файла
+    не была перезаписана редактором). Так позиция/масштаб субтитров применяются
+    надёжно — правкой файла, а не хрупкими кликами мышью.
+
+    Бросает UiAutomationNotReadyError, если UI выключен или не готовы скриншоты.
+    """
     from .. import paths
     from .capcut import CapCutController, ensure_references, missing_references
     from .framework import Screen
@@ -53,12 +66,24 @@ def run_captions_and_export(config, output_filename: str) -> None:
         confidence=config.ui.confidence,
         default_timeout=config.ui.default_timeout,
         defaults_dir=defaults,
+        use_ocr=getattr(config.ui, "use_ocr", True),
     )
     ctrl = CapCutController(screen, config.ui.capcut_exe)
     ctrl.open_project(config.capcut_project_name)
     ctrl.generate_captions()
     ctrl.apply_caption_style(random.Random())
     ctrl.save_project()
+
+    if layout_callback is not None:
+        # Закрываем CapCut, чтобы правка JSON не была затёрта редактором,
+        # применяем позицию/масштаб и открываем проект снова.
+        ctrl.close()
+        try:
+            layout_callback()
+        except Exception as e:  # noqa: BLE001
+            raise UiError(f"Не удалось применить позицию/масштаб субтитров: {e}") from e
+        ctrl.open_project(config.capcut_project_name)
+
     ctrl.export(
         output_filename,
         config.export.resolution,
