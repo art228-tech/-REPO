@@ -77,34 +77,19 @@
 
         <div class="card">
           <h2>🌐 Прокси профиля</h2>
-          <div class="grid-2">
-            <div class="field">
-              <label>Тип</label>
-              <select id="proxy.type">
-                <option value="http">HTTP</option>
-                <option value="socks5">SOCKS5</option>
-                <option value="socks4">SOCKS4</option>
-                <option value="ssh">SSH</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Порт</label>
-              <input id="proxy.port" type="number" placeholder="8080" />
-            </div>
+          <div class="field">
+            <label>Тип</label>
+            <select id="proxy.type">
+              <option value="http">HTTP</option>
+              <option value="socks5">SOCKS5</option>
+              <option value="socks4">SOCKS4</option>
+              <option value="ssh">SSH</option>
+            </select>
           </div>
           <div class="field">
-            <label>Host</label>
-            <input id="proxy.host" type="text" placeholder="1.2.3.4" />
-          </div>
-          <div class="grid-2">
-            <div class="field">
-              <label>Логин</label>
-              <input id="proxy.login" type="text" />
-            </div>
-            <div class="field">
-              <label>Пароль</label>
-              <input id="proxy.password" type="password" />
-            </div>
+            <label>Прокси одной строкой</label>
+            <input id="proxyString" type="text" placeholder="185.240.93.75:8000:kekTAz:MvaYkY" />
+            <p class="hint" id="proxy-preview">Формат: host:port:login:password (также host:port или login:pass@host:port).</p>
           </div>
           <div class="field">
             <label>Change IP URL (для rotating, опц.)</label>

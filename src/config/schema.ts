@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseProxyString } from "../util/proxy.js";
 
 /** Настройки прокси, который добавляется к профилю Dolphin Anty. */
 export const proxySchema = z.object({
@@ -72,6 +73,12 @@ export const appConfigSchema = z.object({
   textsDir: z.string().min(1, "Выберите папку с текстами для озвучки"),
 
   proxy: proxySchema,
+  /**
+   * Прокси одной строкой: host:port:login:password (или host:port,
+   * login:pass@host:port, scheme://...). Если задана — разбирается и
+   * перекрывает поля proxy при валидации. Хранится, чтобы UI показывал ввод.
+   */
+  proxyString: z.string().optional().default(""),
   google: googleAccountSchema,
   voiceDesign: voiceDesignSchema,
   tts: ttsSettingsSchema,
@@ -120,6 +127,7 @@ export type AppConfig = z.infer<typeof appConfigSchema>;
 /** Значения по умолчанию для UI (частичная конфигурация). */
 export const defaultConfig: Partial<AppConfig> = {
   proxy: { type: "http", host: "", port: 8080, login: "", password: "", name: "", changeIpUrl: "" },
+  proxyString: "",
   google: { email: "", password: "", totpSecret: "", recoveryEmail: "" },
   voiceDesign: {
     model: "eleven_ttv_v3",
@@ -156,9 +164,42 @@ export interface ValidationResult {
   errors?: { path: string; message: string }[];
 }
 
+/**
+ * Если задана строка proxyString — разбирает её и подставляет в объект proxy
+ * (тип берётся из схемы строки, иначе из выбранного в UI, иначе http).
+ */
+function normalizeInput(input: unknown): unknown {
+  if (!input || typeof input !== "object") return input;
+  const clone: Record<string, any> = { ...(input as Record<string, any>) };
+  const ps = clone.proxyString;
+  if (typeof ps === "string" && ps.trim()) {
+    const parsed = parseProxyString(ps); // может бросить — ловится в validateConfig
+    const prev = (clone.proxy ?? {}) as Record<string, any>;
+    clone.proxy = {
+      type: parsed.type ?? prev.type ?? "http",
+      host: parsed.host,
+      port: parsed.port,
+      login: parsed.login,
+      password: parsed.password,
+      name: prev.name ?? "",
+      changeIpUrl: prev.changeIpUrl ?? "",
+    };
+  }
+  return clone;
+}
+
 /** Валидирует произвольный объект как AppConfig. */
 export function validateConfig(input: unknown): ValidationResult {
-  const parsed = appConfigSchema.safeParse(input);
+  let normalized: unknown;
+  try {
+    normalized = normalizeInput(input);
+  } catch (error) {
+    return {
+      ok: false,
+      errors: [{ path: "proxyString", message: error instanceof Error ? error.message : String(error) }],
+    };
+  }
+  const parsed = appConfigSchema.safeParse(normalized);
   if (parsed.success) {
     return { ok: true, config: parsed.data };
   }

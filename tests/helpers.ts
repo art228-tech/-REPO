@@ -31,6 +31,7 @@ export function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     promptsDir: "/tmp/prompts",
     textsDir: "/tmp/texts",
     proxy: { type: "http", host: "1.2.3.4", port: 8080, login: "u", password: "p", name: "", changeIpUrl: "" },
+    proxyString: "",
     google: { email: "a@gmail.com", password: "secret", totpSecret: "", recoveryEmail: "" },
     voiceDesign: {
       model: "eleven_ttv_v3",

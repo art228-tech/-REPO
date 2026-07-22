@@ -93,6 +93,19 @@ npm run cli -- --dry-run
 
 Примеры лежат в `samples/prompts` и `samples/texts`.
 
+## Прокси
+
+Прокси указывается **одной строкой** в поле «Прокси одной строкой». Поддерживаемые форматы:
+
+```
+host:port
+host:port:login:password          # например 185.240.93.75:8000:kekTAz:MvaYkY
+login:password@host:port
+socks5://host:port:login:password # схема задаёт тип (http/socks4/socks5/ssh)
+```
+
+Тип прокси берётся из схемы (если указана) или из выпадающего списка «Тип». Под полем показывается разбор строки (host/port/login), настройки сохраняются между запусками.
+
 ## Тесты
 
 ```bash

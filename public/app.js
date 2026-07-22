@@ -49,6 +49,66 @@ function applyConfig(cfg) {
     const src = $("#" + out.getAttribute("data-out"));
     if (src) out.textContent = src.value;
   });
+
+  // Восстановление строки прокси из структурированных полей (для старых конфигов)
+  const ps = $("#proxyString");
+  if (ps && !ps.value && cfg.proxy && cfg.proxy.host) {
+    ps.value =
+      cfg.proxy.host + ":" + cfg.proxy.port +
+      (cfg.proxy.login ? ":" + cfg.proxy.login + ":" + (cfg.proxy.password || "") : "");
+  }
+  updateProxyPreview();
+}
+
+/** Лёгкий парсер строки прокси на клиенте (для превью). */
+function parseProxyJs(raw) {
+  let s = String(raw || "").trim();
+  if (!s) throw new Error("пусто");
+  s = s.replace(/^[a-zA-Z][a-zA-Z0-9]*:\/\//, "");
+  let login = "", password = "", host = "", port = "";
+  if (s.includes("@")) {
+    const at = s.lastIndexOf("@");
+    const creds = s.slice(0, at);
+    const hp = s.slice(at + 1);
+    const ci = creds.indexOf(":");
+    login = ci === -1 ? creds : creds.slice(0, ci);
+    password = ci === -1 ? "" : creds.slice(ci + 1);
+    const idx = hp.lastIndexOf(":");
+    if (idx === -1) throw new Error("нет порта");
+    host = hp.slice(0, idx);
+    port = hp.slice(idx + 1);
+  } else {
+    const parts = s.split(":");
+    if (parts.length < 2) throw new Error("ожидается host:port[:login:password]");
+    host = parts[0];
+    port = parts[1];
+    if (parts.length >= 4) { login = parts[2]; password = parts.slice(3).join(":"); }
+    else if (parts.length === 3) { login = parts[2]; }
+  }
+  const p = Number(port);
+  if (!Number.isInteger(p) || p < 1 || p > 65535) throw new Error("неверный порт");
+  if (!host) throw new Error("нет host");
+  return { host, port: p, login, password };
+}
+
+function updateProxyPreview() {
+  const el = $("#proxyString");
+  const out = $("#proxy-preview");
+  if (!el || !out) return;
+  const raw = (el.value || "").trim();
+  if (!raw) {
+    out.textContent = "Формат: host:port:login:password (также host:port или login:pass@host:port).";
+    out.style.color = "";
+    return;
+  }
+  try {
+    const p = parseProxyJs(raw);
+    out.textContent = `✓ host=${p.host} · port=${p.port}` + (p.login ? ` · login=${p.login}` : "") + (p.password ? " · pass=•••" : "");
+    out.style.color = "var(--success)";
+  } catch (e) {
+    out.textContent = "✕ " + e.message;
+    out.style.color = "var(--danger)";
+  }
 }
 
 function toast(msg, kind = "") {
@@ -211,6 +271,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const src = $("#" + out.getAttribute("data-out"));
     if (src) src.addEventListener("input", () => (out.textContent = src.value));
   });
+
+  const proxyInput = $("#proxyString");
+  if (proxyInput) proxyInput.addEventListener("input", updateProxyPreview);
 
   $all(".pick").forEach((btn) => (btn.onclick = () => openPicker(btn.getAttribute("data-target"))));
   $("#picker-close").onclick = () => $("#picker").classList.add("hidden");
