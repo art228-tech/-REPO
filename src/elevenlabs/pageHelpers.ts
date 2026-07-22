@@ -1,0 +1,111 @@
+import type { ElementHandle, Page } from "puppeteer-core";
+import { sleep } from "../util/sleep.js";
+
+/** Ждёт появления любого из селекторов, возвращает первый найденный handle. */
+export async function waitForAny(
+  page: Page,
+  selectors: string[],
+  timeout = 20_000,
+): Promise<ElementHandle<Element> | null> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    for (const selector of selectors) {
+      try {
+        const el = await page.$(selector);
+        if (el) {
+          const visible = await el.isVisible().catch(() => true);
+          if (visible) return el;
+        }
+      } catch {
+        // невалидный селектор для данного движка — пропускаем
+      }
+    }
+    await sleep(300);
+  }
+  return null;
+}
+
+/** Печатает значение в первый доступный из selectors (с очисткой поля). */
+export async function typeInto(
+  page: Page,
+  selectors: string[],
+  value: string,
+  options: { clear?: boolean; delay?: number } = {},
+): Promise<boolean> {
+  const el = await waitForAny(page, selectors, 15_000);
+  if (!el) return false;
+  await el.click({ clickCount: 3 }).catch(() => undefined);
+  if (options.clear !== false) {
+    await page.keyboard.press("Backspace").catch(() => undefined);
+  }
+  await el.type(value, { delay: options.delay ?? 25 });
+  return true;
+}
+
+/**
+ * Ищет кликабельный элемент, текст которого содержит одну из подстрок,
+ * и кликает по нему. Возвращает true при успехе.
+ */
+export async function clickByText(page: Page, texts: string[], timeout = 15_000): Promise<boolean> {
+  const start = Date.now();
+  const needles = texts.map((t) => t.toLowerCase());
+  while (Date.now() - start < timeout) {
+    const clicked = await page.evaluate((needlesInner) => {
+      const candidates = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          'button, a, [role="button"], [role="menuitem"], [role="tab"], div[tabindex], span[tabindex]',
+        ),
+      );
+      for (const el of candidates) {
+        const label = (el.innerText || el.textContent || el.getAttribute("aria-label") || "").trim().toLowerCase();
+        if (!label) continue;
+        if (needlesInner.some((n: string) => label.includes(n))) {
+          const rect = el.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            el.click();
+            return true;
+          }
+        }
+      }
+      return false;
+    }, needles);
+    if (clicked) return true;
+    await sleep(400);
+  }
+  return false;
+}
+
+/** Клик по элементу, найденному по одному из CSS-селекторов. */
+export async function clickSelector(page: Page, selectors: string[], timeout = 15_000): Promise<boolean> {
+  const el = await waitForAny(page, selectors, timeout);
+  if (!el) return false;
+  await el.click().catch(() => undefined);
+  return true;
+}
+
+/** Проверяет, присутствует ли на странице любой из текстов (без учёта регистра). */
+export async function textPresent(page: Page, texts: string[]): Promise<boolean> {
+  const needles = texts.map((t) => t.toLowerCase());
+  return page.evaluate((needlesInner) => {
+    const body = document.body?.innerText?.toLowerCase() ?? "";
+    return needlesInner.some((n: string) => body.includes(n));
+  }, needles);
+}
+
+/** Ждёт, пока на странице появится один из текстов. */
+export async function waitForText(page: Page, texts: string[], timeout = 20_000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    if (await textPresent(page, texts)) return true;
+    await sleep(400);
+  }
+  return false;
+}
+
+/** Извлекает первое целое число из текста (для чтения остатка кредитов). */
+export function parseCreditsNumber(text: string): number | null {
+  const match = text.replace(/[,\s]/g, "").match(/(\d{2,})/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : null;
+}
