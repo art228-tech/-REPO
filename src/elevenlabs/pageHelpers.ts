@@ -49,26 +49,23 @@ export async function typeInto(
 export async function clickByText(page: Page, texts: string[], timeout = 15_000): Promise<boolean> {
   const start = Date.now();
   const needles = texts.map((t) => t.toLowerCase());
-  while (Date.now() - start < timeout) {
-    const clicked = await page.evaluate((needlesInner) => {
-      const candidates = Array.from(
-        document.querySelectorAll<HTMLElement>(
-          'button, a, [role="button"], [role="menuitem"], [role="tab"], div[tabindex], span[tabindex]',
-        ),
-      );
-      for (const el of candidates) {
-        const label = (el.innerText || el.textContent || el.getAttribute("aria-label") || "").trim().toLowerCase();
-        if (!label) continue;
-        if (needlesInner.some((n: string) => label.includes(n))) {
-          const rect = el.getBoundingClientRect();
-          if (rect.width > 0 && rect.height > 0) {
-            el.click();
-            return true;
-          }
-        }
+  // ВАЖНО: код передаётся строкой (а не функцией), иначе в собранном бинарнике
+  // (esbuild + pkg) Puppeteer падает с "Passed function cannot be serialized!".
+  const code = `(() => {
+    const needles = ${JSON.stringify(needles)};
+    const candidates = Array.from(document.querySelectorAll('button, a, [role="button"], [role="menuitem"], [role="tab"], div[tabindex], span[tabindex]'));
+    for (const el of candidates) {
+      const label = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim().toLowerCase();
+      if (!label) continue;
+      if (needles.some((n) => label.includes(n))) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) { el.click(); return true; }
       }
-      return false;
-    }, needles);
+    }
+    return false;
+  })()`;
+  while (Date.now() - start < timeout) {
+    const clicked = (await page.evaluate(code)) as boolean;
     if (clicked) return true;
     await sleep(400);
   }
@@ -86,10 +83,12 @@ export async function clickSelector(page: Page, selectors: string[], timeout = 1
 /** Проверяет, присутствует ли на странице любой из текстов (без учёта регистра). */
 export async function textPresent(page: Page, texts: string[]): Promise<boolean> {
   const needles = texts.map((t) => t.toLowerCase());
-  return page.evaluate((needlesInner) => {
-    const body = document.body?.innerText?.toLowerCase() ?? "";
-    return needlesInner.some((n: string) => body.includes(n));
-  }, needles);
+  const code = `(() => {
+    const needles = ${JSON.stringify(needles)};
+    const body = (document.body && document.body.innerText ? document.body.innerText : '').toLowerCase();
+    return needles.some((n) => body.includes(n));
+  })()`;
+  return (await page.evaluate(code)) as boolean;
 }
 
 /** Ждёт, пока на странице появится один из текстов. */

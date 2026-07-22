@@ -58,7 +58,10 @@ export class ElevenLabsAutomation implements IElevenLabsAutomation {
     try {
       await page.goto(ELEVENLABS.USAGE_URL, { waitUntil: "domcontentloaded", timeout: 45_000 });
       await sleep(2000);
-      const bodyText = await page.evaluate(() => document.body?.innerText ?? "");
+      // Строкой (не функцией) — ради совместимости с собранным бинарником.
+      const bodyText = ((await page.evaluate(
+        "document.body && document.body.innerText ? document.body.innerText : ''",
+      )) as string) ?? "";
       // Ищем строки вида "12,345 / 100,000" или "credits remaining".
       const remainingMatch =
         bodyText.match(/([\d.,\s]+)\s*(?:credits|characters)?\s*(?:remaining|left|осталось)/i) ||
