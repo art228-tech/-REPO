@@ -98,9 +98,23 @@ export const appConfigSchema = z.object({
    * (чтобы не начинать заведомо неуспешную генерацию).
    */
   minCreditsThreshold: z.coerce.number().int().min(0).default(0),
+
+  /**
+   * Минимальная длительность готовой озвучки в секундах. Если результат
+   * короче — текст отбраковывается и заменяется следующим. 0 = без нижней границы.
+   */
+  minDurationSec: z.coerce.number().min(0).default(10),
+  /**
+   * Максимальная длительность готовой озвучки в секундах. Если результат
+   * длиннее — текст отбраковывается и заменяется следующим. 0 = без верхней границы.
+   */
+  maxDurationSec: z.coerce.number().min(0).default(17),
   /** Сухой прогон: без Dolphin/ElevenLabs, на симуляторах (для тестов). */
   dryRun: z.boolean().default(false),
-});
+}).refine(
+  (c) => c.maxDurationSec === 0 || c.minDurationSec === 0 || c.maxDurationSec >= c.minDurationSec,
+  { message: "maxDurationSec должен быть не меньше minDurationSec", path: ["maxDurationSec"] },
+);
 export type AppConfig = z.infer<typeof appConfigSchema>;
 
 /** Значения по умолчанию для UI (частичная конфигурация). */
@@ -131,6 +145,8 @@ export const defaultConfig: Partial<AppConfig> = {
   consumeTextFiles: true,
   headless: false,
   minCreditsThreshold: 0,
+  minDurationSec: 10,
+  maxDurationSec: 17,
   dryRun: false,
 };
 

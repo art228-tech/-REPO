@@ -57,6 +57,10 @@ export function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     consumeTextFiles: true,
     headless: false,
     minCreditsThreshold: 0,
+    // По умолчанию ограничение длительности отключено (0/0), чтобы базовые
+    // тесты проверяли остальную логику; тесты гейтинга задают пороги явно.
+    minDurationSec: 0,
+    maxDurationSec: 0,
     dryRun: true,
     ...overrides,
   };

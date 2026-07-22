@@ -112,6 +112,7 @@ function renderStatus(s) {
   $("#st-voices").textContent = `${s.voicesCreated}/${s.voicesTarget}`;
   $("#st-files").textContent = s.filesDone;
   $("#st-failed").textContent = s.filesFailed;
+  $("#st-rejected").textContent = s.filesRejected ?? 0;
   $("#st-texts").textContent = s.textsRemaining;
   $("#st-credits").textContent = s.creditsRemaining == null ? "—" : s.creditsRemaining;
   $("#st-error").textContent = s.error || "";

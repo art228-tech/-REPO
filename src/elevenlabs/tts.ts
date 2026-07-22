@@ -2,6 +2,7 @@ import path from "node:path";
 import type { Page } from "puppeteer-core";
 import { Logger } from "../logging/logger.js";
 import { sleep } from "../util/sleep.js";
+import { getAudioDurationSec } from "../util/audioDuration.js";
 import { ELEVENLABS } from "./constants.js";
 import { enableDownloads, moveDownload, snapshotDir, waitForNewDownload } from "./download.js";
 import { clickByText, textPresent, typeInto, waitForAny } from "./pageHelpers.js";
@@ -57,8 +58,9 @@ export async function synthesize(page: Page, params: SynthesizeParams, logger: L
   if (downloaded !== outputPath) {
     await moveDownload(downloaded, outputPath);
   }
-  logger.success("elevenlabs.tts", `Аудио сохранено`, { outputPath });
-  return { outputPath, charactersUsed: text.length };
+  const durationSec = await getAudioDurationSec(outputPath, logger);
+  logger.success("elevenlabs.tts", `Аудио сохранено`, { outputPath, durationSec });
+  return { outputPath, charactersUsed: text.length, durationSec };
 }
 
 /** Открывает селектор голосов, ищет по имени и выбирает. */

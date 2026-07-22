@@ -25,6 +25,8 @@ export interface SynthesizeResult {
   outputPath: string;
   /** Сколько символов ушло (для учёта токенов), если удалось определить. */
   charactersUsed?: number;
+  /** Длительность готового аудио в секундах (null — определить не удалось). */
+  durationSec?: number | null;
 }
 
 /**

@@ -217,6 +217,17 @@
               <input id="minCreditsThreshold" type="number" min="0" value="0" />
             </div>
           </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Мин. длительность озвучки, сек</label>
+              <input id="minDurationSec" type="number" min="0" step="0.5" value="10" />
+            </div>
+            <div class="field">
+              <label>Макс. длительность озвучки, сек</label>
+              <input id="maxDurationSec" type="number" min="0" step="0.5" value="17" />
+            </div>
+          </div>
+          <p class="hint">Если готовая озвучка короче минимума или длиннее максимума — текст отбраковывается и заменяется следующим. 0 = без ограничения.</p>
           <label class="checkbox"><input id="deleteProfileOnFinish" type="checkbox" checked /> Удалять профиль после завершения</label>
           <label class="checkbox"><input id="consumeTextFiles" type="checkbox" checked /> Удалять текст после озвучки</label>
           <label class="checkbox"><input id="headless" type="checkbox" /> Headless-режим</label>
@@ -234,6 +245,7 @@
             <div><span class="k">Голоса</span><span id="st-voices" class="v">0/0</span></div>
             <div><span class="k">Озвучено</span><span id="st-files" class="v">0</span></div>
             <div><span class="k">Ошибок</span><span id="st-failed" class="v">0</span></div>
+            <div><span class="k">Отбраковано (длит.)</span><span id="st-rejected" class="v">0</span></div>
             <div><span class="k">Текстов осталось</span><span id="st-texts" class="v">0</span></div>
             <div><span class="k">Кредиты</span><span id="st-credits" class="v">—</span></div>
           </div>

@@ -1,6 +1,8 @@
 import { EventEmitter } from "node:events";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { AppConfig } from "../config/schema.js";
+import { checkDuration } from "../util/audioDuration.js";
 import { DolphinService } from "../dolphin/dolphinService.js";
 import { SimulatedDolphinService } from "../dolphin/simulated.js";
 import { IDolphinService } from "../dolphin/types.js";
@@ -23,6 +25,8 @@ export interface RunStatus {
   voicesTarget: number;
   filesDone: number;
   filesFailed: number;
+  /** Тексты, отбракованные по длительности (вне диапазона). */
+  filesRejected: number;
   textsRemaining: number;
   creditsRemaining: number | null;
   startedAt: number | null;
@@ -58,6 +62,7 @@ export class Orchestrator extends EventEmitter {
       voicesTarget: 0,
       filesDone: 0,
       filesFailed: 0,
+      filesRejected: 0,
       textsRemaining: 0,
       creditsRemaining: null,
       startedAt: null,
@@ -271,12 +276,31 @@ export class Orchestrator extends EventEmitter {
         continue;
       }
 
+      // Голос назначаем на слот, но переключаем только после УСПЕШНОЙ,
+      // прошедшей по длительности озвучки — чтобы отбракованный текст
+      // заменялся следующим на том же голосе.
       const voice = voices[voiceIndex % voices.length];
-      voiceIndex += 1;
 
       try {
-        await this.synthesizeText(config, item.name, content, voice, el);
+        const { paths, totalDurationSec } = await this.synthesizeText(config, item.name, content, voice, el);
+
+        const verdict = checkDuration(totalDurationSec, config.minDurationSec, config.maxDurationSec);
+        if (verdict === "too_short" || verdict === "too_long") {
+          // Отбраковка по длительности: удаляем результат, текст не берём,
+          // заменяем следующим (голос остаётся тем же).
+          for (const p of paths) await fs.unlink(p).catch(() => undefined);
+          texts.fail(item);
+          this.update({ filesRejected: this.status.filesRejected + 1 });
+          this.logger.warn("orchestrator", `Текст "${item.name}" отбракован по длительности — заменяю следующим`, {
+            durationSec: totalDurationSec,
+            allowed: `${config.minDurationSec}-${config.maxDurationSec} c`,
+            verdict,
+          });
+          continue;
+        }
+
         await texts.complete(item);
+        voiceIndex += 1;
         this.update({ filesDone: this.status.filesDone + 1 });
       } catch (error) {
         if (error instanceof OutOfCreditsError) {
@@ -294,17 +318,25 @@ export class Orchestrator extends EventEmitter {
     }
   }
 
-  /** Озвучивает один текст, разбивая на части при превышении лимита. */
+  /**
+   * Озвучивает один текст, разбивая на части при превышении лимита.
+   * Возвращает пути созданных файлов и суммарную длительность (для проверки
+   * попадания в допустимый диапазон секунд).
+   */
   private async synthesizeText(
     config: AppConfig,
     fileName: string,
     content: string,
     voice: CreatedVoice,
     el: IElevenLabsAutomation,
-  ): Promise<void> {
+  ): Promise<{ paths: string[]; totalDurationSec: number | null }> {
     const ext = config.tts.outputFormat === "wav" ? ".wav" : ".mp3";
     const base = sanitizeFilename(fileName.replace(/\.[^.]+$/, ""));
     const chunks = chunkText(content);
+
+    const paths: string[] = [];
+    let totalDuration = 0;
+    let anyDurationKnown = false;
 
     for (let i = 0; i < chunks.length; i++) {
       this.abortIfStopping();
@@ -315,8 +347,15 @@ export class Orchestrator extends EventEmitter {
         chunk: `${i + 1}/${chunks.length}`,
         chars: chunks[i].length,
       });
-      await el.synthesize({ text: chunks[i], voice, settings: config.tts, outputPath });
+      const result = await el.synthesize({ text: chunks[i], voice, settings: config.tts, outputPath });
+      paths.push(result.outputPath);
+      if (typeof result.durationSec === "number" && Number.isFinite(result.durationSec)) {
+        totalDuration += result.durationSec;
+        anyDurationKnown = true;
+      }
     }
+
+    return { paths, totalDurationSec: anyDurationKnown ? totalDuration : null };
   }
 
   /** Останавливает и удаляет профиль, отключается от браузера. */

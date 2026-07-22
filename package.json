@@ -23,6 +23,7 @@
   "bin": "build/bundle.cjs",
   "dependencies": {
     "express": "^4.19.2",
+    "music-metadata": "^10.9.1",
     "puppeteer-core": "^23.6.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
