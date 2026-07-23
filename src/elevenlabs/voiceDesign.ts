@@ -2,7 +2,7 @@ import type { Page } from "puppeteer-core";
 import { Logger } from "../logging/logger.js";
 import { sleep } from "../util/sleep.js";
 import { ELEVENLABS, validatePreviewText, validateVoiceDescription } from "./constants.js";
-import { clickByText, dumpDiagnostics, textPresent, typeInto, waitForText } from "./pageHelpers.js";
+import { clickByText, clickNth, countAny, dumpDiagnostics, textPresent, typeInto, waitForText } from "./pageHelpers.js";
 import { ELEVENLABS_SELECTORS } from "./selectors.js";
 import { CreatedVoice, DesignVoiceParams, OutOfCreditsError, VoiceDescriptionError } from "./types.js";
 
@@ -85,25 +85,12 @@ export async function designVoice(page: Page, params: DesignVoiceParams, logger:
 async function waitForPreviews(page: Page, timeout: number): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeout) {
-    for (const selector of ELEVENLABS_SELECTORS.previewCandidate) {
-      const els = await page.$$(selector).catch(() => []);
-      if (els.length >= 1) return true;
-    }
+    if ((await countAny(page, ELEVENLABS_SELECTORS.previewCandidate)) >= 1) return true;
     await sleep(700);
   }
   return false;
 }
 
 async function selectCandidate(page: Page, index: number): Promise<void> {
-  for (const selector of ELEVENLABS_SELECTORS.previewCandidate) {
-    const els = await page.$$(selector).catch(() => []);
-    if (els.length > index) {
-      await els[index].click().catch(() => undefined);
-      return;
-    }
-    if (els.length >= 1) {
-      await els[0].click().catch(() => undefined);
-      return;
-    }
-  }
+  await clickNth(page, ELEVENLABS_SELECTORS.previewCandidate, index);
 }

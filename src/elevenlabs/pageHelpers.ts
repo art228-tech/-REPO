@@ -1,15 +1,14 @@
-import type { ElementHandle, Frame, Page } from "puppeteer-core";
+import type { Frame, Page } from "puppeteer-core";
 import { Logger } from "../logging/logger.js";
 import { sleep } from "../util/sleep.js";
 
 /**
- * ВАЖНО: во всех функциях используется только строковая форма evaluate и
- * нативные методы handle (getProperty/boundingBox/click/focus/type). Передача
- * функций в evaluate ломается в собранном бинарнике (esbuild+pkg:
- * "Passed function cannot be serialized!"), поэтому её здесь нет.
- *
- * Все действия — фрейм-осведомлённые (ищем по всем фреймам страницы) и с
- * несколькими стратегиями, чтобы срабатывать наверняка.
+ * КРИТИЧЕСКИ ВАЖНО: в собранном бинарнике (esbuild + pkg) Puppeteer НЕ умеет
+ * сериализовать функции. Поэтому ломается не только page.evaluate(fn), но и
+ * page.$/$$/waitForSelector и любые операции с ElementHandle (они внутри
+ * передают функцию в страницу). Работает только СТРОКОВЫЙ evaluate и CDP-ввод
+ * (keyboard/mouse). Поэтому здесь ВСЁ сделано через frame.evaluate("...") и
+ * page.keyboard — без ElementHandle. Так действия срабатывают и в .exe.
  */
 
 /** Список фреймов страницы (main + вложенные), безопасно. */
@@ -21,80 +20,82 @@ function framesOf(page: Page): Frame[] {
   }
 }
 
-export interface FoundElement {
+export interface FoundSelector {
   frame: Frame;
-  el: ElementHandle<Element>;
+  selector: string;
 }
 
-/**
- * Проверяет видимость элемента по offsetWidth/offsetHeight (нативно, через
- * getProperty). ВАЖНО: boundingBox() у Puppeteer в popup-окнах антидетект-
- * браузера часто возвращает null (окно «не отрисовано» для CDP), хотя элемент
- * реально виден, поэтому используем layout-свойства, как в диагностике.
- */
-async function isVisibleHandle(el: ElementHandle<Element>): Promise<boolean> {
+/** Проверяет в конкретном фрейме, есть ли видимый элемент по одному из селекторов. Возвращает найденный селектор. */
+async function matchInFrame(frame: Frame, selectors: string[]): Promise<string | null> {
+  const code = `(() => {
+    const sels = ${JSON.stringify(selectors)};
+    for (const s of sels) {
+      let el = null;
+      try { el = document.querySelector(s); } catch (e) { continue; }
+      if (el) {
+        const vis = !!(el.offsetWidth || el.offsetHeight || (el.getClientRects && el.getClientRects().length));
+        if (vis) return s;
+      }
+    }
+    return null;
+  })()`;
   try {
-    const w = Number(await (await el.getProperty("offsetWidth")).jsonValue()) || 0;
-    const h = Number(await (await el.getProperty("offsetHeight")).jsonValue()) || 0;
-    if (w > 0 || h > 0) return true;
-    const rects = Number(await (await el.getProperty("clientHeight")).jsonValue()) || 0;
-    return rects > 0;
+    const res = (await frame.evaluate(code)) as string | null;
+    return typeof res === "string" ? res : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-/** Ищет по всем фреймам первый видимый элемент по любому из селекторов. */
-export async function findAny(page: Page, selectors: string[], timeout = 20_000): Promise<FoundElement | null> {
+/** Ищет по всем фреймам первый видимый элемент по любому селектору (опрос до таймаута). */
+export async function findAny(page: Page, selectors: string[], timeout = 20_000): Promise<FoundSelector | null> {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     for (const frame of framesOf(page)) {
-      for (const selector of selectors) {
-        try {
-          const els = (await frame.$$(selector)) as ElementHandle<Element>[];
-          for (const el of els) {
-            if (await isVisibleHandle(el)) return { frame, el };
-          }
-        } catch {
-          // навигация/пересоздание контекста/невалидный селектор — пробуем снова
-        }
-      }
+      const selector = await matchInFrame(frame, selectors);
+      if (selector) return { frame, selector };
     }
     await sleep(300);
   }
   return null;
 }
 
-/** Обратная совместимость: возвращает только handle. */
-export async function waitForAny(page: Page, selectors: string[], timeout = 20_000): Promise<ElementHandle<Element> | null> {
-  const found = await findAny(page, selectors, timeout);
-  return found?.el ?? null;
+/** Возвращает true, если элемент по одному из селекторов виден (для проверок «появилось ли»). */
+export async function waitForAny(page: Page, selectors: string[], timeout = 20_000): Promise<boolean> {
+  return (await findAny(page, selectors, timeout)) !== null;
 }
 
-/** Читает свойство value элемента (нативно, без сериализации функций). */
-async function readValue(el: ElementHandle<Element>): Promise<string | null> {
+/** Читает значение поля (input/textarea/contenteditable) по селектору в конкретном фрейме. */
+async function readFieldValue(frame: Frame, selector: string): Promise<string | null> {
+  const code = `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return null;
+    if (el.isContentEditable) return String(el.textContent || '');
+    return String(el.value != null ? el.value : '');
+  })()`;
   try {
-    const prop = await el.getProperty("value");
-    const val = await prop.jsonValue();
-    return typeof val === "string" ? val : null;
+    const v = await frame.evaluate(code);
+    return typeof v === "string" ? v : null;
   } catch {
     return null;
   }
 }
 
-async function valueEntered(el: ElementHandle<Element>, value: string): Promise<boolean> {
-  const v = await readValue(el);
-  if (v === null) return true; // не поле ввода (нельзя проверить) — считаем успехом
-  const trimmed = v.trim();
-  return trimmed.length > 0 && (trimmed === value.trim() || trimmed.includes(value.trim()));
+function valueOk(v: string | null, value: string): boolean {
+  if (v === null) return false;
+  const a = v.trim();
+  const b = value.trim();
+  return a.length > 0 && (a === b || a.includes(b));
 }
 
 /**
- * Вводит значение в первое подходящее поле (по всем фреймам), пробуя несколько
- * методов и проверяя, что значение реально попало в поле:
- *  1) тройной клик + Backspace + type
- *  2) focus + keyboard.type
- *  3) JS: установка value активному элементу + события input/change
+ * Универсальный ввод значения в поле по любому из селекторов (по всем фреймам).
+ * Пробует несколько способов и ПРОВЕРЯЕТ, что значение реально попало в поле:
+ *  1) JS: нативный сеттер value + события input/change (совместимо с React) /
+ *     textContent для contenteditable;
+ *  2) фокус + CDP-клавиатура (page.keyboard.type);
+ *  3) повтор JS-сеттера.
+ * Всё — через строковый evaluate и keyboard (безопасно для бинарника).
  */
 export async function typeInto(
   page: Page,
@@ -104,51 +105,61 @@ export async function typeInto(
 ): Promise<boolean> {
   const found = await findAny(page, selectors, options.timeout ?? 15_000);
   if (!found) return false;
-  const { frame, el } = found;
-  const delay = options.delay ?? 20;
+  const { frame, selector } = found;
+  const sel = JSON.stringify(selector);
+  const val = JSON.stringify(value);
 
-  // Метод 1: focus + клавиатура. Самый надёжный, не требует «отрисовки» окна
-  // (в отличие от el.click(), который использует box model и падает в popup).
+  const setViaJs = `(() => {
+    const el = document.querySelector(${sel});
+    if (!el) return false;
+    try { el.focus(); } catch (e) {}
+    if (el.isContentEditable) {
+      el.textContent = ${val};
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+    let desc = null;
+    try { desc = Object.getOwnPropertyDescriptor(proto, 'value'); } catch (e) {}
+    try { el.value = ''; } catch (e) {}
+    if (desc && desc.set) { desc.set.call(el, ${val}); } else { el.value = ${val}; }
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+    return true;
+  })()`;
+
+  // Способ 1: JS-сеттер
   try {
-    await el.focus();
-    // Выделить всё и стереть (Ctrl/Cmd+A → Backspace), затем печатать.
-    await page.keyboard.down("Control").catch(() => undefined);
-    await page.keyboard.press("KeyA").catch(() => undefined);
-    await page.keyboard.up("Control").catch(() => undefined);
-    await page.keyboard.press("Backspace").catch(() => undefined);
-    await page.keyboard.type(value, { delay });
+    await frame.evaluate(setViaJs);
   } catch {
     /* ignore */
   }
-  if (await valueEntered(el, value)) return true;
+  if (valueOk(await readFieldValue(frame, selector), value)) return true;
 
-  // Метод 2: JS-установка value активному элементу (строковый evaluate).
+  // Способ 2: фокус + клавиатура
   try {
-    await el.focus();
-    const code = `(() => { const el = document.activeElement; if (el) { el.value = ${JSON.stringify(
-      value,
-    )}; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return true; } return false; })()`;
-    await frame.evaluate(code);
+    await frame.evaluate(`(() => { const el = document.querySelector(${sel}); if (el) { el.focus(); if(!el.isContentEditable){ try{el.value='';}catch(e){} } } })()`);
+    await page.keyboard.type(value, { delay: options.delay ?? 15 });
   } catch {
     /* ignore */
   }
-  if (await valueEntered(el, value)) return true;
+  if (valueOk(await readFieldValue(frame, selector), value)) return true;
 
-  // Метод 3: тройной клик + печать (если окно всё же отрисовано).
+  // Способ 3: повтор JS-сеттера
   try {
-    await el.click({ clickCount: 3 });
-    await page.keyboard.press("Backspace").catch(() => undefined);
-    await el.type(value, { delay });
+    await frame.evaluate(setViaJs);
   } catch {
     /* ignore */
   }
-  return valueEntered(el, value);
+  return valueOk(await readFieldValue(frame, selector), value);
 }
 
 const CLICKABLE =
-  'button, a, [role="button"], [role="menuitem"], [role="tab"], [role="option"], div[tabindex], span[tabindex], input[type="submit"], input[type="button"]';
+  'button, a, [role="button"], [role="menuitem"], [role="tab"], [role="option"], [role="radio"], div[tabindex], span[tabindex], input[type="submit"], input[type="button"], label';
 
-/** Кликает по элементу, чей текст/aria-label содержит одну из строк (по всем фреймам). */
+/** Кликает по элементу, чей текст/aria-label содержит одну из строк (по всем фреймам, строковый evaluate). */
 export async function clickByText(page: Page, texts: string[], timeout = 15_000): Promise<boolean> {
   const start = Date.now();
   const needles = texts.map((t) => t.toLowerCase());
@@ -159,8 +170,8 @@ export async function clickByText(page: Page, texts: string[], timeout = 15_000)
       const label = (el.innerText || el.textContent || el.getAttribute('aria-label') || el.value || '').trim().toLowerCase();
       if (!label) continue;
       if (needles.some((n) => label.includes(n))) {
-        const r = el.getBoundingClientRect();
-        if (r.width > 0 && r.height > 0) { el.scrollIntoView({block:'center'}); el.click(); return true; }
+        const vis = !!(el.offsetWidth || el.offsetHeight || (el.getClientRects && el.getClientRects().length));
+        if (vis) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
       }
     }
     return false;
@@ -178,16 +189,59 @@ export async function clickByText(page: Page, texts: string[], timeout = 15_000)
   return false;
 }
 
-/** Клик по элементу, найденному по одному из CSS-селекторов (по всем фреймам). */
+/** Клик по элементу, найденному по одному из CSS-селекторов (строковый evaluate, по всем фреймам). */
 export async function clickSelector(page: Page, selectors: string[], timeout = 15_000): Promise<boolean> {
   const found = await findAny(page, selectors, timeout);
   if (!found) return false;
+  const code = `(() => {
+    const el = document.querySelector(${JSON.stringify(found.selector)});
+    if (el) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
+    return false;
+  })()`;
   try {
-    await found.el.click();
-    return true;
+    return (await found.frame.evaluate(code)) as boolean;
   } catch {
     return false;
   }
+}
+
+/** Считает суммарное число элементов по селекторам (по всем фреймам). */
+export async function countAny(page: Page, selectors: string[]): Promise<number> {
+  const code = `(() => {
+    const sels = ${JSON.stringify(selectors)};
+    let n = 0;
+    for (const s of sels) { try { n += document.querySelectorAll(s).length; } catch (e) {} }
+    return n;
+  })()`;
+  let total = 0;
+  for (const frame of framesOf(page)) {
+    try {
+      total += Number(await frame.evaluate(code)) || 0;
+    } catch {
+      /* ignore */
+    }
+  }
+  return total;
+}
+
+/** Кликает по N-му (index) совпавшему элементу среди селекторов (по всем фреймам). */
+export async function clickNth(page: Page, selectors: string[], index: number): Promise<boolean> {
+  const code = `(() => {
+    const sels = ${JSON.stringify(selectors)};
+    let list = [];
+    for (const s of sels) { try { list = list.concat(Array.from(document.querySelectorAll(s))); } catch (e) {} }
+    const el = list[${index}] || list[0];
+    if (el) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
+    return false;
+  })()`;
+  for (const frame of framesOf(page)) {
+    try {
+      if ((await frame.evaluate(code)) as boolean) return true;
+    } catch {
+      /* ignore */
+    }
+  }
+  return false;
 }
 
 /** Проверяет наличие любого из текстов на странице (по всем фреймам). */
@@ -228,8 +282,7 @@ export function parseCreditsNumber(text: string): number | null {
 
 /**
  * Собирает и логирует диагностику страницы: по каждому фрейму — заголовок,
- * список полей ввода и кнопок. Помогает точно понять, что на странице, а не
- * угадывать селекторы.
+ * список полей ввода и кнопок. Помогает точно понять, что на странице.
  */
 export async function dumpDiagnostics(page: Page, logger: Logger, label: string): Promise<void> {
   const code = `(() => {

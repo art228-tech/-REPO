@@ -5,7 +5,7 @@ import { sleep } from "../util/sleep.js";
 import { getAudioDurationSec } from "../util/audioDuration.js";
 import { ELEVENLABS } from "./constants.js";
 import { enableDownloads, moveDownload, snapshotDir, waitForNewDownload } from "./download.js";
-import { clickByText, dumpDiagnostics, textPresent, typeInto, waitForAny } from "./pageHelpers.js";
+import { clickByText, clickSelector, dumpDiagnostics, textPresent, typeInto, waitForAny } from "./pageHelpers.js";
 import { ELEVENLABS_SELECTORS } from "./selectors.js";
 import { OutOfCreditsError, SynthesizeParams, SynthesizeResult } from "./types.js";
 
@@ -68,16 +68,7 @@ export async function synthesize(page: Page, params: SynthesizeParams, logger: L
 async function selectVoice(page: Page, voiceName: string, logger: Logger): Promise<void> {
   const opened =
     (await clickByText(page, [voiceName], 3000)) ||
-    (await (async () => {
-      for (const sel of ELEVENLABS_SELECTORS.voiceSelector) {
-        const el = await page.$(sel).catch(() => null);
-        if (el) {
-          await el.click().catch(() => undefined);
-          return true;
-        }
-      }
-      return false;
-    })());
+    (await clickSelector(page, ELEVENLABS_SELECTORS.voiceSelector, 5000));
   if (!opened) {
     logger.warn("elevenlabs.tts", "Не удалось открыть селектор голоса — использую текущий выбранный");
     return;
@@ -96,13 +87,13 @@ async function waitForGenerationDone(page: Page, timeout: number, logger: Logger
   const start = Date.now();
   while (Date.now() - start < timeout) {
     if (await textPresent(page, ELEVENLABS_SELECTORS.outOfCreditsText)) return;
-    const downloadBtn = await waitForAny(
+    const hasDownloadBtn = await waitForAny(
       page,
-      ['button[aria-label*="download" i]', 'a[download]', 'button:has(svg)'],
+      ['button[aria-label*="download" i]', 'a[download]'],
       1500,
-    ).catch(() => null);
+    );
     const hasDownloadText = await textPresent(page, ELEVENLABS_SELECTORS.downloadButtonText);
-    if (downloadBtn && hasDownloadText) return;
+    if (hasDownloadBtn || hasDownloadText) return;
     await sleep(1000);
   }
   logger.warn("elevenlabs.tts", "Таймаут ожидания завершения генерации — пробую скачать как есть");
