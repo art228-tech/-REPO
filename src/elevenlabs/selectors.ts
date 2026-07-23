@@ -97,6 +97,44 @@ export const ELEVENLABS_SELECTORS = {
   downloadButtonText: ["Download", "Скачать", "Export"],
   settingsToggleText: ["Settings", "Voice settings", "Настройки"],
 
+  /** Кнопки принятия cookie (Cookiebot и общие). */
+  cookieAcceptSelectors: [
+    "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+    "#CybotCookiebotDialogBodyButtonAccept",
+    "#CybotCookiebotDialogBodyLevelButtonAccept",
+    'button[aria-label*="accept" i]',
+    'button[id*="accept" i]',
+  ],
+  cookieAcceptText: [
+    "Accept all cookies",
+    "Accept all",
+    "Allow all",
+    "Accept cookies",
+    "Принять все",
+    "Разрешить все",
+    "Принять",
+    "Accept",
+  ],
+
+  /** Онбординг: выбор платформы и переход дальше. */
+  onboardingPlatformText: ["ElevenCreative", "Text to Speech", "Creative"],
+  onboardingContinueText: [
+    "Continue",
+    "Get started",
+    "Get Started",
+    "Let's go",
+    "Next",
+    "Skip",
+    "Skip for now",
+    "Done",
+    "Finish",
+    "Продолжить",
+    "Начать",
+    "Далее",
+    "Пропустить",
+    "Готово",
+  ],
+
   /** Индикатор остатка кредитов (символов). */
   creditsMarkers: [
     '[data-testid="character-count"]',

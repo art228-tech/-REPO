@@ -3,6 +3,7 @@ import { GoogleAccount } from "../config/schema.js";
 import { Logger } from "../logging/logger.js";
 import { sleep } from "../util/sleep.js";
 import { ELEVENLABS } from "./constants.js";
+import { prepareApp } from "./appHelpers.js";
 import { clickByText, clickSelector, dumpDiagnostics, textPresent, typeInto, waitForAny } from "./pageHelpers.js";
 import { ELEVENLABS_SELECTORS, GOOGLE_SELECTORS } from "./selectors.js";
 import { generateTotp } from "./totp.js";
@@ -62,6 +63,8 @@ export async function loginWithGoogle(
     throw new Error("Вход Google прошёл, но приложение ElevenLabs не подтвердило авторизацию (сессия не установилась)");
   }
   logger.success("elevenlabs.login", "Успешный вход в ElevenLabs через Google");
+  // Закрыть cookie-баннер и пройти онбординг «Choose your platform».
+  await prepareApp(appPage, logger);
   return appPage;
 }
 
@@ -238,8 +241,9 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
   const url = safeUrl(page).toLowerCase();
   if (!url.includes("/app")) return false;
   if (/sign-in|signin|log-in|login|\/auth\/|register|sign-up|signup/.test(url)) return false;
-  // Видна форма входа → точно не залогинены.
+  // Видна форма входа → точно не залогинены. Иначе любая страница /app
+  // (включая /app/onboarding) считается залогиненной.
   if (await waitForAny(page, ['input[type="password"]', 'input[name="password"]'], 700)) return false;
-  return waitForAny(page, ELEVENLABS_SELECTORS.loggedInMarkers, 1500);
+  return true;
 }
 

@@ -2,6 +2,7 @@ import type { Page } from "puppeteer-core";
 import { Logger } from "../logging/logger.js";
 import { sleep } from "../util/sleep.js";
 import { ELEVENLABS, validatePreviewText, validateVoiceDescription } from "./constants.js";
+import { prepareApp } from "./appHelpers.js";
 import { clickByText, clickNth, countAny, dumpDiagnostics, textPresent, typeInto, waitForText } from "./pageHelpers.js";
 import { ELEVENLABS_SELECTORS } from "./selectors.js";
 import { CreatedVoice, DesignVoiceParams, NotLoggedInError, OutOfCreditsError, VoiceDescriptionError } from "./types.js";
@@ -27,6 +28,12 @@ export async function designVoice(page: Page, params: DesignVoiceParams, logger:
   logger.info("elevenlabs.voice", `Открываю Voice Design для "${voiceName}"`);
   await page.goto(ELEVENLABS.VOICE_DESIGN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await sleep(1500);
+  // Закрыть cookie / пройти онбординг, если всплыли, затем вернуться в Voice Design.
+  await prepareApp(page, logger);
+  if (page.url().toLowerCase().includes("onboarding")) {
+    await page.goto(ELEVENLABS.VOICE_DESIGN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 }).catch(() => undefined);
+    await sleep(1500);
+  }
   await clickByText(page, ELEVENLABS_SELECTORS.voiceDesignEntryText, 6000).catch(() => undefined);
   await dumpDiagnostics(page, logger, "Voice Design");
   if (/sign-in|signin|login|\/auth\//i.test(page.url())) {

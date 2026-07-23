@@ -5,6 +5,7 @@ import { sleep } from "../util/sleep.js";
 import { getAudioDurationSec } from "../util/audioDuration.js";
 import { ELEVENLABS } from "./constants.js";
 import { enableDownloads, moveDownload, snapshotDir, waitForNewDownload } from "./download.js";
+import { prepareApp } from "./appHelpers.js";
 import { clickByText, clickSelector, dumpDiagnostics, textPresent, typeInto, waitForAny } from "./pageHelpers.js";
 import { ELEVENLABS_SELECTORS } from "./selectors.js";
 import { OutOfCreditsError, SynthesizeParams, SynthesizeResult } from "./types.js";
@@ -20,6 +21,11 @@ export async function synthesize(page: Page, params: SynthesizeParams, logger: L
   logger.info("elevenlabs.tts", `Открываю Text to Speech, голос "${voice.name}"`);
   await page.goto(ELEVENLABS.TTS_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await sleep(1500);
+  await prepareApp(page, logger);
+  if (page.url().toLowerCase().includes("onboarding")) {
+    await page.goto(ELEVENLABS.TTS_URL, { waitUntil: "domcontentloaded", timeout: 60_000 }).catch(() => undefined);
+    await sleep(1500);
+  }
   await dumpDiagnostics(page, logger, "Text to Speech");
 
   await selectVoice(page, voice.name, logger);
