@@ -131,15 +131,22 @@ export class Orchestrator extends EventEmitter {
       await dolphin.authenticate();
 
       this.abortIfStopping();
-      this.update({ step: "Создание профиля" });
-      const profileName = `${config.profileNamePrefix}-${sessionId}`;
-      profileId = await dolphin.createProfile({
-        name: profileName,
-        platform: config.platform,
-        proxy: config.proxy,
-        mainWebsite: "https://elevenlabs.io",
-      });
-      this.update({ profileId });
+      const reuseId = config.reuseProfileId?.trim();
+      if (reuseId) {
+        profileId = reuseId;
+        this.update({ step: "Использую существующий профиль", profileId });
+        this.logger.info("orchestrator", `Использую существующий профиль Dolphin ${reuseId} (без создания/удаления)`);
+      } else {
+        this.update({ step: "Создание профиля" });
+        const profileName = `${config.profileNamePrefix}-${sessionId}`;
+        profileId = await dolphin.createProfile({
+          name: profileName,
+          platform: config.platform,
+          proxy: config.proxy,
+          mainWebsite: "https://elevenlabs.io",
+        });
+        this.update({ profileId });
+      }
 
       this.abortIfStopping();
       this.update({ step: "Запуск профиля" });
@@ -151,7 +158,10 @@ export class Orchestrator extends EventEmitter {
 
       this.abortIfStopping();
       this.update({ step: "Вход в ElevenLabs через Google" });
-      await el.loginWithGoogle(config.google);
+      await el.loginWithGoogle(config.google, {
+        manualAssist: config.manualAssist,
+        manualAssistTimeoutSec: config.manualAssistTimeoutSec,
+      });
 
       this.update({ step: "Создание голосов" });
       const voices = await this.createVoices(config, prompts, el);
@@ -376,9 +386,11 @@ export class Orchestrator extends EventEmitter {
         .stopProfile(profileId)
         .catch((e) => this.logger.warn("orchestrator", "Ошибка остановки профиля", { error: String(e) }));
 
+      // Переиспользуемый профиль никогда не удаляем.
+      const reused = Boolean(config.reuseProfileId?.trim());
       // При ошибке профиль НЕ удаляем — оставляем для диагностики.
       const endedWithError = this.status.state === "error";
-      if (config.deleteProfileOnFinish && !endedWithError) {
+      if (config.deleteProfileOnFinish && !endedWithError && !reused) {
         await dolphin
           .deleteProfile(profileId)
           .catch((e) => this.logger.warn("orchestrator", "Ошибка удаления профиля", { error: String(e) }));

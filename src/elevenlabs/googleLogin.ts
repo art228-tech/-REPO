@@ -7,6 +7,9 @@ import { prepareApp } from "./appHelpers.js";
 import { clickByText, clickSelector, dumpDiagnostics, textPresent, typeInto, waitForAny } from "./pageHelpers.js";
 import { ELEVENLABS_SELECTORS, GOOGLE_SELECTORS } from "./selectors.js";
 import { generateTotp } from "./totp.js";
+import { LoginOptions } from "./types.js";
+
+const DEFAULT_LOGIN_OPTIONS: LoginOptions = { manualAssist: true, manualAssistTimeoutSec: 300 };
 
 /**
  * Выполняет вход в ElevenLabs через Google. Обрабатывает как всплывающее окно
@@ -17,6 +20,7 @@ export async function loginWithGoogle(
   page: Page,
   account: GoogleAccount,
   logger: Logger,
+  options: LoginOptions = DEFAULT_LOGIN_OPTIONS,
 ): Promise<Page> {
   logger.info("elevenlabs.login", "Открываю страницу входа ElevenLabs");
   await page.goto(ELEVENLABS.SIGN_IN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
@@ -46,7 +50,7 @@ export async function loginWithGoogle(
   logger.info("elevenlabs.login", `Открыто окно входа Google`, { url: safeUrl(googlePage), popup: isPopup });
   await sleep(1000);
 
-  await performGoogleAuth(googlePage, account, logger);
+  await performGoogleAuth(browser, googlePage, account, logger, options);
 
   // Если был popup — дождаться его закрытия; иначе вернуться в приложение.
   if (isPopup) {
@@ -167,21 +171,79 @@ async function assertNotBlocked(page: Page, logger: Logger): Promise<void> {
   }
 }
 
-/** Проходит форму Google: email → пароль → (опционально) 2FA → согласие. */
-async function performGoogleAuth(page: Page, account: GoogleAccount, logger: Logger): Promise<void> {
-  // Дать форме прогрузиться и снять диагностику того, что реально на странице.
+/** Признак экрана проверки (reCAPTCHA / verify / 2FA), требующего ручного действия. */
+async function isChallenge(page: Page): Promise<boolean> {
+  const url = safeUrl(page).toLowerCase();
+  if (/challenge|recaptcha|captcha|\/totp|two-step|twostep|2sv/.test(url)) return true;
+  return textPresent(page, GOOGLE_SELECTORS.challengeText);
+}
+
+/**
+ * Ждёт появления поля пароля. Если Google показал проверку (reCAPTCHA/verify/
+ * 2FA) — при manualAssist ставит паузу и ждёт, пока ПОЛЬЗОВАТЕЛЬ пройдёт её
+ * вручную в окне браузера Dolphin (капчу автоматизировать нельзя). Возвращает
+ * true, если поле пароля появилось; или бросает, если время вышло.
+ */
+async function waitForPasswordWithManualAssist(
+  browser: Browser,
+  page: Page,
+  account: GoogleAccount,
+  logger: Logger,
+  options: LoginOptions,
+): Promise<boolean> {
+  const deadline = Date.now() + Math.max(30, options.manualAssistTimeoutSec) * 1000;
+  let manualNotified = false;
+  while (Date.now() < deadline) {
+    // Уже вошли (иногда после проверки сразу редиректит в приложение)?
+    const app = await findElevenLabsPage(browser, page);
+    if (await isLoggedIn(app)) return false;
+    // 2FA (TOTP) с автоматическим кодом.
+    if (await waitForAny(page, GOOGLE_SELECTORS.totpInput, 500)) {
+      if (account.totpSecret) return false; // обработаем TOTP отдельно ниже
+    }
+    if (await waitForAny(page, GOOGLE_SELECTORS.passwordInput, 800)) return true;
+
+    if (await isChallenge(page)) {
+      if (!options.manualAssist) {
+        await dumpDiagnostics(page, logger, "требуется проверка (капча/2FA), ручной режим выключен");
+        throw new Error(
+          "Google требует проверку (reCAPTCHA/«Verify it's you»). Включите «Ручное подтверждение» в настройках или используйте существующий залогиненный профиль.",
+        );
+      }
+      if (!manualNotified) {
+        manualNotified = true;
+        await dumpDiagnostics(page, logger, "экран проверки Google (reCAPTCHA/verify/2FA)");
+        logger.warn(
+          "elevenlabs.login",
+          "⚠️ ТРЕБУЕТСЯ РУЧНОЕ ДЕЙСТВИЕ: пройдите проверку (reCAPTCHA/«Verify it's you») в ОТКРЫТОМ окне браузера Dolphin. Софт продолжит автоматически. Жду...",
+          { waitSec: options.manualAssistTimeoutSec },
+        );
+        await page.bringToFront().catch(() => undefined);
+      }
+    }
+    await sleep(2000);
+  }
+  return false;
+}
+
+/** Проходит форму Google: email → (проверка вручную) → пароль → 2FA → согласие. */
+async function performGoogleAuth(
+  browser: Browser,
+  page: Page,
+  account: GoogleAccount,
+  logger: Logger,
+  options: LoginOptions,
+): Promise<void> {
   await sleep(2000);
   await dumpDiagnostics(page, logger, "экран входа Google (до ввода email)");
   await assertNotBlocked(page, logger);
 
-  // Если Google показал выбор аккаунта — жмём «Использовать другой аккаунт».
   await clickByText(
     page,
     ["Use another account", "Add account", "Другой аккаунт", "Добавить аккаунт", "Использовать другой"],
     3000,
   ).catch(() => undefined);
 
-  // Через прокси Google грузится медленно — даём поля до 60 сек, пробуем несколько методов.
   logger.info("elevenlabs.login", "Ввожу email Google", { email: account.email });
   const emailTyped = await typeInto(page, GOOGLE_SELECTORS.emailInput, account.email, { timeout: 60_000 });
   if (!emailTyped) {
@@ -190,45 +252,60 @@ async function performGoogleAuth(page: Page, account: GoogleAccount, logger: Log
     throw new Error(`Не нашёл поле email Google (страница: ${safeUrl(page) || "неизвестно"})`);
   }
   await sleep(500);
-  // Переход дальше: кнопка «Далее» ИЛИ Enter (запасной вариант).
   if (!(await clickByText(page, GOOGLE_SELECTORS.emailNextText, 6000))) {
     await page.keyboard.press("Enter").catch(() => undefined);
   }
 
-  logger.info("elevenlabs.login", "Ожидаю поле пароля Google");
-  const passField = await waitForAny(page, GOOGLE_SELECTORS.passwordInput, 60_000);
-  if (!passField) {
-    await dumpDiagnostics(page, logger, "не найдено поле пароля");
-    await assertNotBlocked(page, logger);
-    throw new Error("Не появилось поле пароля Google (возможно, требуется подтверждение устройства/капча)");
-  }
-  await sleep(500);
-  logger.info("elevenlabs.login", "Ввожу пароль Google");
-  await typeInto(page, GOOGLE_SELECTORS.passwordInput, account.password, { timeout: 60_000 });
-  await sleep(500);
-  if (!(await clickByText(page, GOOGLE_SELECTORS.passwordNextText, 6000))) {
-    await page.keyboard.press("Enter").catch(() => undefined);
-  }
-  await sleep(2500);
-
-  // 2FA по TOTP, если настроен секрет и появилось поле.
-  const totpField = await waitForAny(page, GOOGLE_SELECTORS.totpInput, 10_000);
-  if (totpField) {
-    if (!account.totpSecret) {
-      await dumpDiagnostics(page, logger, "запрошен 2FA, но totpSecret не задан");
-      throw new Error("Google запросил 2FA-код, но totpSecret не указан в настройках");
-    }
-    const code = generateTotp(account.totpSecret);
-    logger.info("elevenlabs.login", "Ввожу 2FA (TOTP) код");
-    await typeInto(page, GOOGLE_SELECTORS.totpInput, code, { timeout: 20_000 });
+  logger.info("elevenlabs.login", "Ожидаю поле пароля Google (при капче — ручное подтверждение)");
+  const hasPassword = await waitForPasswordWithManualAssist(browser, page, account, logger, options);
+  if (hasPassword) {
+    await sleep(500);
+    logger.info("elevenlabs.login", "Ввожу пароль Google");
+    await typeInto(page, GOOGLE_SELECTORS.passwordInput, account.password, { timeout: 60_000 });
+    await sleep(500);
     if (!(await clickByText(page, GOOGLE_SELECTORS.passwordNextText, 6000))) {
       await page.keyboard.press("Enter").catch(() => undefined);
     }
     await sleep(2500);
   }
 
-  // Экран подтверждения доступа (Continue/Allow), если появился.
+  // 2FA по TOTP, если настроен секрет и появилось поле.
+  const totpField = await waitForAny(page, GOOGLE_SELECTORS.totpInput, 8000);
+  if (totpField) {
+    if (account.totpSecret) {
+      const code = generateTotp(account.totpSecret);
+      logger.info("elevenlabs.login", "Ввожу 2FA (TOTP) код");
+      await typeInto(page, GOOGLE_SELECTORS.totpInput, code, { timeout: 20_000 });
+      if (!(await clickByText(page, GOOGLE_SELECTORS.passwordNextText, 6000))) {
+        await page.keyboard.press("Enter").catch(() => undefined);
+      }
+      await sleep(2500);
+    } else if (options.manualAssist) {
+      logger.warn("elevenlabs.login", "⚠️ ТРЕБУЕТСЯ РУЧНОЕ ДЕЙСТВИЕ: введите 2FA-код в окне браузера Dolphin. Жду...");
+      // Ждём, пока пользователь введёт код и пройдёт дальше.
+      const deadline = Date.now() + Math.max(30, options.manualAssistTimeoutSec) * 1000;
+      while (Date.now() < deadline) {
+        const app = await findElevenLabsPage(browser, page);
+        if (await isLoggedIn(app)) break;
+        await sleep(2000);
+      }
+    } else {
+      throw new Error("Google запросил 2FA-код, но totpSecret не указан и ручной режим выключен");
+    }
+  }
+
+  // Экран подтверждения доступа (Continue/Allow) — если появился, но капчу тут
+  // тоже могут показать: даём ручное время при необходимости.
   await clickByText(page, GOOGLE_SELECTORS.approveButtonText, 8000).catch(() => undefined);
+  if (options.manualAssist && (await isChallenge(page))) {
+    logger.warn("elevenlabs.login", "⚠️ ТРЕБУЕТСЯ РУЧНОЕ ДЕЙСТВИЕ: завершите проверку Google в окне браузера. Жду...");
+    const deadline = Date.now() + Math.max(30, options.manualAssistTimeoutSec) * 1000;
+    while (Date.now() < deadline) {
+      const app = await findElevenLabsPage(browser, page);
+      if (await isLoggedIn(app)) break;
+      await sleep(2000);
+    }
+  }
 }
 
 /**

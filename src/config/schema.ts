@@ -93,6 +93,16 @@ export const appConfigSchema = z.object({
   platform: z.enum(["windows", "macos", "linux"]).default("windows"),
   /** Префикс имени создаваемого профиля. */
   profileNamePrefix: z.string().default("EL-Auto"),
+  /**
+   * ID существующего профиля Dolphin для повторного использования. Если задан —
+   * профиль НЕ создаётся и НЕ удаляется; используется уже залогиненный профиль
+   * (капчу/вход проходите один раз вручную, дальше — автоматически).
+   */
+  reuseProfileId: z.string().optional().default(""),
+  /** Разрешить паузу для ручного прохождения reCAPTCHA/2FA в окне браузера. */
+  manualAssist: z.boolean().default(true),
+  /** Сколько секунд ждать ручного действия (капча/2FA). */
+  manualAssistTimeoutSec: z.coerce.number().int().min(30).max(1800).default(300),
 
   /** Удалять профиль после завершения работы. */
   deleteProfileOnFinish: z.boolean().default(true),
@@ -149,6 +159,9 @@ export const defaultConfig: Partial<AppConfig> = {
   dolphinRemoteApi: "https://dolphin-anty-api.com",
   platform: "windows",
   profileNamePrefix: "EL-Auto",
+  reuseProfileId: "",
+  manualAssist: true,
+  manualAssistTimeoutSec: 300,
   deleteProfileOnFinish: true,
   consumeTextFiles: true,
   headless: false,

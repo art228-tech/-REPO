@@ -11,6 +11,7 @@ import {
   CreatedVoice,
   DesignVoiceParams,
   IElevenLabsAutomation,
+  LoginOptions,
   SynthesizeParams,
   SynthesizeResult,
 } from "./types.js";
@@ -49,9 +50,9 @@ export class ElevenLabsAutomation implements IElevenLabsAutomation {
     return this.browser;
   }
 
-  async loginWithGoogle(account: GoogleAccount): Promise<void> {
+  async loginWithGoogle(account: GoogleAccount, options?: LoginOptions): Promise<void> {
     // Вход может завершиться на другой вкладке — используем ту, что вернул логин.
-    this.page = await loginWithGoogle(this.requireBrowser(), this.requirePage(), account, this.logger);
+    this.page = await loginWithGoogle(this.requireBrowser(), this.requirePage(), account, this.logger, options);
   }
 
   async getRemainingCredits(): Promise<number> {

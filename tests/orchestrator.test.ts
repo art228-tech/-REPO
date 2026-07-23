@@ -141,6 +141,21 @@ describe("Orchestrator (dry-run с симуляторами)", () => {
     expect(dolphin.deleted.length).toBe(0); // профиль оставлен
   });
 
+  it("переиспользует существующий профиль: не создаёт и не удаляет", async () => {
+    const { promptsDir, textsDir, downloadDir } = await setupDirs(1);
+    const logger = makeLogger();
+    const dolphin = new SimulatedDolphinService(logger);
+    const el = new SimulatedElevenLabs(logger, { initialCredits: 100000, latencyMs: 0 });
+    const orch = new Orchestrator(logger);
+    const cfg = baseConfig({ promptsDir, textsDir, downloadDir, reuseProfileId: "my-profile-42", deleteProfileOnFinish: true });
+    const status = await orch.run(cfg, { dolphin, elevenlabs: el });
+    expect(status.state).toBe("done");
+    expect(dolphin.created.length).toBe(0); // профиль не создавался
+    expect(status.profileId).toBe("my-profile-42");
+    expect(dolphin.started).toEqual(["my-profile-42"]);
+    expect(dolphin.deleted.length).toBe(0); // и не удалялся
+  });
+
   it("не удаляет профиль, если deleteProfileOnFinish=false", async () => {
     const { promptsDir, textsDir, downloadDir } = await setupDirs(1);
     const logger = makeLogger();

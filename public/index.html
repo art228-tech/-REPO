@@ -202,6 +202,16 @@
               <input id="minCreditsThreshold" type="number" min="0" value="0" />
             </div>
           </div>
+          <div class="field">
+            <label>ID существующего профиля Dolphin (опц. — вход один раз, потом переиспользуется)</label>
+            <input id="reuseProfileId" type="text" placeholder="напр. 829790460" />
+            <p class="hint">Если указан — профиль не создаётся и не удаляется. Залогиньтесь/пройдите капчу в нём один раз, дальше софт заходит без входа.</p>
+          </div>
+          <label class="checkbox"><input id="manualAssist" type="checkbox" checked /> Ручное подтверждение капчи/2FA (пауза до ввода вами)</label>
+          <div class="field">
+            <label>Сколько ждать ручного действия, сек</label>
+            <input id="manualAssistTimeoutSec" type="number" min="30" max="1800" value="300" />
+          </div>
           <div class="grid-2">
             <div class="field">
               <label>Мин. длительность озвучки, сек</label>

@@ -10,6 +10,7 @@ import {
   CreatedVoice,
   DesignVoiceParams,
   IElevenLabsAutomation,
+  LoginOptions,
   OutOfCreditsError,
   SynthesizeParams,
   SynthesizeResult,
@@ -51,7 +52,7 @@ export class SimulatedElevenLabs implements IElevenLabsAutomation {
     this.logger?.info("elevenlabs.sim", "Симуляция: подключение к браузеру");
   }
 
-  async loginWithGoogle(account: GoogleAccount): Promise<void> {
+  async loginWithGoogle(account: GoogleAccount, _options?: LoginOptions): Promise<void> {
     await sleep(this.latency);
     this.logger?.success("elevenlabs.sim", "Симуляция: вход через Google", { email: account.email });
   }

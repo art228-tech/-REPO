@@ -26,6 +26,24 @@ export const GOOGLE_SELECTORS = {
   passwordNextText: ["Далее", "Next", "Продолжить", "Continue"],
   totpInput: ['input[name="totpPin"]', "#totpPin", 'input[type="tel"]', 'input[autocomplete="one-time-code"]'],
   approveButtonText: ["Продолжить", "Continue", "Разрешить", "Allow", "Подтвердить", "Confirm"],
+  /** Признаки экрана проверки (reCAPTCHA / «Verify it's you» / 2FA) — требуют ручного действия. */
+  challengeText: [
+    "verify it's you",
+    "verify it’s you",
+    "i'm not a robot",
+    "i’m not a robot",
+    "confirm you're not a robot",
+    "recaptcha",
+    "2-step verification",
+    "2-step",
+    "enter the code",
+    "подтвердите, что это вы",
+    "подтвердите, что вы не робот",
+    "я не робот",
+    "двухэтап",
+    "введите код",
+  ],
+
   /** Признаки блокировки автоматизированного входа со стороны Google. */
   blockedText: [
     "couldn't sign you in",

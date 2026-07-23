@@ -33,11 +33,19 @@ export interface SynthesizeResult {
  * Абстракция автоматизации ElevenLabs. Есть две реализации:
  * настоящая (Puppeteer + Dolphin) и симулятор (для dry-run/тестов).
  */
+/** Параметры входа: ручное подтверждение при капче/2FA. */
+export interface LoginOptions {
+  /** Разрешить паузу для ручного прохождения reCAPTCHA/2FA в окне браузера. */
+  manualAssist: boolean;
+  /** Сколько секунд ждать ручного действия. */
+  manualAssistTimeoutSec: number;
+}
+
 export interface IElevenLabsAutomation {
   /** Подключение к уже запущенному профилю Dolphin по CDP. */
   connect(endpoint: AutomationEndpoint): Promise<void>;
   /** Вход в ElevenLabs через Google-аккаунт. */
-  loginWithGoogle(account: GoogleAccount): Promise<void>;
+  loginWithGoogle(account: GoogleAccount, options?: LoginOptions): Promise<void>;
   /** Остаток кредитов (символов) на аккаунте. */
   getRemainingCredits(): Promise<number>;
   /** Создание голоса через Voice Design. */
