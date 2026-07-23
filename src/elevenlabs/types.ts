@@ -33,12 +33,16 @@ export interface SynthesizeResult {
  * Абстракция автоматизации ElevenLabs. Есть две реализации:
  * настоящая (Puppeteer + Dolphin) и симулятор (для dry-run/тестов).
  */
-/** Параметры входа: ручное подтверждение при капче/2FA. */
+/** Параметры входа: способ, ручное подтверждение при капче/2FA. */
 export interface LoginOptions {
-  /** Разрешить паузу для ручного прохождения reCAPTCHA/2FA в окне браузера. */
+  /** Разрешить паузу для ручного прохождения reCAPTCHA/2FA/капчи в окне браузера. */
   manualAssist: boolean;
   /** Сколько секунд ждать ручного действия. */
   manualAssistTimeoutSec: number;
+  /** Способ входа: через Google OAuth или по почте (нативная форма ElevenLabs). */
+  method?: "google" | "email";
+  /** Пароль ElevenLabs для входа по почте (если отличается от пароля Google). */
+  elevenPassword?: string;
 }
 
 export interface IElevenLabsAutomation {

@@ -163,6 +163,8 @@ export class Orchestrator extends EventEmitter {
       await el.loginWithGoogle(config.google, {
         manualAssist: config.manualAssist,
         manualAssistTimeoutSec: config.manualAssistTimeoutSec,
+        method: config.loginMethod,
+        elevenPassword: config.elevenLabsPassword,
       });
       if (el.manualLoginUsed && !config.reuseProfileId?.trim() && profileId) {
         // Пользователь прошёл капчу/телефон вручную — сохраняем профиль, чтобы

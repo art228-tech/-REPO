@@ -3,7 +3,7 @@ import { GoogleAccount } from "../config/schema.js";
 import { Logger } from "../logging/logger.js";
 import { sleep } from "../util/sleep.js";
 import { ELEVENLABS } from "./constants.js";
-import { prepareApp } from "./appHelpers.js";
+import { dismissCookies, prepareApp } from "./appHelpers.js";
 import { clickByText, clickSelector, dumpDiagnostics, textPresent, typeInto, waitForAny } from "./pageHelpers.js";
 import { ELEVENLABS_SELECTORS, GOOGLE_SELECTORS } from "./selectors.js";
 import { generateTotp } from "./totp.js";
@@ -163,6 +163,81 @@ async function findGoogleAuthPage(
   }
   logger.warn("elevenlabs.login", "Окно входа Google не найдено по URL за отведённое время");
   return null;
+}
+
+/**
+ * Вход по почте через нативную форму ElevenLabs (email + пароль). Обходит
+ * телефонную проверку Google. Логин — это email (может быть gmail), а пароль —
+ * пароль аккаунта ElevenLabs (не пароль Google!). На форме есть hCaptcha: если
+ * появится видимая — при manualAssist ждём ручного прохождения.
+ */
+export async function loginWithEmail(
+  browser: Browser,
+  page: Page,
+  email: string,
+  password: string,
+  logger: Logger,
+  options: LoginOptions = DEFAULT_LOGIN_OPTIONS,
+): Promise<LoginResult> {
+  logger.info("elevenlabs.login", "Открываю страницу входа ElevenLabs (по почте)");
+  await page.goto(ELEVENLABS.SIGN_IN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await sleep(1500);
+  if (await isLoggedIn(page)) {
+    logger.success("elevenlabs.login", "Уже выполнен вход, пропускаю авторизацию");
+    return { page, manualUsed: false };
+  }
+
+  await dismissCookies(page, logger);
+  await dumpDiagnostics(page, logger, "форма входа ElevenLabs (email+пароль)");
+
+  logger.info("elevenlabs.login", "Ввожу email", { email });
+  const emailOk = await typeInto(page, ELEVENLABS_SELECTORS.emailInput, email, { timeout: 30_000 });
+  if (!emailOk) throw new Error("Не нашёл поле email на форме входа ElevenLabs");
+  logger.info("elevenlabs.login", "Ввожу пароль ElevenLabs");
+  const passOk = await typeInto(page, ELEVENLABS_SELECTORS.passwordInput, password, { timeout: 30_000 });
+  if (!passOk) throw new Error("Не нашёл поле пароля на форме входа ElevenLabs");
+  await sleep(400);
+  if (!(await clickByText(page, ELEVENLABS_SELECTORS.signInButtonText, 6000))) {
+    await page.keyboard.press("Enter").catch(() => undefined);
+  }
+
+  // Ждём вход; обрабатываем ошибку пароля и hCaptcha (ручное прохождение).
+  const deadline = Date.now() + Math.max(30, options.manualAssistTimeoutSec) * 1000;
+  let manualUsed = false;
+  let manualNotified = false;
+  const start = Date.now();
+  while (Date.now() < deadline) {
+    const app = await findElevenLabsPage(browser, page);
+    if (await isLoggedIn(app)) {
+      logger.success("elevenlabs.login", "Успешный вход в ElevenLabs по почте");
+      await prepareApp(app, logger);
+      return { page: app, manualUsed };
+    }
+    if (await textPresent(page, ELEVENLABS_SELECTORS.loginErrorText)) {
+      await dumpDiagnostics(page, logger, "ошибка входа по почте");
+      throw new Error(
+        "ElevenLabs отклонил email/пароль. Если аккаунт создан через Google — задайте пароль ElevenLabs через «Forgot password», затем впишите его в настройки.",
+      );
+    }
+    const captcha = await textPresent(page, ELEVENLABS_SELECTORS.hcaptchaText);
+    // Если через ~15с всё ещё не вошли — вероятно капча/подтверждение.
+    if ((captcha || Date.now() - start > 15_000) && options.manualAssist && !manualNotified) {
+      manualNotified = true;
+      manualUsed = true;
+      await dumpDiagnostics(page, logger, "вход по почте: возможно требуется капча/подтверждение");
+      logger.warn(
+        "elevenlabs.login",
+        "⚠️ ТРЕБУЕТСЯ РУЧНОЕ ДЕЙСТВИЕ: если в окне браузера показана капча (hCaptcha) или подтверждение — пройдите её вручную. Софт продолжит сам. Жду...",
+      );
+      await page.bringToFront().catch(() => undefined);
+    }
+    if (!options.manualAssist && captcha) {
+      throw new Error("Вход по почте требует капчу (hCaptcha), а ручной режим выключен. Включите его или используйте reuseProfileId.");
+    }
+    await sleep(2000);
+  }
+  await dumpDiagnostics(page, logger, "вход по почте не подтверждён");
+  throw new Error("Вход по почте не подтверждён вовремя (капча/неверный пароль/медленная сеть)");
 }
 
 /** Бросает понятную ошибку, если Google заблокировал автоматизированный вход. */

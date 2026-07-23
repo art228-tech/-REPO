@@ -4,7 +4,7 @@ import { AutomationEndpoint } from "../dolphin/types.js";
 import { Logger } from "../logging/logger.js";
 import { sleep } from "../util/sleep.js";
 import { ELEVENLABS } from "./constants.js";
-import { loginWithGoogle } from "./googleLogin.js";
+import { loginWithEmail, loginWithGoogle } from "./googleLogin.js";
 import { parseCreditsNumber } from "./pageHelpers.js";
 import { synthesize } from "./tts.js";
 import {
@@ -53,7 +53,19 @@ export class ElevenLabsAutomation implements IElevenLabsAutomation {
 
   async loginWithGoogle(account: GoogleAccount, options?: LoginOptions): Promise<void> {
     // Вход может завершиться на другой вкладке — используем ту, что вернул логин.
-    const result = await loginWithGoogle(this.requireBrowser(), this.requirePage(), account, this.logger, options);
+    const browser = this.requireBrowser();
+    const page = this.requirePage();
+    const result =
+      options?.method === "email"
+        ? await loginWithEmail(
+            browser,
+            page,
+            account.email,
+            options.elevenPassword || account.password,
+            this.logger,
+            options,
+          )
+        : await loginWithGoogle(browser, page, account, this.logger, options);
     this.page = result.page;
     this.manualLoginUsed = result.manualUsed;
   }

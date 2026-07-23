@@ -98,14 +98,26 @@
         </div>
 
         <div class="card">
-          <h2>🔑 Google аккаунт</h2>
+          <h2>🔑 Аккаунт и способ входа</h2>
           <div class="field">
-            <label>Email</label>
+            <label>Способ входа</label>
+            <select id="loginMethod">
+              <option value="google">Через Google (OAuth)</option>
+              <option value="email">По почте (email + пароль ElevenLabs)</option>
+            </select>
+            <p class="hint">«По почте» обходит телефонную проверку Google. Логин — ваша почта (можно gmail), пароль — от аккаунта ElevenLabs. Если аккаунт создан через Google — задайте пароль на elevenlabs.io через «Forgot password».</p>
+          </div>
+          <div class="field">
+            <label>Email (логин)</label>
             <input id="google.email" type="text" placeholder="mail@gmail.com" />
           </div>
           <div class="field">
-            <label>Пароль</label>
+            <label>Пароль Google (для входа через Google)</label>
             <input id="google.password" type="password" />
+          </div>
+          <div class="field">
+            <label>Пароль ElevenLabs (для входа по почте)</label>
+            <input id="elevenLabsPassword" type="password" />
           </div>
           <div class="grid-2">
             <div class="field">

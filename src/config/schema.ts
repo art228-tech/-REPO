@@ -99,7 +99,11 @@ export const appConfigSchema = z.object({
    * (капчу/вход проходите один раз вручную, дальше — автоматически).
    */
   reuseProfileId: z.string().optional().default(""),
-  /** Разрешить паузу для ручного прохождения reCAPTCHA/2FA в окне браузера. */
+  /** Способ входа: через Google OAuth или по почте (нативная форма ElevenLabs). */
+  loginMethod: z.enum(["google", "email"]).default("google"),
+  /** Пароль ElevenLabs для входа по почте (если аккаунт создан через Google — задайте его через Forgot password). */
+  elevenLabsPassword: z.string().optional().default(""),
+  /** Разрешить паузу для ручного прохождения reCAPTCHA/2FA/капчи в окне браузера. */
   manualAssist: z.boolean().default(true),
   /** Сколько секунд ждать ручного действия (капча/2FA). */
   manualAssistTimeoutSec: z.coerce.number().int().min(30).max(1800).default(300),
@@ -160,6 +164,8 @@ export const defaultConfig: Partial<AppConfig> = {
   platform: "windows",
   profileNamePrefix: "EL-Auto",
   reuseProfileId: "",
+  loginMethod: "google",
+  elevenLabsPassword: "",
   manualAssist: true,
   manualAssistTimeoutSec: 300,
   deleteProfileOnFinish: true,

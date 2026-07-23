@@ -79,6 +79,30 @@ export const ELEVENLABS_SELECTORS = {
     'button:has(img[alt*="Google"])',
   ],
 
+  /** Нативная форма входа ElevenLabs (email + пароль). */
+  emailInput: ['input[type="email"]', 'input[name="email"]', 'input[autocomplete="email"]', 'input[placeholder*="email" i]'],
+  passwordInput: [
+    'input[type="password"]',
+    'input[name="password"]',
+    'input[autocomplete="current-password"]',
+    'input[placeholder*="password" i]',
+  ],
+  signInButtonText: ["Sign in", "Sign In", "Log in", "Log In", "Continue with email", "Войти", "Продолжить"],
+  /** Признаки неверных данных входа. */
+  loginErrorText: [
+    "incorrect",
+    "wrong password",
+    "invalid email or password",
+    "invalid credentials",
+    "doesn't match",
+    "does not match",
+    "no account",
+    "неверн",
+    "неправильн",
+  ],
+  /** Признаки капчи hCaptcha (видимой). */
+  hcaptchaText: ["verify you are human", "i am human", "hcaptcha", "select all images", "выберите все"],
+
   /** Признак успешного входа: наличие сайдбара/навигации приложения. */
   loggedInMarkers: ['nav[aria-label]', '[data-testid="sidebar"]', 'a[href*="/app/"]'],
 

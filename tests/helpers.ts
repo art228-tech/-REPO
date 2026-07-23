@@ -55,6 +55,8 @@ export function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     platform: "windows",
     profileNamePrefix: "EL-Auto",
     reuseProfileId: "",
+    loginMethod: "google",
+    elevenLabsPassword: "",
     manualAssist: true,
     manualAssistTimeoutSec: 300,
     deleteProfileOnFinish: true,
