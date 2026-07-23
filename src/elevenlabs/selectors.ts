@@ -111,8 +111,21 @@ export const ELEVENLABS_SELECTORS = {
   /** Признак успешного входа: наличие сайдбара/навигации приложения. */
   loggedInMarkers: ['nav[aria-label]', '[data-testid="sidebar"]', 'a[href*="/app/"]'],
 
-  /** Voice Design. */
-  voiceDesignEntryText: ["Voice Design", "Design", "Создать голос", "Дизайн голоса"],
+  /** Voice Design: сначала открыть меню создания голоса. */
+  voiceDesignEntryText: ["Create Voice", "Create a voice", "Create a Voice", "Создать голос", "Создать"],
+  /** Затем выбрать вариант «Voice Design» (создание по текстовому промпту). */
+  voiceDesignOptionText: [
+    "Voice Design",
+    "Text to Voice",
+    "Design a voice",
+    "Design voice",
+    "Create from a prompt",
+    "Describe your voice",
+    "from a prompt",
+    "Дизайн голоса",
+    "по описанию",
+    "по промпту",
+  ],
   voiceDescriptionTextarea: [
     'textarea[placeholder*="describe" i]',
     'textarea[placeholder*="voice" i]',

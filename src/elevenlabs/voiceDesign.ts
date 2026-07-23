@@ -34,13 +34,24 @@ export async function designVoice(page: Page, params: DesignVoiceParams, logger:
     await page.goto(ELEVENLABS.VOICE_DESIGN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 }).catch(() => undefined);
     await sleep(1500);
   }
-  await clickByText(page, ELEVENLABS_SELECTORS.voiceDesignEntryText, 6000).catch(() => undefined);
-  await dumpDiagnostics(page, logger, "Voice Design");
   if (/sign-in|signin|login|\/auth\//i.test(page.url())) {
     throw new NotLoggedInError(
-      "Voice Design перекинул на страницу входа — вход в ElevenLabs не выполнен (проверьте пароль Google).",
+      "Voice Design перекинул на страницу входа — вход в ElevenLabs не выполнен.",
     );
   }
+  await dumpDiagnostics(page, logger, "страница Voices (до открытия меню создания)");
+
+  // Шаг 1: открыть меню создания голоса («Create Voice» / «Create a voice»).
+  logger.info("elevenlabs.voice", "Открываю меню создания голоса");
+  await clickByText(page, ELEVENLABS_SELECTORS.voiceDesignEntryText, 12_000).catch(() => undefined);
+  await sleep(1500);
+  await dumpDiagnostics(page, logger, "меню создания голоса (выбор типа)");
+
+  // Шаг 2: выбрать «Voice Design» (создание по текстовому промпту).
+  logger.info("elevenlabs.voice", "Выбираю вариант Voice Design");
+  await clickByText(page, ELEVENLABS_SELECTORS.voiceDesignOptionText, 8000).catch(() => undefined);
+  await sleep(1500);
+  await dumpDiagnostics(page, logger, "форма Voice Design (поле описания)");
 
   const descTyped = await typeInto(page, ELEVENLABS_SELECTORS.voiceDescriptionTextarea, desc.value, {
     timeout: 30_000,
