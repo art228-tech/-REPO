@@ -26,6 +26,24 @@ export interface FoundElement {
   el: ElementHandle<Element>;
 }
 
+/**
+ * Проверяет видимость элемента по offsetWidth/offsetHeight (нативно, через
+ * getProperty). ВАЖНО: boundingBox() у Puppeteer в popup-окнах антидетект-
+ * браузера часто возвращает null (окно «не отрисовано» для CDP), хотя элемент
+ * реально виден, поэтому используем layout-свойства, как в диагностике.
+ */
+async function isVisibleHandle(el: ElementHandle<Element>): Promise<boolean> {
+  try {
+    const w = Number(await (await el.getProperty("offsetWidth")).jsonValue()) || 0;
+    const h = Number(await (await el.getProperty("offsetHeight")).jsonValue()) || 0;
+    if (w > 0 || h > 0) return true;
+    const rects = Number(await (await el.getProperty("clientHeight")).jsonValue()) || 0;
+    return rects > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Ищет по всем фреймам первый видимый элемент по любому из селекторов. */
 export async function findAny(page: Page, selectors: string[], timeout = 20_000): Promise<FoundElement | null> {
   const deadline = Date.now() + timeout;
@@ -33,10 +51,9 @@ export async function findAny(page: Page, selectors: string[], timeout = 20_000)
     for (const frame of framesOf(page)) {
       for (const selector of selectors) {
         try {
-          const el = (await frame.$(selector)) as ElementHandle<Element> | null;
-          if (el) {
-            const box = await el.boundingBox().catch(() => null);
-            if (box && box.width > 0 && box.height > 0) return { frame, el };
+          const els = (await frame.$$(selector)) as ElementHandle<Element>[];
+          for (const el of els) {
+            if (await isVisibleHandle(el)) return { frame, el };
           }
         } catch {
           // навигация/пересоздание контекста/невалидный селектор — пробуем снова
@@ -90,32 +107,38 @@ export async function typeInto(
   const { frame, el } = found;
   const delay = options.delay ?? 20;
 
-  // Метод 1
-  try {
-    await el.click({ clickCount: 3 });
-    await page.keyboard.press("Backspace").catch(() => undefined);
-    await el.type(value, { delay });
-  } catch {
-    /* ignore */
-  }
-  if (await valueEntered(el, value)) return true;
-
-  // Метод 2
+  // Метод 1: focus + клавиатура. Самый надёжный, не требует «отрисовки» окна
+  // (в отличие от el.click(), который использует box model и падает в popup).
   try {
     await el.focus();
+    // Выделить всё и стереть (Ctrl/Cmd+A → Backspace), затем печатать.
+    await page.keyboard.down("Control").catch(() => undefined);
+    await page.keyboard.press("KeyA").catch(() => undefined);
+    await page.keyboard.up("Control").catch(() => undefined);
+    await page.keyboard.press("Backspace").catch(() => undefined);
     await page.keyboard.type(value, { delay });
   } catch {
     /* ignore */
   }
   if (await valueEntered(el, value)) return true;
 
-  // Метод 3 (JS через строковый evaluate — безопасно для бинарника)
+  // Метод 2: JS-установка value активному элементу (строковый evaluate).
   try {
     await el.focus();
     const code = `(() => { const el = document.activeElement; if (el) { el.value = ${JSON.stringify(
       value,
     )}; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return true; } return false; })()`;
     await frame.evaluate(code);
+  } catch {
+    /* ignore */
+  }
+  if (await valueEntered(el, value)) return true;
+
+  // Метод 3: тройной клик + печать (если окно всё же отрисовано).
+  try {
+    await el.click({ clickCount: 3 });
+    await page.keyboard.press("Backspace").catch(() => undefined);
+    await el.type(value, { delay });
   } catch {
     /* ignore */
   }
