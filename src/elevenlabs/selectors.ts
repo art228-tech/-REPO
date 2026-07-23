@@ -5,12 +5,37 @@
  * достаточно поправить селекторы здесь, не трогая логику.
  */
 export const GOOGLE_SELECTORS = {
-  emailInput: ['input[type="email"]', "#identifierId", 'input[name="identifier"]'],
-  emailNextText: ["Далее", "Next"],
-  passwordInput: ['input[type="password"]', 'input[name="Passwd"]', 'input[name="password"]'],
-  passwordNextText: ["Далее", "Next"],
-  totpInput: ['input[name="totpPin"]', "#totpPin", 'input[type="tel"]'],
-  approveButtonText: ["Продолжить", "Continue", "Разрешить", "Allow"],
+  emailInput: [
+    'input[type="email"]',
+    "#identifierId",
+    'input[name="identifier"]',
+    'input[autocomplete="username"]',
+    'input[aria-label*="email" i]',
+    'input[aria-label*="почт" i]',
+    'input[jsname][type="text"]',
+  ],
+  emailNextText: ["Далее", "Next", "Продолжить", "Continue"],
+  passwordInput: [
+    'input[type="password"]',
+    'input[name="Passwd"]',
+    'input[name="password"]',
+    'input[autocomplete="current-password"]',
+    'input[aria-label*="password" i]',
+    'input[aria-label*="пароль" i]',
+  ],
+  passwordNextText: ["Далее", "Next", "Продолжить", "Continue"],
+  totpInput: ['input[name="totpPin"]', "#totpPin", 'input[type="tel"]', 'input[autocomplete="one-time-code"]'],
+  approveButtonText: ["Продолжить", "Continue", "Разрешить", "Allow", "Подтвердить", "Confirm"],
+  /** Признаки блокировки автоматизированного входа со стороны Google. */
+  blockedText: [
+    "couldn't sign you in",
+    "couldn’t sign you in",
+    "this browser or app may not be secure",
+    "не удалось выполнить вход",
+    "этот браузер или приложение",
+    "browser or app may not be secure",
+    "try using a different browser",
+  ],
 };
 
 export const ELEVENLABS_SELECTORS = {

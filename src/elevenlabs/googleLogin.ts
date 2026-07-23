@@ -3,7 +3,7 @@ import { GoogleAccount } from "../config/schema.js";
 import { Logger } from "../logging/logger.js";
 import { sleep } from "../util/sleep.js";
 import { ELEVENLABS } from "./constants.js";
-import { clickByText, clickSelector, typeInto, waitForAny, waitForText } from "./pageHelpers.js";
+import { clickByText, clickSelector, dumpDiagnostics, textPresent, typeInto, waitForAny, waitForText } from "./pageHelpers.js";
 import { ELEVENLABS_SELECTORS, GOOGLE_SELECTORS } from "./selectors.js";
 import { generateTotp } from "./totp.js";
 
@@ -104,8 +104,25 @@ async function findGoogleAuthPage(
   return null;
 }
 
+/** Бросает понятную ошибку, если Google заблокировал автоматизированный вход. */
+async function assertNotBlocked(page: Page, logger: Logger): Promise<void> {
+  if (await textPresent(page, GOOGLE_SELECTORS.blockedText)) {
+    await dumpDiagnostics(page, logger, "Google заблокировал вход");
+    throw new Error(
+      "Google заблокировал автоматизированный вход («This browser or app may not be secure»). " +
+        "Нужен вход другим способом: войдите в аккаунт вручную в этом профиле Dolphin один раз " +
+        "(или используйте аккаунт без такой блокировки), затем запустите софт повторно.",
+    );
+  }
+}
+
 /** Проходит форму Google: email → пароль → (опционально) 2FA → согласие. */
 async function performGoogleAuth(page: Page, account: GoogleAccount, logger: Logger): Promise<void> {
+  // Дать форме прогрузиться и снять диагностику того, что реально на странице.
+  await sleep(2000);
+  await dumpDiagnostics(page, logger, "экран входа Google (до ввода email)");
+  await assertNotBlocked(page, logger);
+
   // Если Google показал выбор аккаунта — жмём «Использовать другой аккаунт».
   await clickByText(
     page,
@@ -113,39 +130,54 @@ async function performGoogleAuth(page: Page, account: GoogleAccount, logger: Log
     3000,
   ).catch(() => undefined);
 
-  // Через прокси Google грузится медленно — даём поля до 45 сек.
+  // Через прокси Google грузится медленно — даём поля до 60 сек, пробуем несколько методов.
   logger.info("elevenlabs.login", "Ввожу email Google", { email: account.email });
-  const emailTyped = await typeInto(page, GOOGLE_SELECTORS.emailInput, account.email, { timeout: 45_000 });
+  const emailTyped = await typeInto(page, GOOGLE_SELECTORS.emailInput, account.email, { timeout: 60_000 });
   if (!emailTyped) {
+    await dumpDiagnostics(page, logger, "не найдено поле email");
+    await assertNotBlocked(page, logger);
     throw new Error(`Не нашёл поле email Google (страница: ${safeUrl(page) || "неизвестно"})`);
   }
   await sleep(500);
-  await clickByText(page, GOOGLE_SELECTORS.emailNextText, 8000);
+  // Переход дальше: кнопка «Далее» ИЛИ Enter (запасной вариант).
+  if (!(await clickByText(page, GOOGLE_SELECTORS.emailNextText, 6000))) {
+    await page.keyboard.press("Enter").catch(() => undefined);
+  }
 
+  logger.info("elevenlabs.login", "Ожидаю поле пароля Google");
+  const passField = await waitForAny(page, GOOGLE_SELECTORS.passwordInput, 60_000);
+  if (!passField) {
+    await dumpDiagnostics(page, logger, "не найдено поле пароля");
+    await assertNotBlocked(page, logger);
+    throw new Error("Не появилось поле пароля Google (возможно, требуется подтверждение устройства/капча)");
+  }
+  await sleep(500);
   logger.info("elevenlabs.login", "Ввожу пароль Google");
-  const passField = await waitForAny(page, GOOGLE_SELECTORS.passwordInput, 45_000);
-  if (!passField) throw new Error("Не появилось поле пароля Google (возможно, требуется подтверждение устройства)");
+  await typeInto(page, GOOGLE_SELECTORS.passwordInput, account.password, { timeout: 60_000 });
   await sleep(500);
-  await typeInto(page, GOOGLE_SELECTORS.passwordInput, account.password, { timeout: 45_000 });
-  await sleep(500);
-  await clickByText(page, GOOGLE_SELECTORS.passwordNextText, 8000);
+  if (!(await clickByText(page, GOOGLE_SELECTORS.passwordNextText, 6000))) {
+    await page.keyboard.press("Enter").catch(() => undefined);
+  }
   await sleep(2500);
 
   // 2FA по TOTP, если настроен секрет и появилось поле.
   const totpField = await waitForAny(page, GOOGLE_SELECTORS.totpInput, 10_000);
   if (totpField) {
     if (!account.totpSecret) {
+      await dumpDiagnostics(page, logger, "запрошен 2FA, но totpSecret не задан");
       throw new Error("Google запросил 2FA-код, но totpSecret не указан в настройках");
     }
     const code = generateTotp(account.totpSecret);
     logger.info("elevenlabs.login", "Ввожу 2FA (TOTP) код");
-    await typeInto(page, GOOGLE_SELECTORS.totpInput, code);
-    await clickByText(page, GOOGLE_SELECTORS.passwordNextText, 8000);
+    await typeInto(page, GOOGLE_SELECTORS.totpInput, code, { timeout: 20_000 });
+    if (!(await clickByText(page, GOOGLE_SELECTORS.passwordNextText, 6000))) {
+      await page.keyboard.press("Enter").catch(() => undefined);
+    }
     await sleep(2500);
   }
 
   // Экран подтверждения доступа (Continue/Allow), если появился.
-  await clickByText(page, GOOGLE_SELECTORS.approveButtonText, 6000).catch(() => undefined);
+  await clickByText(page, GOOGLE_SELECTORS.approveButtonText, 8000).catch(() => undefined);
 }
 
 /** Проверяет наличие маркеров залогиненного состояния. */

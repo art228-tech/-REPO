@@ -1,29 +1,46 @@
-import type { ElementHandle, Page } from "puppeteer-core";
+import type { ElementHandle, Frame, Page } from "puppeteer-core";
+import { Logger } from "../logging/logger.js";
 import { sleep } from "../util/sleep.js";
 
 /**
- * Ждёт появления любого из селекторов (видимого) и возвращает handle.
- * Реализовано опросом с интервалом: устойчиво к навигациям/редиректам
- * (частым в OAuth-потоке Google через прокси), когда контекст исполнения
- * периодически пересоздаётся и waitForSelector падает с «context destroyed».
- * Видимость проверяется через boundingBox (ненулевой размер).
+ * ВАЖНО: во всех функциях используется только строковая форма evaluate и
+ * нативные методы handle (getProperty/boundingBox/click/focus/type). Передача
+ * функций в evaluate ломается в собранном бинарнике (esbuild+pkg:
+ * "Passed function cannot be serialized!"), поэтому её здесь нет.
+ *
+ * Все действия — фрейм-осведомлённые (ищем по всем фреймам страницы) и с
+ * несколькими стратегиями, чтобы срабатывать наверняка.
  */
-export async function waitForAny(
-  page: Page,
-  selectors: string[],
-  timeout = 20_000,
-): Promise<ElementHandle<Element> | null> {
+
+/** Список фреймов страницы (main + вложенные), безопасно. */
+function framesOf(page: Page): Frame[] {
+  try {
+    return page.frames();
+  } catch {
+    return [];
+  }
+}
+
+export interface FoundElement {
+  frame: Frame;
+  el: ElementHandle<Element>;
+}
+
+/** Ищет по всем фреймам первый видимый элемент по любому из селекторов. */
+export async function findAny(page: Page, selectors: string[], timeout = 20_000): Promise<FoundElement | null> {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    for (const selector of selectors) {
-      try {
-        const el = await page.$(selector);
-        if (el) {
-          const box = await el.boundingBox().catch(() => null);
-          if (box && box.width > 0 && box.height > 0) return el;
+    for (const frame of framesOf(page)) {
+      for (const selector of selectors) {
+        try {
+          const el = (await frame.$(selector)) as ElementHandle<Element> | null;
+          if (el) {
+            const box = await el.boundingBox().catch(() => null);
+            if (box && box.width > 0 && box.height > 0) return { frame, el };
+          }
+        } catch {
+          // навигация/пересоздание контекста/невалидный селектор — пробуем снова
         }
-      } catch {
-        // навигация/пересоздание контекста или невалидный селектор — пробуем снова
       }
     }
     await sleep(300);
@@ -31,66 +48,126 @@ export async function waitForAny(
   return null;
 }
 
-/** Печатает значение в первый доступный из selectors (с очисткой поля). */
+/** Обратная совместимость: возвращает только handle. */
+export async function waitForAny(page: Page, selectors: string[], timeout = 20_000): Promise<ElementHandle<Element> | null> {
+  const found = await findAny(page, selectors, timeout);
+  return found?.el ?? null;
+}
+
+/** Читает свойство value элемента (нативно, без сериализации функций). */
+async function readValue(el: ElementHandle<Element>): Promise<string | null> {
+  try {
+    const prop = await el.getProperty("value");
+    const val = await prop.jsonValue();
+    return typeof val === "string" ? val : null;
+  } catch {
+    return null;
+  }
+}
+
+async function valueEntered(el: ElementHandle<Element>, value: string): Promise<boolean> {
+  const v = await readValue(el);
+  if (v === null) return true; // не поле ввода (нельзя проверить) — считаем успехом
+  const trimmed = v.trim();
+  return trimmed.length > 0 && (trimmed === value.trim() || trimmed.includes(value.trim()));
+}
+
+/**
+ * Вводит значение в первое подходящее поле (по всем фреймам), пробуя несколько
+ * методов и проверяя, что значение реально попало в поле:
+ *  1) тройной клик + Backspace + type
+ *  2) focus + keyboard.type
+ *  3) JS: установка value активному элементу + события input/change
+ */
 export async function typeInto(
   page: Page,
   selectors: string[],
   value: string,
-  options: { clear?: boolean; delay?: number; timeout?: number } = {},
+  options: { delay?: number; timeout?: number } = {},
 ): Promise<boolean> {
-  const el = await waitForAny(page, selectors, options.timeout ?? 15_000);
-  if (!el) return false;
-  await el.click({ clickCount: 3 }).catch(() => undefined);
-  if (options.clear !== false) {
+  const found = await findAny(page, selectors, options.timeout ?? 15_000);
+  if (!found) return false;
+  const { frame, el } = found;
+  const delay = options.delay ?? 20;
+
+  // Метод 1
+  try {
+    await el.click({ clickCount: 3 });
     await page.keyboard.press("Backspace").catch(() => undefined);
+    await el.type(value, { delay });
+  } catch {
+    /* ignore */
   }
-  await el.type(value, { delay: options.delay ?? 25 });
-  return true;
+  if (await valueEntered(el, value)) return true;
+
+  // Метод 2
+  try {
+    await el.focus();
+    await page.keyboard.type(value, { delay });
+  } catch {
+    /* ignore */
+  }
+  if (await valueEntered(el, value)) return true;
+
+  // Метод 3 (JS через строковый evaluate — безопасно для бинарника)
+  try {
+    await el.focus();
+    const code = `(() => { const el = document.activeElement; if (el) { el.value = ${JSON.stringify(
+      value,
+    )}; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return true; } return false; })()`;
+    await frame.evaluate(code);
+  } catch {
+    /* ignore */
+  }
+  return valueEntered(el, value);
 }
 
-/**
- * Ищет кликабельный элемент, текст которого содержит одну из подстрок,
- * и кликает по нему. Возвращает true при успехе.
- */
+const CLICKABLE =
+  'button, a, [role="button"], [role="menuitem"], [role="tab"], [role="option"], div[tabindex], span[tabindex], input[type="submit"], input[type="button"]';
+
+/** Кликает по элементу, чей текст/aria-label содержит одну из строк (по всем фреймам). */
 export async function clickByText(page: Page, texts: string[], timeout = 15_000): Promise<boolean> {
   const start = Date.now();
   const needles = texts.map((t) => t.toLowerCase());
-  // ВАЖНО: код передаётся строкой (а не функцией), иначе в собранном бинарнике
-  // (esbuild + pkg) Puppeteer падает с "Passed function cannot be serialized!".
   const code = `(() => {
     const needles = ${JSON.stringify(needles)};
-    const candidates = Array.from(document.querySelectorAll('button, a, [role="button"], [role="menuitem"], [role="tab"], div[tabindex], span[tabindex]'));
-    for (const el of candidates) {
-      const label = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim().toLowerCase();
+    const els = Array.from(document.querySelectorAll(${JSON.stringify(CLICKABLE)}));
+    for (const el of els) {
+      const label = (el.innerText || el.textContent || el.getAttribute('aria-label') || el.value || '').trim().toLowerCase();
       if (!label) continue;
       if (needles.some((n) => label.includes(n))) {
-        const rect = el.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) { el.click(); return true; }
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) { el.scrollIntoView({block:'center'}); el.click(); return true; }
       }
     }
     return false;
   })()`;
   while (Date.now() - start < timeout) {
-    try {
-      const clicked = (await page.evaluate(code)) as boolean;
-      if (clicked) return true;
-    } catch {
-      // страница навигирует/контекст пересоздан — повторим на следующей итерации
+    for (const frame of framesOf(page)) {
+      try {
+        if ((await frame.evaluate(code)) as boolean) return true;
+      } catch {
+        /* навигация — повторим */
+      }
     }
     await sleep(400);
   }
   return false;
 }
 
-/** Клик по элементу, найденному по одному из CSS-селекторов. */
+/** Клик по элементу, найденному по одному из CSS-селекторов (по всем фреймам). */
 export async function clickSelector(page: Page, selectors: string[], timeout = 15_000): Promise<boolean> {
-  const el = await waitForAny(page, selectors, timeout);
-  if (!el) return false;
-  await el.click().catch(() => undefined);
-  return true;
+  const found = await findAny(page, selectors, timeout);
+  if (!found) return false;
+  try {
+    await found.el.click();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-/** Проверяет, присутствует ли на странице любой из текстов (без учёта регистра). */
+/** Проверяет наличие любого из текстов на странице (по всем фреймам). */
 export async function textPresent(page: Page, texts: string[]): Promise<boolean> {
   const needles = texts.map((t) => t.toLowerCase());
   const code = `(() => {
@@ -98,11 +175,14 @@ export async function textPresent(page: Page, texts: string[]): Promise<boolean>
     const body = (document.body && document.body.innerText ? document.body.innerText : '').toLowerCase();
     return needles.some((n) => body.includes(n));
   })()`;
-  try {
-    return (await page.evaluate(code)) as boolean;
-  } catch {
-    return false;
+  for (const frame of framesOf(page)) {
+    try {
+      if ((await frame.evaluate(code)) as boolean) return true;
+    } catch {
+      /* ignore */
+    }
   }
+  return false;
 }
 
 /** Ждёт, пока на странице появится один из текстов. */
@@ -121,4 +201,38 @@ export function parseCreditsNumber(text: string): number | null {
   if (!match) return null;
   const value = Number(match[1]);
   return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Собирает и логирует диагностику страницы: по каждому фрейму — заголовок,
+ * список полей ввода и кнопок. Помогает точно понять, что на странице, а не
+ * угадывать селекторы.
+ */
+export async function dumpDiagnostics(page: Page, logger: Logger, label: string): Promise<void> {
+  const code = `(() => {
+    const inputs = Array.from(document.querySelectorAll('input, textarea, [contenteditable="true"]')).slice(0, 30).map((e) => ({
+      tag: e.tagName, type: e.type || '', name: e.name || '', id: e.id || '',
+      ph: e.placeholder || '', al: e.getAttribute('aria-label') || '',
+      vis: !!(e.offsetWidth || e.offsetHeight)
+    }));
+    const buttons = Array.from(document.querySelectorAll('button, [role="button"], a')).slice(0, 30)
+      .map((b) => (b.innerText || b.textContent || b.getAttribute('aria-label') || '').trim().slice(0, 40)).filter(Boolean);
+    return { title: document.title, url: location.href, inputs, buttons };
+  })()`;
+  const frameInfos: unknown[] = [];
+  for (const frame of framesOf(page)) {
+    let url = "";
+    try {
+      url = frame.url();
+    } catch {
+      /* ignore */
+    }
+    try {
+      const data = await frame.evaluate(code);
+      frameInfos.push({ frameUrl: url, ...(data as object) });
+    } catch (error) {
+      frameInfos.push({ frameUrl: url, error: String(error) });
+    }
+  }
+  logger.info("elevenlabs.diag", `Диагностика: ${label}`, { frames: frameInfos });
 }
