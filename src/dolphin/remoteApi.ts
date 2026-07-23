@@ -1,4 +1,5 @@
 import { Logger } from "../logging/logger.js";
+import { describeError, fetchWithTimeout, NetworkError } from "../util/net.js";
 import { DolphinHttpError } from "./httpError.js";
 import { CreateProfileOptions } from "./types.js";
 
@@ -24,16 +25,31 @@ export class DolphinRemoteApi {
     private readonly logger: Logger,
   ) {}
 
-  private async request<T = any>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T = any>(method: string, path: string, body?: unknown, timeoutMs = 20_000): Promise<T> {
     const url = `${this.baseUrl}${path}`;
-    const res = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.token}`,
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(
+        url,
+        {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        },
+        timeoutMs,
+      );
+    } catch (error) {
+      const detail = describeError(error);
+      this.logger.error("dolphin.remote", `Сеть: не удалось соединиться с ${this.baseUrl}`, {
+        method,
+        path,
+        detail,
+      });
+      throw new NetworkError(`Нет соединения с ${this.baseUrl} — ${detail}`, error);
+    }
     const text = await res.text();
     if (!res.ok) {
       this.logger.error("dolphin.remote", `HTTP ${res.status} ${method} ${path}`, {
@@ -51,6 +67,8 @@ export class DolphinRemoteApi {
       const res = await this.request<any>(
         "GET",
         `/useragent?browser_type=anty&platform=${encodeURIComponent(platform)}`,
+        undefined,
+        8000,
       );
       const ua = res?.data?.[0]?.value ?? res?.data?.value ?? res?.value;
       if (typeof ua === "string" && ua.includes("Mozilla")) return ua;

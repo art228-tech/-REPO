@@ -1,4 +1,5 @@
 import { Logger } from "../logging/logger.js";
+import { describeError, fetchWithTimeout, NetworkError } from "../util/net.js";
 import { DolphinHttpError } from "./httpError.js";
 import { AutomationEndpoint } from "./types.js";
 
@@ -11,11 +12,29 @@ export class DolphinLocalApi {
 
   private async request<T = any>(method: string, path: string, body?: unknown): Promise<T> {
     const url = `${this.baseUrl}${path}`;
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(
+        url,
+        {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        },
+        60_000,
+      );
+    } catch (error) {
+      const detail = describeError(error);
+      this.logger.error("dolphin.local", `Сеть: локальный API недоступен (${this.baseUrl})`, {
+        method,
+        path,
+        detail,
+      });
+      throw new NetworkError(
+        `Локальный API Dolphin недоступен (${this.baseUrl}). Запущено ли приложение Dolphin и включён ли Local API? — ${detail}`,
+        error,
+      );
+    }
     const text = await res.text();
     if (!res.ok) {
       this.logger.error("dolphin.local", `HTTP ${res.status} ${method} ${path}`, {

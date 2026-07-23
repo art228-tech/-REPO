@@ -11,7 +11,10 @@ import { defaultConfig, validateConfig } from "../config/schema.js";
 import { Orchestrator } from "../core/orchestrator.js";
 import { Logger } from "../logging/logger.js";
 import { isDirectory } from "../util/fsUtils.js";
+import { preferIPv4 } from "../util/net.js";
 import { baseDir, isPackaged, loadDotEnv, resolvePaths } from "./env.js";
+
+preferIPv4();
 
 /** Корень проекта, устойчиво к запуску из ESM (tsx) и из CJS-бандла (pkg). */
 function computeProjectRoot(): string {

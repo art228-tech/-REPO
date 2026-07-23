@@ -4,7 +4,10 @@ import { ConfigStore } from "./config/store.js";
 import { validateConfig } from "./config/schema.js";
 import { Orchestrator } from "./core/orchestrator.js";
 import { Logger } from "./logging/logger.js";
+import { preferIPv4 } from "./util/net.js";
 import { baseDir, loadDotEnv, resolvePaths } from "./server/env.js";
+
+preferIPv4();
 
 /**
  * CLI-режим: запускает сценарий по сохранённому конфигу без веб-интерфейса.
