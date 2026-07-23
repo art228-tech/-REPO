@@ -30,9 +30,9 @@ async function matchInFrame(frame: Frame, selectors: string[]): Promise<string |
   const code = `(() => {
     const sels = ${JSON.stringify(selectors)};
     for (const s of sels) {
-      let el = null;
-      try { el = document.querySelector(s); } catch (e) { continue; }
-      if (el) {
+      let list = [];
+      try { list = Array.from(document.querySelectorAll(s)); } catch (e) { continue; }
+      for (const el of list) {
         const vis = !!(el.offsetWidth || el.offsetHeight || (el.getClientRects && el.getClientRects().length));
         if (vis) return s;
       }
@@ -68,7 +68,8 @@ export async function waitForAny(page: Page, selectors: string[], timeout = 20_0
 /** Читает значение поля (input/textarea/contenteditable) по селектору в конкретном фрейме. */
 async function readFieldValue(frame: Frame, selector: string): Promise<string | null> {
   const code = `(() => {
-    const el = document.querySelector(${JSON.stringify(selector)});
+    const list = Array.from(document.querySelectorAll(${JSON.stringify(selector)}));
+    const el = list.find((e) => !!(e.offsetWidth||e.offsetHeight||(e.getClientRects&&e.getClientRects().length))) || list[0];
     if (!el) return null;
     if (el.isContentEditable) return String(el.textContent || '');
     return String(el.value != null ? el.value : '');
@@ -109,7 +110,8 @@ export async function typeInto(
   const sel = JSON.stringify(selector);
   const val = JSON.stringify(value);
 
-  const focusClear = `(() => { const el = document.querySelector(${sel}); if (el) { el.focus(); if (el.isContentEditable) { el.textContent=''; } else { try { el.value=''; } catch(e){} } return true; } return false; })()`;
+  const pick = `(Array.from(document.querySelectorAll(${sel})).find((e)=>!!(e.offsetWidth||e.offsetHeight||(e.getClientRects&&e.getClientRects().length))) || document.querySelector(${sel}))`;
+  const focusClear = `(() => { const el = ${pick}; if (el) { el.focus(); if (el.isContentEditable) { el.textContent=''; } else { try { el.value=''; } catch(e){} } return true; } return false; })()`;
 
   // Человеческий ввод (для коротких полей: email/пароль/имя): печать по буквам
   // со случайными паузами. Помогает проходить поведенческие капчи.
@@ -129,7 +131,7 @@ export async function typeInto(
   }
 
   const setViaJs = `(() => {
-    const el = document.querySelector(${sel});
+    const el = ${pick};
     if (!el) return false;
     try { el.focus(); } catch (e) {}
     if (el.isContentEditable) {
@@ -192,19 +194,33 @@ export async function clickByText(
   const start = Date.now();
   const needles = texts.map((t) => t.toLowerCase());
   const excludes = exclude.map((t) => t.toLowerCase());
+  // Сначала пытаемся среди «настоящих» кликабельных, затем — среди ВСЕХ видимых
+  // элементов (карточки в модалках ElevenLabs — это div без role, поэтому нужно
+  // искать по тексту у любого элемента и кликать самый точный: клик всплывёт к
+  // обработчику React на родителе).
   const code = `(() => {
     const needles = ${JSON.stringify(needles)};
     const excludes = ${JSON.stringify(excludes)};
-    const els = Array.from(document.querySelectorAll(${JSON.stringify(CLICKABLE)}));
-    for (const el of els) {
-      const label = (el.innerText || el.textContent || el.getAttribute('aria-label') || el.value || '').trim().toLowerCase();
-      if (!label) continue;
-      if (excludes.length && excludes.some((x) => label.includes(x))) continue;
-      if (needles.some((n) => label.includes(n))) {
-        const vis = !!(el.offsetWidth || el.offsetHeight || (el.getClientRects && el.getClientRects().length));
-        if (vis) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
+    function labelOf(el){ return (el.getAttribute && el.getAttribute('aria-label')) || el.innerText || el.textContent || el.value || ''; }
+    function visible(el){ return !!(el.offsetWidth || el.offsetHeight || (el.getClientRects && el.getClientRects().length)); }
+    function tryClick(el){ try { el.scrollIntoView({ block: 'center' }); } catch(e){} el.click(); return true; }
+    function search(scope){
+      let best = null, bestLen = Infinity;
+      const els = Array.from(document.querySelectorAll(scope));
+      for (const el of els) {
+        const label = labelOf(el).trim().toLowerCase();
+        if (!label || label.length > 120) continue;
+        if (excludes.length && excludes.some((x) => label.includes(x))) continue;
+        if (needles.some((n) => label.includes(n)) && visible(el)) {
+          if (label.length < bestLen) { bestLen = label.length; best = el; }
+        }
       }
+      return best;
     }
+    const clickable = search(${JSON.stringify(CLICKABLE)});
+    if (clickable) return tryClick(clickable);
+    const any = search('*');
+    if (any) return tryClick(any);
     return false;
   })()`;
   while (Date.now() - start < timeout) {
@@ -355,7 +371,13 @@ export async function dumpDiagnostics(page: Page, logger: Logger, label: string)
     }));
     const buttons = Array.from(document.querySelectorAll('button, [role="button"], a')).slice(0, 30)
       .map((b) => (b.innerText || b.textContent || b.getAttribute('aria-label') || '').trim().slice(0, 40)).filter(Boolean);
-    return { title: document.title, url: location.href, inputs, buttons };
+    // Кликабельные карточки/опции (div без role) — важны для модалок ElevenLabs.
+    const cards = Array.from(document.querySelectorAll('[role], [tabindex], [class*="card" i], [class*="option" i], [class*="tile" i], h1, h2, h3, li'))
+      .filter((e) => !!(e.offsetWidth || e.offsetHeight))
+      .map((e) => (e.innerText || e.textContent || '').trim().slice(0, 40))
+      .filter((t) => t && t.length <= 40);
+    const uniqueCards = Array.from(new Set(cards)).slice(0, 30);
+    return { title: document.title, url: location.href, inputs, buttons, cards: uniqueCards };
   })()`;
   const frameInfos: unknown[] = [];
   for (const frame of framesOf(page)) {
