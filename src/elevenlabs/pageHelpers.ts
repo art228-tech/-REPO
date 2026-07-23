@@ -1,6 +1,6 @@
 import type { Frame, Page } from "puppeteer-core";
 import { Logger } from "../logging/logger.js";
-import { sleep } from "../util/sleep.js";
+import { humanDelay, sleep } from "../util/sleep.js";
 
 /**
  * КРИТИЧЕСКИ ВАЖНО: в собранном бинарнике (esbuild + pkg) Puppeteer НЕ умеет
@@ -101,13 +101,32 @@ export async function typeInto(
   page: Page,
   selectors: string[],
   value: string,
-  options: { delay?: number; timeout?: number } = {},
+  options: { delay?: number; timeout?: number; human?: boolean } = {},
 ): Promise<boolean> {
   const found = await findAny(page, selectors, options.timeout ?? 15_000);
   if (!found) return false;
   const { frame, selector } = found;
   const sel = JSON.stringify(selector);
   const val = JSON.stringify(value);
+
+  const focusClear = `(() => { const el = document.querySelector(${sel}); if (el) { el.focus(); if (el.isContentEditable) { el.textContent=''; } else { try { el.value=''; } catch(e){} } return true; } return false; })()`;
+
+  // Человеческий ввод (для коротких полей: email/пароль/имя): печать по буквам
+  // со случайными паузами. Помогает проходить поведенческие капчи.
+  if (options.human) {
+    try {
+      await frame.evaluate(focusClear);
+      await humanDelay(120, 320);
+      for (const ch of value) {
+        await page.keyboard.type(ch);
+        await sleep(45 + Math.random() * 120);
+      }
+    } catch {
+      /* ignore */
+    }
+    if (valueOk(await readFieldValue(frame, selector), value)) return true;
+    // фолбэк ниже (JS-сеттер)
+  }
 
   const setViaJs = `(() => {
     const el = document.querySelector(${sel});
@@ -260,6 +279,37 @@ export async function textPresent(page: Page, texts: string[]): Promise<boolean>
     }
   }
   return false;
+}
+
+/** Проверка текста только в ГЛАВНОМ фрейме (без сторонних iframe: капча, cookiebot, stripe). */
+export async function textPresentMain(page: Page, texts: string[]): Promise<boolean> {
+  const needles = texts.map((t) => t.toLowerCase());
+  const code = `(() => {
+    const needles = ${JSON.stringify(needles)};
+    const body = (document.body && document.body.innerText ? document.body.innerText : '').toLowerCase();
+    return needles.some((n) => body.includes(n));
+  })()`;
+  try {
+    return (await page.mainFrame().evaluate(code)) as boolean;
+  } catch {
+    return false;
+  }
+}
+
+/** Лёгкие «человеческие» движения мыши для правдоподобности. */
+export async function humanMouseWander(page: Page): Promise<void> {
+  try {
+    const vp = page.viewport() || { width: 1280, height: 800 };
+    const moves = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < moves; i++) {
+      await page.mouse.move(Math.random() * vp.width, Math.random() * vp.height, {
+        steps: 8 + Math.floor(Math.random() * 12),
+      });
+      await sleep(120 + Math.random() * 260);
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Ждёт, пока на странице появится один из текстов. */

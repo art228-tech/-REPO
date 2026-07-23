@@ -4,7 +4,17 @@ import { Logger } from "../logging/logger.js";
 import { sleep } from "../util/sleep.js";
 import { ELEVENLABS } from "./constants.js";
 import { dismissCookies, prepareApp } from "./appHelpers.js";
-import { clickByText, clickSelector, dumpDiagnostics, textPresent, typeInto, waitForAny } from "./pageHelpers.js";
+import {
+  clickByText,
+  clickSelector,
+  dumpDiagnostics,
+  humanMouseWander,
+  textPresent,
+  textPresentMain,
+  typeInto,
+  waitForAny,
+} from "./pageHelpers.js";
+import { humanDelay } from "../util/sleep.js";
 import { ELEVENLABS_SELECTORS, GOOGLE_SELECTORS } from "./selectors.js";
 import { generateTotp } from "./totp.js";
 import { LoginOptions } from "./types.js";
@@ -190,16 +200,21 @@ export async function loginWithEmail(
   await dismissCookies(page, logger);
   await dumpDiagnostics(page, logger, "форма входа ElevenLabs (email+пароль)");
 
-  logger.info("elevenlabs.login", "Ввожу email", { email });
-  const emailOk = await typeInto(page, ELEVENLABS_SELECTORS.emailInput, email, { timeout: 30_000 });
+  logger.info("elevenlabs.login", "Ввожу email (по-человечески)", { email });
+  const emailOk = await typeInto(page, ELEVENLABS_SELECTORS.emailInput, email, { timeout: 30_000, human: true });
   if (!emailOk) throw new Error("Не нашёл поле email на форме входа ElevenLabs");
-  logger.info("elevenlabs.login", "Ввожу пароль ElevenLabs");
-  const passOk = await typeInto(page, ELEVENLABS_SELECTORS.passwordInput, password, { timeout: 30_000 });
+  await humanDelay(300, 700);
+  logger.info("elevenlabs.login", "Ввожу пароль ElevenLabs (по-человечески)");
+  const passOk = await typeInto(page, ELEVENLABS_SELECTORS.passwordInput, password, { timeout: 30_000, human: true });
   if (!passOk) throw new Error("Не нашёл поле пароля на форме входа ElevenLabs");
-  await sleep(400);
+  await humanDelay(400, 900);
+  await humanMouseWander(page);
   if (!(await clickByText(page, ELEVENLABS_SELECTORS.signInButtonText, 6000))) {
     await page.keyboard.press("Enter").catch(() => undefined);
   }
+
+  // Даём странице обработать вход/капчу, прежде чем судить об ошибке.
+  await sleep(4000);
 
   // Ждём вход; обрабатываем ошибку пароля и hCaptcha (ручное прохождение).
   const deadline = Date.now() + Math.max(30, options.manualAssistTimeoutSec) * 1000;
@@ -213,10 +228,11 @@ export async function loginWithEmail(
       await prepareApp(app, logger);
       return { page: app, manualUsed };
     }
-    if (await textPresent(page, ELEVENLABS_SELECTORS.loginErrorText)) {
-      await dumpDiagnostics(page, logger, "ошибка входа по почте");
+    // Строгая проверка ошибки ТОЛЬКО в главном фрейме (не в капче/cookiebot).
+    if (await textPresentMain(page, ELEVENLABS_SELECTORS.loginErrorText)) {
+      await dumpDiagnostics(page, logger, "ошибка входа по почте (неверные данные)");
       throw new Error(
-        "ElevenLabs отклонил email/пароль. Если аккаунт создан через Google — задайте пароль ElevenLabs через «Forgot password», затем впишите его в настройки.",
+        "ElevenLabs отклонил email/пароль. Проверьте пароль ElevenLabs (не Google!). Если аккаунт создан через Google — задайте пароль через «Forgot password».",
       );
     }
     const captcha = await textPresent(page, ELEVENLABS_SELECTORS.hcaptchaText);
@@ -328,8 +344,8 @@ async function performGoogleAuth(
     3000,
   ).catch(() => undefined);
 
-  logger.info("elevenlabs.login", "Ввожу email Google", { email: account.email });
-  const emailTyped = await typeInto(page, GOOGLE_SELECTORS.emailInput, account.email, { timeout: 60_000 });
+  logger.info("elevenlabs.login", "Ввожу email Google (по-человечески)", { email: account.email });
+  const emailTyped = await typeInto(page, GOOGLE_SELECTORS.emailInput, account.email, { timeout: 60_000, human: true });
   if (!emailTyped) {
     await dumpDiagnostics(page, logger, "не найдено поле email");
     await assertNotBlocked(page, logger);
@@ -345,9 +361,9 @@ async function performGoogleAuth(
   if (pw.manualUsed) manualUsed = true;
   if (pw.hasPassword) {
     await sleep(500);
-    logger.info("elevenlabs.login", "Ввожу пароль Google");
-    await typeInto(page, GOOGLE_SELECTORS.passwordInput, account.password, { timeout: 60_000 });
-    await sleep(500);
+    logger.info("elevenlabs.login", "Ввожу пароль Google (по-человечески)");
+    await typeInto(page, GOOGLE_SELECTORS.passwordInput, account.password, { timeout: 60_000, human: true });
+    await humanDelay(400, 900);
     if (!(await clickByText(page, GOOGLE_SELECTORS.passwordNextText, 6000))) {
       await page.keyboard.press("Enter").catch(() => undefined);
     }
