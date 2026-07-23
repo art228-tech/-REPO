@@ -4,7 +4,7 @@ import { sleep } from "../util/sleep.js";
 import { ELEVENLABS, validatePreviewText, validateVoiceDescription } from "./constants.js";
 import { clickByText, clickNth, countAny, dumpDiagnostics, textPresent, typeInto, waitForText } from "./pageHelpers.js";
 import { ELEVENLABS_SELECTORS } from "./selectors.js";
-import { CreatedVoice, DesignVoiceParams, OutOfCreditsError, VoiceDescriptionError } from "./types.js";
+import { CreatedVoice, DesignVoiceParams, NotLoggedInError, OutOfCreditsError, VoiceDescriptionError } from "./types.js";
 
 /**
  * Создаёт голос через Voice Design. Тщательно валидирует описание под лимиты
@@ -29,6 +29,11 @@ export async function designVoice(page: Page, params: DesignVoiceParams, logger:
   await sleep(1500);
   await clickByText(page, ELEVENLABS_SELECTORS.voiceDesignEntryText, 6000).catch(() => undefined);
   await dumpDiagnostics(page, logger, "Voice Design");
+  if (/sign-in|signin|login|\/auth\//i.test(page.url())) {
+    throw new NotLoggedInError(
+      "Voice Design перекинул на страницу входа — вход в ElevenLabs не выполнен (проверьте пароль Google).",
+    );
+  }
 
   const descTyped = await typeInto(page, ELEVENLABS_SELECTORS.voiceDescriptionTextarea, desc.value, {
     timeout: 30_000,

@@ -63,3 +63,11 @@ export class VoiceDescriptionError extends Error {
     this.name = "VoiceDescriptionError";
   }
 }
+
+/** Вход в ElevenLabs не выполнен (страница перекинула на sign-in). Фатально для запуска. */
+export class NotLoggedInError extends Error {
+  constructor(message = "Вход в ElevenLabs не выполнен") {
+    super(message);
+    this.name = "NotLoggedInError";
+  }
+}

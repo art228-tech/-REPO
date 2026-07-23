@@ -9,7 +9,7 @@ import { IDolphinService } from "../dolphin/types.js";
 import { chunkText } from "../elevenlabs/constants.js";
 import { ElevenLabsAutomation } from "../elevenlabs/elevenLabsAutomation.js";
 import { SimulatedElevenLabs } from "../elevenlabs/simulated.js";
-import { CreatedVoice, IElevenLabsAutomation, OutOfCreditsError, VoiceDescriptionError } from "../elevenlabs/types.js";
+import { CreatedVoice, IElevenLabsAutomation, NotLoggedInError, OutOfCreditsError, VoiceDescriptionError } from "../elevenlabs/types.js";
 import { Logger } from "../logging/logger.js";
 import { PromptQueue } from "../queue/promptQueue.js";
 import { TextQueue } from "../queue/textQueue.js";
@@ -229,6 +229,7 @@ export class Orchestrator extends EventEmitter {
         this.update({ voicesCreated: voices.length });
       } catch (error) {
         if (error instanceof OutOfCreditsError) throw error;
+        if (error instanceof NotLoggedInError) throw error; // фатально — нет смысла пробовать другие промпты
         if (error instanceof VoiceDescriptionError) {
           this.logger.warn("orchestrator", `Промпт "${prompt.name}" отбракован, пробую следующий`, {
             reason: error.message,

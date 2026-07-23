@@ -3,7 +3,7 @@ import { GoogleAccount } from "../config/schema.js";
 import { Logger } from "../logging/logger.js";
 import { sleep } from "../util/sleep.js";
 import { ELEVENLABS } from "./constants.js";
-import { clickByText, clickSelector, dumpDiagnostics, textPresent, typeInto, waitForAny, waitForText } from "./pageHelpers.js";
+import { clickByText, clickSelector, dumpDiagnostics, textPresent, typeInto, waitForAny } from "./pageHelpers.js";
 import { ELEVENLABS_SELECTORS, GOOGLE_SELECTORS } from "./selectors.js";
 import { generateTotp } from "./totp.js";
 
@@ -180,18 +180,26 @@ async function performGoogleAuth(page: Page, account: GoogleAccount, logger: Log
   await clickByText(page, GOOGLE_SELECTORS.approveButtonText, 8000).catch(() => undefined);
 }
 
-/** Проверяет наличие маркеров залогиненного состояния. */
-async function isLoggedIn(page: Page): Promise<boolean> {
-  const el = await waitForAny(page, ELEVENLABS_SELECTORS.loggedInMarkers, 4000);
-  return !!el;
+/**
+ * Строгая проверка входа в ElevenLabs. Раньше проверка была слишком наивной
+ * (селектор a[href*="/app/"] есть и на странице входа) и давала ложное «уже
+ * залогинен». Теперь: должны быть на /app (но НЕ на sign-in/login), без видимой
+ * формы входа (email+password), и с маркером приложения.
+ */
+export async function isLoggedIn(page: Page): Promise<boolean> {
+  const url = safeUrl(page).toLowerCase();
+  if (!url.includes("/app")) return false;
+  if (/sign-in|signin|log-in|login|\/auth\/|register|sign-up|signup/.test(url)) return false;
+  // Видна форма входа → точно не залогинены.
+  if (await waitForAny(page, ['input[type="password"]', 'input[name="password"]'], 700)) return false;
+  return waitForAny(page, ELEVENLABS_SELECTORS.loggedInMarkers, 1500);
 }
 
 async function waitForLogin(page: Page, timeout: number): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeout) {
-    if (page.url().includes("/app/") && (await isLoggedIn(page))) return true;
+    if (await isLoggedIn(page)) return true;
     await sleep(1000);
   }
-  // Иногда достаточно текста навигации
-  return waitForText(page, ["Text to Speech", "Voice", "Home", "Studio"], 5000);
+  return false;
 }
