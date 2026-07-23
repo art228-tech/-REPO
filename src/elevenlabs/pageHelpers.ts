@@ -2,29 +2,33 @@ import type { ElementHandle, Page } from "puppeteer-core";
 import { sleep } from "../util/sleep.js";
 
 /**
- * Ждёт появления любого из селекторов (видимого), возвращает первый handle.
- * Использует page.waitForSelector({visible:true}) для каждого селектора и
- * Promise.any — устойчиво к медленной загрузке и невалидным селекторам.
+ * Ждёт появления любого из селекторов (видимого) и возвращает handle.
+ * Реализовано опросом с интервалом: устойчиво к навигациям/редиректам
+ * (частым в OAuth-потоке Google через прокси), когда контекст исполнения
+ * периодически пересоздаётся и waitForSelector падает с «context destroyed».
+ * Видимость проверяется через boundingBox (ненулевой размер).
  */
 export async function waitForAny(
   page: Page,
   selectors: string[],
   timeout = 20_000,
 ): Promise<ElementHandle<Element> | null> {
-  try {
-    return await Promise.any(
-      selectors.map((selector) =>
-        page
-          .waitForSelector(selector, { visible: true, timeout })
-          .then((el) => {
-            if (!el) throw new Error("null");
-            return el as ElementHandle<Element>;
-          }),
-      ),
-    );
-  } catch {
-    return null;
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    for (const selector of selectors) {
+      try {
+        const el = await page.$(selector);
+        if (el) {
+          const box = await el.boundingBox().catch(() => null);
+          if (box && box.width > 0 && box.height > 0) return el;
+        }
+      } catch {
+        // навигация/пересоздание контекста или невалидный селектор — пробуем снова
+      }
+    }
+    await sleep(300);
   }
+  return null;
 }
 
 /** Печатает значение в первый доступный из selectors (с очисткой поля). */
@@ -67,8 +71,12 @@ export async function clickByText(page: Page, texts: string[], timeout = 15_000)
     return false;
   })()`;
   while (Date.now() - start < timeout) {
-    const clicked = (await page.evaluate(code)) as boolean;
-    if (clicked) return true;
+    try {
+      const clicked = (await page.evaluate(code)) as boolean;
+      if (clicked) return true;
+    } catch {
+      // страница навигирует/контекст пересоздан — повторим на следующей итерации
+    }
     await sleep(400);
   }
   return false;
@@ -90,7 +98,11 @@ export async function textPresent(page: Page, texts: string[]): Promise<boolean>
     const body = (document.body && document.body.innerText ? document.body.innerText : '').toLowerCase();
     return needles.some((n) => body.includes(n));
   })()`;
-  return (await page.evaluate(code)) as boolean;
+  try {
+    return (await page.evaluate(code)) as boolean;
+  } catch {
+    return false;
+  }
 }
 
 /** Ждёт, пока на странице появится один из текстов. */

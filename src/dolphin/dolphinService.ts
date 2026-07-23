@@ -26,7 +26,7 @@ export class DolphinService implements IDolphinService {
 
   private retryOpts(action: string) {
     return {
-      attempts: 4,
+      attempts: 6,
       baseDelayMs: 2000,
       shouldRetry: isRetriableHttp,
       onRetry: (error: unknown, attempt: number, next: number) =>
