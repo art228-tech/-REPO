@@ -16,7 +16,7 @@ export async function loginWithGoogle(
   page: Page,
   account: GoogleAccount,
   logger: Logger,
-): Promise<void> {
+): Promise<Page> {
   logger.info("elevenlabs.login", "Открываю страницу входа ElevenLabs");
   await page.goto(ELEVENLABS.SIGN_IN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await sleep(1500);
@@ -24,7 +24,7 @@ export async function loginWithGoogle(
   // Уже залогинены?
   if (await isLoggedIn(page)) {
     logger.success("elevenlabs.login", "Уже выполнен вход, пропускаю авторизацию");
-    return;
+    return page;
   }
 
   const clickedText = await clickByText(page, ELEVENLABS_SELECTORS.googleSignInText, 10_000);
@@ -56,11 +56,59 @@ export async function loginWithGoogle(
   }
 
   logger.info("elevenlabs.login", "Ожидаю завершения входа в приложение");
-  const ok = await waitForLogin(page, 60_000);
-  if (!ok) {
-    throw new Error("Вход выполнен, но приложение ElevenLabs не подтвердило авторизацию вовремя");
+  const appPage = await ensureAppLoggedIn(browser, page, 120_000, logger);
+  if (!appPage) {
+    await dumpDiagnostics(page, logger, "не подтверждён вход в приложение");
+    throw new Error("Вход Google прошёл, но приложение ElevenLabs не подтвердило авторизацию (сессия не установилась)");
   }
   logger.success("elevenlabs.login", "Успешный вход в ElevenLabs через Google");
+  return appPage;
+}
+
+/** Находит вкладку ElevenLabs среди всех (предпочитая уже на /app, не sign-in). */
+async function findElevenLabsPage(browser: Browser, fallback: Page): Promise<Page> {
+  const pages = await browser.pages().catch(() => [] as Page[]);
+  const el = pages.filter((p) => !p.isClosed?.() && safeUrl(p).toLowerCase().includes("elevenlabs.io"));
+  const onApp = el.find((p) => {
+    const u = safeUrl(p).toLowerCase();
+    return u.includes("/app") && !/sign-in|signin|login/.test(u);
+  });
+  return onApp ?? el[0] ?? fallback;
+}
+
+/**
+ * Активно доводит вход до конца: ищет вкладку ElevenLabs, при необходимости САМ
+ * переходит на /app/home и ждёт, пока страница станет залогиненной. Возвращает
+ * рабочую (залогиненную) вкладку или null.
+ */
+async function ensureAppLoggedIn(
+  browser: Browser,
+  originalPage: Page,
+  timeout: number,
+  logger: Logger,
+): Promise<Page | null> {
+  const deadline = Date.now() + timeout;
+  let navigated = false;
+  while (Date.now() < deadline) {
+    const page = await findElevenLabsPage(browser, originalPage);
+    await page.bringToFront().catch(() => undefined);
+
+    if (await isLoggedIn(page)) return page;
+
+    const url = safeUrl(page).toLowerCase();
+    const stuck = !url.includes("/app") || /sign-in|signin|login/.test(url);
+    // Сначала даём ~15с на естественный редирект после OAuth, затем принудительно
+    // переходим на /app/home (если сессия установлена — приложение откроется).
+    if (stuck && (navigated || Date.now() - (deadline - timeout) > 15_000)) {
+      logger.info("elevenlabs.login", "Перехожу на /app/home для подтверждения входа");
+      await page.goto(ELEVENLABS.APP_URL, { waitUntil: "domcontentloaded", timeout: 60_000 }).catch(() => undefined);
+      navigated = true;
+      await sleep(3000);
+      if (await isLoggedIn(page)) return page;
+    }
+    await sleep(2000);
+  }
+  return null;
 }
 
 /** URL страницы без падения, если контекст уже закрыт. */
@@ -195,11 +243,3 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
   return waitForAny(page, ELEVENLABS_SELECTORS.loggedInMarkers, 1500);
 }
 
-async function waitForLogin(page: Page, timeout: number): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    if (await isLoggedIn(page)) return true;
-    await sleep(1000);
-  }
-  return false;
-}

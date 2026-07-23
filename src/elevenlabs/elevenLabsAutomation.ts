@@ -50,7 +50,8 @@ export class ElevenLabsAutomation implements IElevenLabsAutomation {
   }
 
   async loginWithGoogle(account: GoogleAccount): Promise<void> {
-    await loginWithGoogle(this.requireBrowser(), this.requirePage(), account, this.logger);
+    // Вход может завершиться на другой вкладке — используем ту, что вернул логин.
+    this.page = await loginWithGoogle(this.requireBrowser(), this.requirePage(), account, this.logger);
   }
 
   async getRemainingCredits(): Promise<number> {
