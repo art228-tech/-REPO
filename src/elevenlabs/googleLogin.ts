@@ -113,8 +113,9 @@ async function performGoogleAuth(page: Page, account: GoogleAccount, logger: Log
     3000,
   ).catch(() => undefined);
 
+  // Через прокси Google грузится медленно — даём поля до 45 сек.
   logger.info("elevenlabs.login", "Ввожу email Google", { email: account.email });
-  const emailTyped = await typeInto(page, GOOGLE_SELECTORS.emailInput, account.email);
+  const emailTyped = await typeInto(page, GOOGLE_SELECTORS.emailInput, account.email, { timeout: 45_000 });
   if (!emailTyped) {
     throw new Error(`Не нашёл поле email Google (страница: ${safeUrl(page) || "неизвестно"})`);
   }
@@ -122,16 +123,16 @@ async function performGoogleAuth(page: Page, account: GoogleAccount, logger: Log
   await clickByText(page, GOOGLE_SELECTORS.emailNextText, 8000);
 
   logger.info("elevenlabs.login", "Ввожу пароль Google");
-  const passField = await waitForAny(page, GOOGLE_SELECTORS.passwordInput, 20_000);
+  const passField = await waitForAny(page, GOOGLE_SELECTORS.passwordInput, 45_000);
   if (!passField) throw new Error("Не появилось поле пароля Google (возможно, требуется подтверждение устройства)");
   await sleep(500);
-  await typeInto(page, GOOGLE_SELECTORS.passwordInput, account.password);
+  await typeInto(page, GOOGLE_SELECTORS.passwordInput, account.password, { timeout: 45_000 });
   await sleep(500);
   await clickByText(page, GOOGLE_SELECTORS.passwordNextText, 8000);
   await sleep(2500);
 
   // 2FA по TOTP, если настроен секрет и появилось поле.
-  const totpField = await waitForAny(page, GOOGLE_SELECTORS.totpInput, 6000);
+  const totpField = await waitForAny(page, GOOGLE_SELECTORS.totpInput, 10_000);
   if (totpField) {
     if (!account.totpSecret) {
       throw new Error("Google запросил 2FA-код, но totpSecret не указан в настройках");

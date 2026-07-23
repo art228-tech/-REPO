@@ -1,28 +1,30 @@
 import type { ElementHandle, Page } from "puppeteer-core";
 import { sleep } from "../util/sleep.js";
 
-/** Ждёт появления любого из селекторов, возвращает первый найденный handle. */
+/**
+ * Ждёт появления любого из селекторов (видимого), возвращает первый handle.
+ * Использует page.waitForSelector({visible:true}) для каждого селектора и
+ * Promise.any — устойчиво к медленной загрузке и невалидным селекторам.
+ */
 export async function waitForAny(
   page: Page,
   selectors: string[],
   timeout = 20_000,
 ): Promise<ElementHandle<Element> | null> {
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    for (const selector of selectors) {
-      try {
-        const el = await page.$(selector);
-        if (el) {
-          const visible = await el.isVisible().catch(() => true);
-          if (visible) return el;
-        }
-      } catch {
-        // невалидный селектор для данного движка — пропускаем
-      }
-    }
-    await sleep(300);
+  try {
+    return await Promise.any(
+      selectors.map((selector) =>
+        page
+          .waitForSelector(selector, { visible: true, timeout })
+          .then((el) => {
+            if (!el) throw new Error("null");
+            return el as ElementHandle<Element>;
+          }),
+      ),
+    );
+  } catch {
+    return null;
   }
-  return null;
 }
 
 /** Печатает значение в первый доступный из selectors (с очисткой поля). */
@@ -30,9 +32,9 @@ export async function typeInto(
   page: Page,
   selectors: string[],
   value: string,
-  options: { clear?: boolean; delay?: number } = {},
+  options: { clear?: boolean; delay?: number; timeout?: number } = {},
 ): Promise<boolean> {
-  const el = await waitForAny(page, selectors, 15_000);
+  const el = await waitForAny(page, selectors, options.timeout ?? 15_000);
   if (!el) return false;
   await el.click({ clickCount: 3 }).catch(() => undefined);
   if (options.clear !== false) {
