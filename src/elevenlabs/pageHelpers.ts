@@ -178,16 +178,28 @@ export async function typeInto(
 const CLICKABLE =
   'button, a, [role="button"], [role="menuitem"], [role="tab"], [role="option"], [role="radio"], div[tabindex], span[tabindex], input[type="submit"], input[type="button"], label';
 
-/** Кликает по элементу, чей текст/aria-label содержит одну из строк (по всем фреймам, строковый evaluate). */
-export async function clickByText(page: Page, texts: string[], timeout = 15_000): Promise<boolean> {
+/**
+ * Кликает по элементу, чей текст/aria-label содержит одну из строк (по всем
+ * фреймам). `exclude` — стоп-слова: элемент пропускается, если его текст содержит
+ * любое из них (напр. чтобы «Sign in» не попал в «Sign in with Google»).
+ */
+export async function clickByText(
+  page: Page,
+  texts: string[],
+  timeout = 15_000,
+  exclude: string[] = [],
+): Promise<boolean> {
   const start = Date.now();
   const needles = texts.map((t) => t.toLowerCase());
+  const excludes = exclude.map((t) => t.toLowerCase());
   const code = `(() => {
     const needles = ${JSON.stringify(needles)};
+    const excludes = ${JSON.stringify(excludes)};
     const els = Array.from(document.querySelectorAll(${JSON.stringify(CLICKABLE)}));
     for (const el of els) {
       const label = (el.innerText || el.textContent || el.getAttribute('aria-label') || el.value || '').trim().toLowerCase();
       if (!label) continue;
+      if (excludes.length && excludes.some((x) => label.includes(x))) continue;
       if (needles.some((n) => label.includes(n))) {
         const vis = !!(el.offsetWidth || el.offsetHeight || (el.getClientRects && el.getClientRects().length));
         if (vis) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }

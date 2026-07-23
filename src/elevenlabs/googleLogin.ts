@@ -209,7 +209,17 @@ export async function loginWithEmail(
   if (!passOk) throw new Error("Не нашёл поле пароля на форме входа ElevenLabs");
   await humanDelay(400, 900);
   await humanMouseWander(page);
-  if (!(await clickByText(page, ELEVENLABS_SELECTORS.signInButtonText, 6000))) {
+  // ВАЖНО: жмём именно кнопку отправки формы, НЕ «Sign in with Google/Apple/SSO».
+  const submitted =
+    (await clickSelector(page, ['button[type="submit"]'], 4000)) ||
+    (await clickByText(page, ["Sign in", "Log in", "Войти", "Пријави"], 6000, [
+      "with",
+      "google",
+      "apple",
+      "sso",
+      "гугл",
+    ]));
+  if (!submitted) {
     await page.keyboard.press("Enter").catch(() => undefined);
   }
 
