@@ -38,6 +38,7 @@ export class SimulatedElevenLabs implements IElevenLabsAutomation {
   private credits: number;
   private readonly latency: number;
   private readonly charsPerSecond: number;
+  manualLoginUsed = false;
   readonly designedVoices: CreatedVoice[] = [];
   readonly synthesized: string[] = [];
 

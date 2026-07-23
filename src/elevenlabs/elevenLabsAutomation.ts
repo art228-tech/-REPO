@@ -24,6 +24,7 @@ import { designVoice } from "./voiceDesign.js";
 export class ElevenLabsAutomation implements IElevenLabsAutomation {
   private browser: Browser | null = null;
   private page: Page | null = null;
+  manualLoginUsed = false;
 
   constructor(private readonly logger: Logger) {}
 
@@ -52,7 +53,9 @@ export class ElevenLabsAutomation implements IElevenLabsAutomation {
 
   async loginWithGoogle(account: GoogleAccount, options?: LoginOptions): Promise<void> {
     // Вход может завершиться на другой вкладке — используем ту, что вернул логин.
-    this.page = await loginWithGoogle(this.requireBrowser(), this.requirePage(), account, this.logger, options);
+    const result = await loginWithGoogle(this.requireBrowser(), this.requirePage(), account, this.logger, options);
+    this.page = result.page;
+    this.manualLoginUsed = result.manualUsed;
   }
 
   async getRemainingCredits(): Promise<number> {

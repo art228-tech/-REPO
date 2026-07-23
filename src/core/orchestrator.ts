@@ -48,6 +48,7 @@ export class Orchestrator extends EventEmitter {
   private status: RunStatus = Orchestrator.initialStatus();
   private stopRequested = false;
   private running = false;
+  private keepProfileForReuse = false;
 
   constructor(private readonly logger: Logger) {
     super();
@@ -97,6 +98,7 @@ export class Orchestrator extends EventEmitter {
     if (this.running) throw new Error("Сценарий уже выполняется");
     this.running = true;
     this.stopRequested = false;
+    this.keepProfileForReuse = false;
     this.status = Orchestrator.initialStatus();
     this.update({
       state: "running",
@@ -162,6 +164,16 @@ export class Orchestrator extends EventEmitter {
         manualAssist: config.manualAssist,
         manualAssistTimeoutSec: config.manualAssistTimeoutSec,
       });
+      if (el.manualLoginUsed && !config.reuseProfileId?.trim() && profileId) {
+        // Пользователь прошёл капчу/телефон вручную — сохраняем профиль, чтобы
+        // в следующий раз войти без проверки: достаточно указать этот ID.
+        this.keepProfileForReuse = true;
+        this.logger.warn(
+          "orchestrator",
+          `🔑 Вход потребовал ручной проверки. Профиль СОХРАНЁН. Чтобы больше не проходить капчу/телефон — укажите этот ID в поле «ID существующего профиля»: ${profileId}`,
+          { reuseProfileId: profileId },
+        );
+      }
 
       this.update({ step: "Создание голосов" });
       const voices = await this.createVoices(config, prompts, el);
@@ -390,12 +402,14 @@ export class Orchestrator extends EventEmitter {
       const reused = Boolean(config.reuseProfileId?.trim());
       // При ошибке профиль НЕ удаляем — оставляем для диагностики.
       const endedWithError = this.status.state === "error";
-      if (config.deleteProfileOnFinish && !endedWithError && !reused) {
+      if (config.deleteProfileOnFinish && !endedWithError && !reused && !this.keepProfileForReuse) {
         await dolphin
           .deleteProfile(profileId)
           .catch((e) => this.logger.warn("orchestrator", "Ошибка удаления профиля", { error: String(e) }));
       } else if (endedWithError) {
-        this.logger.warn("orchestrator", "Профиль НЕ удалён из-за ошибки — оставлен для диагностики", {
+        this.logger.warn("orchestrator", "Профиль НЕ удалён из-за ошибки — оставлен для диагностики", { profileId });
+      } else if (this.keepProfileForReuse) {
+        this.logger.warn("orchestrator", `Профиль СОХРАНЁН для повторного входа без капчи. ID: ${profileId}`, {
           profileId,
         });
       }

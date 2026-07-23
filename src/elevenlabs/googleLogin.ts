@@ -15,13 +15,19 @@ const DEFAULT_LOGIN_OPTIONS: LoginOptions = { manualAssist: true, manualAssistTi
  * Выполняет вход в ElevenLabs через Google. Обрабатывает как всплывающее окно
  * Google (popup), так и редирект в том же табе, а также шаг 2FA (TOTP).
  */
+export interface LoginResult {
+  page: Page;
+  /** Понадобилось ли ручное действие (капча/2FA/телефон). */
+  manualUsed: boolean;
+}
+
 export async function loginWithGoogle(
   browser: Browser,
   page: Page,
   account: GoogleAccount,
   logger: Logger,
   options: LoginOptions = DEFAULT_LOGIN_OPTIONS,
-): Promise<Page> {
+): Promise<LoginResult> {
   logger.info("elevenlabs.login", "Открываю страницу входа ElevenLabs");
   await page.goto(ELEVENLABS.SIGN_IN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await sleep(1500);
@@ -29,7 +35,7 @@ export async function loginWithGoogle(
   // Уже залогинены?
   if (await isLoggedIn(page)) {
     logger.success("elevenlabs.login", "Уже выполнен вход, пропускаю авторизацию");
-    return page;
+    return { page, manualUsed: false };
   }
 
   const clickedText = await clickByText(page, ELEVENLABS_SELECTORS.googleSignInText, 10_000);
@@ -50,7 +56,7 @@ export async function loginWithGoogle(
   logger.info("elevenlabs.login", `Открыто окно входа Google`, { url: safeUrl(googlePage), popup: isPopup });
   await sleep(1000);
 
-  await performGoogleAuth(browser, googlePage, account, logger, options);
+  const manualUsed = await performGoogleAuth(browser, googlePage, account, logger, options);
 
   // Если был popup — дождаться его закрытия; иначе вернуться в приложение.
   if (isPopup) {
@@ -69,7 +75,7 @@ export async function loginWithGoogle(
   logger.success("elevenlabs.login", "Успешный вход в ElevenLabs через Google");
   // Закрыть cookie-баннер и пройти онбординг «Choose your platform».
   await prepareApp(appPage, logger);
-  return appPage;
+  return { page: appPage, manualUsed };
 }
 
 /** Находит вкладку ElevenLabs среди всех (предпочитая уже на /app, не sign-in). */
@@ -190,32 +196,34 @@ async function waitForPasswordWithManualAssist(
   account: GoogleAccount,
   logger: Logger,
   options: LoginOptions,
-): Promise<boolean> {
+): Promise<{ hasPassword: boolean; manualUsed: boolean }> {
   const deadline = Date.now() + Math.max(30, options.manualAssistTimeoutSec) * 1000;
   let manualNotified = false;
   while (Date.now() < deadline) {
     // Уже вошли (иногда после проверки сразу редиректит в приложение)?
     const app = await findElevenLabsPage(browser, page);
-    if (await isLoggedIn(app)) return false;
+    if (await isLoggedIn(app)) return { hasPassword: false, manualUsed: manualNotified };
     // 2FA (TOTP) с автоматическим кодом.
     if (await waitForAny(page, GOOGLE_SELECTORS.totpInput, 500)) {
-      if (account.totpSecret) return false; // обработаем TOTP отдельно ниже
+      if (account.totpSecret) return { hasPassword: false, manualUsed: manualNotified };
     }
-    if (await waitForAny(page, GOOGLE_SELECTORS.passwordInput, 800)) return true;
+    if (await waitForAny(page, GOOGLE_SELECTORS.passwordInput, 800)) {
+      return { hasPassword: true, manualUsed: manualNotified };
+    }
 
     if (await isChallenge(page)) {
       if (!options.manualAssist) {
         await dumpDiagnostics(page, logger, "требуется проверка (капча/2FA), ручной режим выключен");
         throw new Error(
-          "Google требует проверку (reCAPTCHA/«Verify it's you»). Включите «Ручное подтверждение» в настройках или используйте существующий залогиненный профиль.",
+          "Google требует проверку (reCAPTCHA/«Verify it's you»/телефон). Включите «Ручное подтверждение» в настройках или используйте существующий залогиненный профиль (reuseProfileId).",
         );
       }
       if (!manualNotified) {
         manualNotified = true;
-        await dumpDiagnostics(page, logger, "экран проверки Google (reCAPTCHA/verify/2FA)");
+        await dumpDiagnostics(page, logger, "экран проверки Google (reCAPTCHA/verify/телефон/2FA)");
         logger.warn(
           "elevenlabs.login",
-          "⚠️ ТРЕБУЕТСЯ РУЧНОЕ ДЕЙСТВИЕ: пройдите проверку (reCAPTCHA/«Verify it's you») в ОТКРЫТОМ окне браузера Dolphin. Софт продолжит автоматически. Жду...",
+          "⚠️ ТРЕБУЕТСЯ РУЧНОЕ ДЕЙСТВИЕ: пройдите проверку Google (reCAPTCHA / «Verify it's you» / номер телефона) в ОТКРЫТОМ окне браузера Dolphin. Софт продолжит автоматически. Жду...",
           { waitSec: options.manualAssistTimeoutSec },
         );
         await page.bringToFront().catch(() => undefined);
@@ -223,17 +231,18 @@ async function waitForPasswordWithManualAssist(
     }
     await sleep(2000);
   }
-  return false;
+  return { hasPassword: false, manualUsed: manualNotified };
 }
 
-/** Проходит форму Google: email → (проверка вручную) → пароль → 2FA → согласие. */
+/** Проходит форму Google: email → (проверка вручную) → пароль → 2FA → согласие. Возвращает, было ли ручное действие. */
 async function performGoogleAuth(
   browser: Browser,
   page: Page,
   account: GoogleAccount,
   logger: Logger,
   options: LoginOptions,
-): Promise<void> {
+): Promise<boolean> {
+  let manualUsed = false;
   await sleep(2000);
   await dumpDiagnostics(page, logger, "экран входа Google (до ввода email)");
   await assertNotBlocked(page, logger);
@@ -257,8 +266,9 @@ async function performGoogleAuth(
   }
 
   logger.info("elevenlabs.login", "Ожидаю поле пароля Google (при капче — ручное подтверждение)");
-  const hasPassword = await waitForPasswordWithManualAssist(browser, page, account, logger, options);
-  if (hasPassword) {
+  const pw = await waitForPasswordWithManualAssist(browser, page, account, logger, options);
+  if (pw.manualUsed) manualUsed = true;
+  if (pw.hasPassword) {
     await sleep(500);
     logger.info("elevenlabs.login", "Ввожу пароль Google");
     await typeInto(page, GOOGLE_SELECTORS.passwordInput, account.password, { timeout: 60_000 });
@@ -281,6 +291,7 @@ async function performGoogleAuth(
       }
       await sleep(2500);
     } else if (options.manualAssist) {
+      manualUsed = true;
       logger.warn("elevenlabs.login", "⚠️ ТРЕБУЕТСЯ РУЧНОЕ ДЕЙСТВИЕ: введите 2FA-код в окне браузера Dolphin. Жду...");
       // Ждём, пока пользователь введёт код и пройдёт дальше.
       const deadline = Date.now() + Math.max(30, options.manualAssistTimeoutSec) * 1000;
@@ -298,6 +309,7 @@ async function performGoogleAuth(
   // тоже могут показать: даём ручное время при необходимости.
   await clickByText(page, GOOGLE_SELECTORS.approveButtonText, 8000).catch(() => undefined);
   if (options.manualAssist && (await isChallenge(page))) {
+    manualUsed = true;
     logger.warn("elevenlabs.login", "⚠️ ТРЕБУЕТСЯ РУЧНОЕ ДЕЙСТВИЕ: завершите проверку Google в окне браузера. Жду...");
     const deadline = Date.now() + Math.max(30, options.manualAssistTimeoutSec) * 1000;
     while (Date.now() < deadline) {
@@ -306,6 +318,7 @@ async function performGoogleAuth(
       await sleep(2000);
     }
   }
+  return manualUsed;
 }
 
 /**

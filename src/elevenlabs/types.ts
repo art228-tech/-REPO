@@ -42,6 +42,8 @@ export interface LoginOptions {
 }
 
 export interface IElevenLabsAutomation {
+  /** Понадобилось ли ручное действие при последнем входе (капча/2FA/телефон). */
+  manualLoginUsed?: boolean;
   /** Подключение к уже запущенному профилю Dolphin по CDP. */
   connect(endpoint: AutomationEndpoint): Promise<void>;
   /** Вход в ElevenLabs через Google-аккаунт. */
