@@ -127,10 +127,11 @@ export const ELEVENLABS_SELECTORS = {
     "по промпту",
   ],
   voiceDescriptionTextarea: [
+    'textarea[name="voiceDescription"]',
+    'textarea[name*="description" i]',
     'textarea[placeholder*="describe" i]',
     'textarea[placeholder*="voice" i]',
-    'textarea[name*="description" i]',
-    "textarea",
+    'textarea:not([name="h-captcha-response"])',
   ],
   previewTextarea: [
     'textarea[placeholder*="preview" i]',
@@ -142,13 +143,23 @@ export const ELEVENLABS_SELECTORS = {
     '[role="radio"]',
     '[data-preview-index]',
   ],
-  saveVoiceButtonText: ["Save voice", "Save", "Add to library", "Сохранить", "Сохранить голос"],
+  saveVoiceButtonText: [
+    "Select voice",
+    "Use voice",
+    "Save voice",
+    "Save to library",
+    "Add voice",
+    "Add to library",
+    "Выбрать голос",
+    "Сохранить голос",
+    "Сохранить",
+  ],
   voiceNameInput: [
     'input[placeholder*="name" i]',
     'input[name*="name" i]',
     'input[aria-label*="name" i]',
   ],
-  confirmSaveButtonText: ["Save", "Confirm", "Create voice", "Сохранить", "Создать"],
+  confirmSaveButtonText: ["Create voice", "Add voice", "Save voice", "Save", "Create", "Confirm", "Done", "Сохранить", "Создать", "Готово"],
 
   /** Text to Speech. */
   ttsTextarea: [

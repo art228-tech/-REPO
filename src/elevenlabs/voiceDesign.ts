@@ -3,7 +3,7 @@ import { Logger } from "../logging/logger.js";
 import { sleep } from "../util/sleep.js";
 import { ELEVENLABS, validatePreviewText, validateVoiceDescription } from "./constants.js";
 import { prepareApp } from "./appHelpers.js";
-import { clickByText, clickNth, countAny, dumpDiagnostics, textPresent, typeInto, waitForText } from "./pageHelpers.js";
+import { clickByText, clickNth, countAny, dumpDiagnostics, textPresent, typeInto } from "./pageHelpers.js";
 import { ELEVENLABS_SELECTORS } from "./selectors.js";
 import { CreatedVoice, DesignVoiceParams, NotLoggedInError, OutOfCreditsError, VoiceDescriptionError } from "./types.js";
 
@@ -87,22 +87,50 @@ export async function designVoice(page: Page, params: DesignVoiceParams, logger:
 
   const index = Math.min(config.previewToSaveIndex, ELEVENLABS.PREVIEW_CANDIDATES - 1);
   logger.info("elevenlabs.voice", `Выбираю кандидата #${index + 1}`);
-  await selectCandidate(page, index);
-  await sleep(500);
+  // Кандидаты обычно называются «Voice 1/2/3»; первый выбран по умолчанию.
+  await clickByText(page, [`Voice ${index + 1}`], 4000).catch(() => undefined);
+  await selectCandidate(page, index).catch(() => undefined);
+  await sleep(600);
 
-  logger.info("elevenlabs.voice", "Сохраняю голос");
-  const saveClicked = await clickByText(page, ELEVENLABS_SELECTORS.saveVoiceButtonText, 10_000);
+  logger.info("elevenlabs.voice", "Сохраняю голос (Select voice)");
+  const saveClicked = await clickByText(page, ELEVENLABS_SELECTORS.saveVoiceButtonText, 12_000);
   if (!saveClicked) {
-    throw new Error("Не нашёл кнопку сохранения голоса");
+    await dumpDiagnostics(page, logger, "не нашёл кнопку сохранения/выбора голоса");
+    throw new Error("Не нашёл кнопку сохранения голоса (Select voice)");
   }
-  await sleep(1000);
-  await typeInto(page, ELEVENLABS_SELECTORS.voiceNameInput, voiceName).catch(() => undefined);
-  await sleep(400);
-  await clickByText(page, ELEVENLABS_SELECTORS.confirmSaveButtonText, 8000).catch(() => undefined);
+  await sleep(1500);
+  await dumpDiagnostics(page, logger, "после Select voice (диалог названия?)");
 
-  await waitForText(page, ["saved", "added", "сохран", "добавлен", voiceName], 15_000).catch(() => undefined);
-  logger.success("elevenlabs.voice", `Голос "${voiceName}" создан и сохранён`);
+  // Если появился диалог с именем — вводим имя и подтверждаем.
+  await typeInto(page, ELEVENLABS_SELECTORS.voiceNameInput, voiceName, { human: true, timeout: 5000 }).catch(
+    () => undefined,
+  );
+  await sleep(500);
+  await clickByText(page, ELEVENLABS_SELECTORS.confirmSaveButtonText, 8000, ["cancel", "отмен", "back", "назад"]).catch(
+    () => undefined,
+  );
+
+  // Проверяем, что модалка создания закрылась (голос сохранён).
+  const saved = await waitForModalClosed(page, 20_000);
+  if (saved) {
+    logger.success("elevenlabs.voice", `Голос "${voiceName}" создан и сохранён`);
+  } else {
+    await dumpDiagnostics(page, logger, "модалка создания не закрылась после сохранения");
+    logger.warn("elevenlabs.voice", `Голос "${voiceName}": не удалось подтвердить сохранение (модалка открыта)`);
+  }
   return { id: voiceName, name: voiceName };
+}
+
+/** Ждёт закрытия модалки создания голоса (URL без action=create и нет кнопки выбора). */
+async function waitForModalClosed(page: Page, timeout: number): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const url = page.url().toLowerCase();
+    const stillOpen = url.includes("action=create") || url.includes("creationtype");
+    if (!stillOpen) return true;
+    await sleep(700);
+  }
+  return false;
 }
 
 async function waitForPreviews(page: Page, timeout: number): Promise<boolean> {
