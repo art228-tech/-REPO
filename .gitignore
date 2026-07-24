@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+release/
+*.log
+logs/
+data/config.json
+data/runtime/
+.env
+.DS_Store
+downloads/
+coverage/

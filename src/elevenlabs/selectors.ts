@@ -1,0 +1,234 @@
+/**
+ * Централизованный список селекторов. UI ElevenLabs и Google периодически
+ * меняется, поэтому для каждого действия хранится НЕСКОЛЬКО кандидатов и
+ * текстовых меток — хелперы перебирают их по очереди. Если что-то сломалось,
+ * достаточно поправить селекторы здесь, не трогая логику.
+ */
+export const GOOGLE_SELECTORS = {
+  emailInput: [
+    'input[type="email"]',
+    "#identifierId",
+    'input[name="identifier"]',
+    'input[autocomplete="username"]',
+    'input[aria-label*="email" i]',
+    'input[aria-label*="почт" i]',
+    'input[jsname][type="text"]',
+  ],
+  emailNextText: ["Далее", "Next", "Продолжить", "Continue"],
+  passwordInput: [
+    'input[type="password"]',
+    'input[name="Passwd"]',
+    'input[name="password"]',
+    'input[autocomplete="current-password"]',
+    'input[aria-label*="password" i]',
+    'input[aria-label*="пароль" i]',
+  ],
+  passwordNextText: ["Далее", "Next", "Продолжить", "Continue"],
+  totpInput: ['input[name="totpPin"]', "#totpPin", 'input[type="tel"]', 'input[autocomplete="one-time-code"]'],
+  approveButtonText: ["Продолжить", "Continue", "Разрешить", "Allow", "Подтвердить", "Confirm"],
+  /** Признаки экрана проверки (reCAPTCHA / «Verify it's you» / 2FA) — требуют ручного действия. */
+  challengeText: [
+    "verify it's you",
+    "verify it’s you",
+    "i'm not a robot",
+    "i’m not a robot",
+    "confirm you're not a robot",
+    "recaptcha",
+    "2-step verification",
+    "2-step",
+    "enter the code",
+    "подтвердите, что это вы",
+    "подтвердите, что вы неробот",
+    "я не робот",
+    "двухэтап",
+    "введите код",
+    "verify your identity",
+    "confirm your identity",
+    "enter your phone",
+    "phone number",
+    "потврдите идентитет",
+    "број телефона",
+    "unesite broj telefona",
+    "verifikacija",
+  ],
+
+  /** Признаки блокировки автоматизированного входа со стороны Google. */
+  blockedText: [
+    "couldn't sign you in",
+    "couldn’t sign you in",
+    "this browser or app may not be secure",
+    "не удалось выполнить вход",
+    "этот браузер или приложение",
+    "browser or app may not be secure",
+    "try using a different browser",
+  ],
+};
+
+export const ELEVENLABS_SELECTORS = {
+  /** Кнопки/ссылки входа через Google на странице sign-in. */
+  googleSignInText: [
+    "Continue with Google",
+    "Sign in with Google",
+    "Продолжить с Google",
+    "Войти через Google",
+    "Google",
+  ],
+  googleSignInButton: [
+    'button[data-provider="google"]',
+    'a[href*="google"]',
+    'button:has(img[alt*="Google"])',
+  ],
+
+  /** Нативная форма входа ElevenLabs (email + пароль). */
+  emailInput: ['input[type="email"]', 'input[name="email"]', 'input[autocomplete="email"]', 'input[placeholder*="email" i]'],
+  passwordInput: [
+    'input[type="password"]',
+    'input[name="password"]',
+    'input[autocomplete="current-password"]',
+    'input[placeholder*="password" i]',
+  ],
+  signInButtonText: ["Sign in", "Sign In", "Log in", "Log In", "Continue with email", "Войти", "Продолжить"],
+  /** Строгие признаки неверных данных входа (проверяются только в главном фрейме). */
+  loginErrorText: [
+    "invalid email or password",
+    "incorrect email or password",
+    "wrong email or password",
+    "email or password is incorrect",
+    "password is incorrect",
+    "incorrect password",
+    "couldn't sign you in",
+    "could not sign you in",
+    "no account found",
+    "account not found",
+    "user not found",
+    "неверный логин или пароль",
+    "неверный пароль",
+    "неправильный пароль",
+  ],
+  /** Признаки капчи hCaptcha (видимой). */
+  hcaptchaText: ["verify you are human", "i am human", "hcaptcha", "select all images", "выберите все"],
+
+  /** Признак успешного входа: наличие сайдбара/навигации приложения. */
+  loggedInMarkers: ['nav[aria-label]', '[data-testid="sidebar"]', 'a[href*="/app/"]'],
+
+  /** Voice Design: сначала открыть меню создания голоса. */
+  voiceDesignEntryText: ["Create Voice", "Create a voice", "Create a Voice", "Создать голос", "Создать"],
+  /** Затем выбрать вариант «Voice Design» (создание по текстовому промпту). */
+  voiceDesignOptionText: [
+    "Voice Design",
+    "Text to Voice",
+    "Design a voice",
+    "Design voice",
+    "Create from a prompt",
+    "Describe your voice",
+    "from a prompt",
+    "Дизайн голоса",
+    "по описанию",
+    "по промпту",
+  ],
+  voiceDescriptionTextarea: [
+    'textarea[name="voiceDescription"]',
+    'textarea[name*="description" i]',
+    'textarea[placeholder*="describe" i]',
+    'textarea[placeholder*="voice" i]',
+    'textarea:not([name="h-captcha-response"])',
+  ],
+  previewTextarea: [
+    'textarea[placeholder*="preview" i]',
+    'textarea[placeholder*="text to preview" i]',
+  ],
+  generateButtonText: ["Generate", "Generate voices", "Сгенерировать", "Создать"],
+  previewCandidate: [
+    '[data-testid*="preview"]',
+    '[role="radio"]',
+    '[data-preview-index]',
+  ],
+  saveVoiceButtonText: [
+    "Select voice",
+    "Use voice",
+    "Save voice",
+    "Save to library",
+    "Add voice",
+    "Add to library",
+    "Выбрать голос",
+    "Сохранить голос",
+    "Сохранить",
+  ],
+  voiceNameInput: [
+    'input[placeholder*="name" i]',
+    'input[name*="name" i]',
+    'input[aria-label*="name" i]',
+  ],
+  confirmSaveButtonText: ["Create voice", "Add voice", "Save voice", "Save", "Create", "Confirm", "Done", "Сохранить", "Создать", "Готово"],
+
+  /** Text to Speech. */
+  ttsTextarea: [
+    'textarea[placeholder*="text" i]',
+    'div[contenteditable="true"]',
+    "textarea",
+  ],
+  voiceSelector: [
+    '[data-testid="voice-selector"]',
+    'button[aria-haspopup="listbox"]',
+    'button[aria-label*="voice" i]',
+  ],
+  generateSpeechButtonText: ["Generate speech", "Generate", "Сгенерировать речь", "Сгенерировать"],
+  downloadButtonText: ["Download", "Скачать", "Export"],
+  settingsToggleText: ["Settings", "Voice settings", "Настройки"],
+
+  /** Кнопки принятия cookie (Cookiebot и общие). */
+  cookieAcceptSelectors: [
+    "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+    "#CybotCookiebotDialogBodyButtonAccept",
+    "#CybotCookiebotDialogBodyLevelButtonAccept",
+    'button[aria-label*="accept" i]',
+    'button[id*="accept" i]',
+  ],
+  cookieAcceptText: [
+    "Accept all cookies",
+    "Accept all",
+    "Allow all",
+    "Accept cookies",
+    "Принять все",
+    "Разрешить все",
+    "Принять",
+    "Accept",
+  ],
+
+  /** Онбординг: выбор платформы и переход дальше. */
+  onboardingPlatformText: ["ElevenCreative", "Text to Speech", "Creative"],
+  onboardingContinueText: [
+    "Continue",
+    "Get started",
+    "Get Started",
+    "Let's go",
+    "Next",
+    "Skip",
+    "Skip for now",
+    "Done",
+    "Finish",
+    "Продолжить",
+    "Начать",
+    "Далее",
+    "Пропустить",
+    "Готово",
+  ],
+
+  /** Индикатор остатка кредитов (символов). */
+  creditsMarkers: [
+    '[data-testid="character-count"]',
+    '[data-testid="subscription-usage"]',
+    'text/credits remaining',
+  ],
+
+  /** Тексты ошибки лимита кредитов. */
+  outOfCreditsText: [
+    "out of credits",
+    "quota exceeded",
+    "not enough credits",
+    "insufficient",
+    "недостаточно",
+    "лимит",
+    "закончились",
+  ],
+};

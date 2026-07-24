@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ElevenLabs Auto Voiceover · Dolphin Anty</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">🎙️</span>
+        <div>
+          <h1>ElevenLabs Auto Voiceover</h1>
+          <p class="subtitle">Автоозвучка через антидетект-браузер Dolphin Anty</p>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="btn-save" class="btn ghost">Сохранить</button>
+        <button id="btn-start" class="btn primary">▶ Запустить</button>
+        <button id="btn-stop" class="btn danger" disabled>■ Остановить</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="config">
+        <div class="card">
+          <h2>📁 Папки</h2>
+          <div class="field">
+            <label>Куда скачивать озвучки</label>
+            <div class="path-input">
+              <input id="downloadDir" type="text" placeholder="Выберите папку…" />
+              <button class="btn small pick" data-target="downloadDir">Обзор</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Папка с промптами для голосов</label>
+            <div class="path-input">
+              <input id="promptsDir" type="text" placeholder="Выберите папку…" />
+              <button class="btn small pick" data-target="promptsDir">Обзор</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Папка с текстами для озвучки</label>
+            <div class="path-input">
+              <input id="textsDir" type="text" placeholder="Выберите папку…" />
+              <button class="btn small pick" data-target="textsDir">Обзор</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>🐬 Dolphin Anty</h2>
+          <div class="field">
+            <label>API-токен (Bearer)</label>
+            <input id="dolphinApiToken" type="password" placeholder="Токен из dolphin-anty.com/panel" />
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Локальный API</label>
+              <input id="dolphinLocalApi" type="text" value="http://localhost:3001" />
+            </div>
+            <div class="field">
+              <label>Remote API</label>
+              <input id="dolphinRemoteApi" type="text" value="https://dolphin-anty-api.com" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Платформа профиля</label>
+            <select id="platform">
+              <option value="windows">Windows</option>
+              <option value="macos">macOS</option>
+              <option value="linux">Linux</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>🌐 Прокси профиля</h2>
+          <div class="field">
+            <label>Тип</label>
+            <select id="proxy.type">
+              <option value="http">HTTP</option>
+              <option value="socks5">SOCKS5</option>
+              <option value="socks4">SOCKS4</option>
+              <option value="ssh">SSH</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Прокси одной строкой</label>
+            <input id="proxyString" type="text" placeholder="185.240.93.75:8000:kekTAz:MvaYkY" />
+            <p class="hint" id="proxy-preview">Формат: host:port:login:password (также host:port или login:pass@host:port).</p>
+          </div>
+          <div class="field">
+            <label>Change IP URL (для rotating, опц.)</label>
+            <input id="proxy.changeIpUrl" type="text" />
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>🔑 Аккаунт и способ входа</h2>
+          <div class="field">
+            <label>Способ входа</label>
+            <select id="loginMethod">
+              <option value="google">Через Google (OAuth)</option>
+              <option value="email">По почте (email + пароль ElevenLabs)</option>
+            </select>
+            <p class="hint">«По почте» обходит телефонную проверку Google. Логин — ваша почта (можно gmail), пароль — от аккаунта ElevenLabs. Если аккаунт создан через Google — задайте пароль на elevenlabs.io через «Forgot password».</p>
+          </div>
+          <div class="field">
+            <label>Email (логин)</label>
+            <input id="google.email" type="text" placeholder="mail@gmail.com" />
+          </div>
+          <div class="field">
+            <label>Пароль Google (для входа через Google)</label>
+            <input id="google.password" type="password" />
+          </div>
+          <div class="field">
+            <label>Пароль ElevenLabs (для входа по почте)</label>
+            <input id="elevenLabsPassword" type="password" />
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>2FA секрет (TOTP, опц.)</label>
+              <input id="google.totpSecret" type="password" placeholder="Base32 secret" />
+            </div>
+            <div class="field">
+              <label>Резервный email (опц.)</label>
+              <input id="google.recoveryEmail" type="text" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>🗣️ Дизайн голосов</h2>
+          <div class="grid-2">
+            <div class="field">
+              <label>Модель</label>
+              <select id="voiceDesign.model">
+                <option value="eleven_ttv_v3">eleven_ttv_v3</option>
+                <option value="eleven_multilingual_ttv_v2">eleven_multilingual_ttv_v2</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Сколько голосов создать</label>
+              <input id="voiceDesign.voicesToCreate" type="number" min="1" max="10" value="3" />
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Префикс имени голоса</label>
+              <input id="voiceDesign.voiceNamePrefix" type="text" value="AutoVoice" />
+            </div>
+            <div class="field">
+              <label>Какой из 3 превью сохранять (0–2)</label>
+              <input id="voiceDesign.previewToSaveIndex" type="number" min="0" max="2" value="0" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Preview-текст (100–1000 симв., опц. — иначе авто)</label>
+            <textarea id="voiceDesign.previewText" rows="2"></textarea>
+          </div>
+          <p class="hint">Описание голоса берётся из файлов папки промптов (20–1000 символов). Слишком длинные обрезаются автоматически.</p>
+        </div>
+
+        <div class="card">
+          <h2>🎚️ Настройки озвучки (TTS)</h2>
+          <div class="grid-2">
+            <div class="field">
+              <label>Модель</label>
+              <select id="tts.model">
+                <option value="eleven_multilingual_v2">eleven_multilingual_v2</option>
+                <option value="eleven_v3">eleven_v3</option>
+                <option value="eleven_turbo_v2_5">eleven_turbo_v2_5</option>
+                <option value="eleven_flash_v2_5">eleven_flash_v2_5</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Формат</label>
+              <select id="tts.outputFormat">
+                <option value="mp3">MP3</option>
+                <option value="wav">WAV</option>
+              </select>
+            </div>
+          </div>
+          <div class="field range">
+            <label>Стабильность: <span data-out="tts.stability">0.5</span></label>
+            <input id="tts.stability" type="range" min="0" max="1" step="0.05" value="0.5" />
+          </div>
+          <div class="field range">
+            <label>Похожесть: <span data-out="tts.similarity">0.75</span></label>
+            <input id="tts.similarity" type="range" min="0" max="1" step="0.05" value="0.75" />
+          </div>
+          <div class="field range">
+            <label>Стиль: <span data-out="tts.style">0</span></label>
+            <input id="tts.style" type="range" min="0" max="1" step="0.05" value="0" />
+          </div>
+          <div class="field range">
+            <label>Скорость: <span data-out="tts.speed">1</span></label>
+            <input id="tts.speed" type="range" min="0.7" max="1.2" step="0.05" value="1" />
+          </div>
+          <label class="checkbox"><input id="tts.speakerBoost" type="checkbox" checked /> Speaker boost</label>
+        </div>
+
+        <div class="card">
+          <h2>⚙️ Параметры запуска</h2>
+          <div class="grid-2">
+            <div class="field">
+              <label>Префикс имени профиля</label>
+              <input id="profileNamePrefix" type="text" value="EL-Auto" />
+            </div>
+            <div class="field">
+              <label>Мин. порог кредитов</label>
+              <input id="minCreditsThreshold" type="number" min="0" value="0" />
+            </div>
+          </div>
+          <div class="field">
+            <label>ID существующего профиля Dolphin (опц. — вход один раз, потом переиспользуется)</label>
+            <input id="reuseProfileId" type="text" placeholder="напр. 829790460" />
+            <p class="hint">Если указан — профиль не создаётся и не удаляется. Залогиньтесь/пройдите капчу в нём один раз, дальше софт заходит без входа.</p>
+          </div>
+          <label class="checkbox"><input id="manualAssist" type="checkbox" checked /> Ручное подтверждение капчи/2FA (пауза до ввода вами)</label>
+          <div class="field">
+            <label>Сколько ждать ручного действия, сек</label>
+            <input id="manualAssistTimeoutSec" type="number" min="30" max="1800" value="300" />
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Мин. длительность озвучки, сек</label>
+              <input id="minDurationSec" type="number" min="0" step="0.5" value="10" />
+            </div>
+            <div class="field">
+              <label>Макс. длительность озвучки, сек</label>
+              <input id="maxDurationSec" type="number" min="0" step="0.5" value="17" />
+            </div>
+          </div>
+          <p class="hint">Если готовая озвучка короче минимума или длиннее максимума — текст отбраковывается и заменяется следующим. 0 = без ограничения.</p>
+          <label class="checkbox"><input id="deleteProfileOnFinish" type="checkbox" checked /> Удалять профиль после завершения</label>
+          <label class="checkbox"><input id="consumeTextFiles" type="checkbox" checked /> Удалять текст после озвучки</label>
+          <label class="checkbox"><input id="headless" type="checkbox" /> Headless-режим</label>
+          <label class="checkbox"><input id="dryRun" type="checkbox" /> Сухой прогон (симуляция, без токенов)</label>
+        </div>
+      </section>
+
+      <section class="monitor">
+        <div class="card status-card">
+          <h2>📊 Статус</h2>
+          <div class="status-grid">
+            <div><span class="k">Состояние</span><span id="st-state" class="v badge">idle</span></div>
+            <div><span class="k">Этап</span><span id="st-step" class="v">—</span></div>
+            <div><span class="k">Профиль</span><span id="st-profile" class="v">—</span></div>
+            <div><span class="k">Голоса</span><span id="st-voices" class="v">0/0</span></div>
+            <div><span class="k">Озвучено</span><span id="st-files" class="v">0</span></div>
+            <div><span class="k">Ошибок</span><span id="st-failed" class="v">0</span></div>
+            <div><span class="k">Отбраковано (длит.)</span><span id="st-rejected" class="v">0</span></div>
+            <div><span class="k">Текстов осталось</span><span id="st-texts" class="v">0</span></div>
+            <div><span class="k">Кредиты</span><span id="st-credits" class="v">—</span></div>
+          </div>
+          <p id="st-error" class="error-line"></p>
+        </div>
+
+        <div class="card log-card">
+          <div class="log-head">
+            <h2>📜 Логи</h2>
+            <div class="log-actions">
+              <select id="log-filter">
+                <option value="debug">debug+</option>
+                <option value="info" selected>info+</option>
+                <option value="warn">warn+</option>
+                <option value="error">error</option>
+              </select>
+              <button id="btn-download-logs" class="btn small ghost">⬇ Скачать логи</button>
+              <button id="btn-clear-logs" class="btn small ghost">Очистить</button>
+            </div>
+          </div>
+          <div id="log" class="log"></div>
+        </div>
+      </section>
+    </main>
+
+    <div id="picker" class="modal hidden">
+      <div class="modal-body">
+        <div class="modal-head">
+          <h3>Выбор папки</h3>
+          <button id="picker-close" class="btn small ghost">✕</button>
+        </div>
+        <div class="picker-path">
+          <button id="picker-up" class="btn small">↑ Вверх</button>
+          <button id="picker-home" class="btn small">🏠 Домой</button>
+          <code id="picker-current"></code>
+        </div>
+        <div id="picker-list" class="picker-list"></div>
+        <div class="modal-foot">
+          <button id="picker-select" class="btn primary">Выбрать эту папку</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
