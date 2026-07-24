@@ -38,15 +38,13 @@ export async function loginWithGoogle(
   logger: Logger,
   options: LoginOptions = DEFAULT_LOGIN_OPTIONS,
 ): Promise<LoginResult> {
+  // Сначала проверяем, не залогинен ли профиль уже (важно для reuseProfileId).
+  if (await alreadyLoggedIn(page, browser, logger)) {
+    return { page, manualUsed: false };
+  }
   logger.info("elevenlabs.login", "Открываю страницу входа ElevenLabs");
   await page.goto(ELEVENLABS.SIGN_IN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await sleep(1500);
-
-  // Уже залогинены?
-  if (await isLoggedIn(page)) {
-    logger.success("elevenlabs.login", "Уже выполнен вход, пропускаю авторизацию");
-    return { page, manualUsed: false };
-  }
 
   const clickedText = await clickByText(page, ELEVENLABS_SELECTORS.googleSignInText, 10_000);
   const clicked = clickedText || (await clickSelector(page, ELEVENLABS_SELECTORS.googleSignInButton, 5000));
@@ -134,6 +132,29 @@ async function ensureAppLoggedIn(
   return null;
 }
 
+/**
+ * Проверяет, залогинен ли профиль уже: открывает /app/home и смотрит, не
+ * перекинуло ли на sign-in. Если залогинен — закрывает cookie/онбординг и
+ * возвращает true (вход не нужен). Критично для reuseProfileId.
+ */
+async function alreadyLoggedIn(page: Page, browser: Browser, logger: Logger): Promise<boolean> {
+  try {
+    logger.info("elevenlabs.login", "Проверяю, не залогинен ли профиль уже");
+    await page.goto(ELEVENLABS.APP_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await sleep(2500);
+    await dismissCookies(page, logger);
+    const target = await findElevenLabsPage(browser, page);
+    if (await isLoggedIn(target)) {
+      logger.success("elevenlabs.login", "Профиль уже залогинен — вход не требуется");
+      await prepareApp(target, logger);
+      return true;
+    }
+  } catch (error) {
+    logger.debug("elevenlabs.login", "Проверка существующего входа не удалась", { error: String(error) });
+  }
+  return false;
+}
+
 /** URL страницы без падения, если контекст уже закрыт. */
 function safeUrl(page: Page): string {
   try {
@@ -189,13 +210,13 @@ export async function loginWithEmail(
   logger: Logger,
   options: LoginOptions = DEFAULT_LOGIN_OPTIONS,
 ): Promise<LoginResult> {
+  // Сначала проверяем, не залогинен ли профиль уже (важно для reuseProfileId).
+  if (await alreadyLoggedIn(page, browser, logger)) {
+    return { page, manualUsed: false };
+  }
   logger.info("elevenlabs.login", "Открываю страницу входа ElevenLabs (по почте)");
   await page.goto(ELEVENLABS.SIGN_IN_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await sleep(1500);
-  if (await isLoggedIn(page)) {
-    logger.success("elevenlabs.login", "Уже выполнен вход, пропускаю авторизацию");
-    return { page, manualUsed: false };
-  }
 
   await dismissCookies(page, logger);
   await dumpDiagnostics(page, logger, "форма входа ElevenLabs (email+пароль)");
