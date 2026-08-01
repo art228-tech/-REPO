@@ -104,11 +104,32 @@ class TestAppDefaults:
         assert APP_DEFAULTS["app_url"].startswith("http")
 
     def test_shortname_fits_portal_rules(self):
+        """Портал требует: alphanumeric, 5-32 символа."""
         from tgparser.userbot.appkeys import APP_DEFAULTS
 
         shortname = APP_DEFAULTS["app_shortname"]
         assert shortname.isalnum()
         assert 5 <= len(shortname) <= 32
+
+    def test_platform_is_concrete(self):
+        """Вариант other в форме требует назвать платформу в описании."""
+        from tgparser.userbot.appkeys import APP_DEFAULTS
+
+        assert APP_DEFAULTS["app_platform"] != "other"
+        assert APP_DEFAULTS["app_platform"] in {
+            "android",
+            "ios",
+            "wp",
+            "bb",
+            "desktop",
+            "web",
+            "ubp",
+        }
+
+    def test_every_field_is_filled(self):
+        from tgparser.userbot.appkeys import APP_DEFAULTS
+
+        assert all(str(value).strip() for value in APP_DEFAULTS.values())
 
 
 class FakePortalHTTP:

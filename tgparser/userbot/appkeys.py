@@ -60,8 +60,10 @@ APP_DEFAULTS = {
     # Пустой URL портал может счесть незаполненным полем и отказать безликой
     # ошибкой, поэтому подставляем валидный адрес.
     "app_url": "https://telegram.org",
-    "app_platform": "other",
-    "app_desc": "Personal tool for collecting chat participants",
+    # Не "other": в форме этот вариант подписан «Other (specify in
+    # description)», то есть требует назвать платформу в описании.
+    "app_platform": "android",
+    "app_desc": "Personal tool for collecting chat participants on Android",
 }
 
 
