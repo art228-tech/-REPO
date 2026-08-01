@@ -139,6 +139,7 @@ class ScanService:
                 buckets=build_buckets(
                     scan_settings.effective_roster_budget(),
                     scan_settings.effective_history_budget(),
+                    scan_settings.effective_write_budget(),
                 ),
                 min_delay=scan_settings.min_delay_sec,
                 max_delay=scan_settings.max_delay_sec,

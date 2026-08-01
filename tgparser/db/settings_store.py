@@ -64,6 +64,9 @@ class ScanSettings:
 
     roster_calls_per_hour: int = 20
     history_calls_per_hour: int = 240
+    # Пересылки идут в собственный канал и пачками, поэтому бюджет щедрее:
+    # это не операция из «спамерского следа».
+    write_calls_per_hour: int = 120
 
     min_delay_sec: float = 1.5
     max_delay_sec: float = 4.0
@@ -104,6 +107,10 @@ class ScanSettings:
     def effective_history_budget(self) -> int:
         base = self.history_calls_per_hour
         return max(10, int(base * self.warmup_factor)) if self.in_warmup else base
+
+    def effective_write_budget(self) -> int:
+        base = self.write_calls_per_hour
+        return max(20, int(base * self.warmup_factor)) if self.in_warmup else base
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)

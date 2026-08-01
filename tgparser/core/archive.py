@@ -22,7 +22,7 @@ from telethon.errors import (
 from telethon.tl.functions.channels import CreateChannelRequest
 
 from tgparser.core.util import message_link
-from tgparser.ratelimit.guard import FloodGuard
+from tgparser.ratelimit.guard import AccountFlagged, FloodGuard, ScanAborted
 
 logger = logging.getLogger(__name__)
 
@@ -90,45 +90,67 @@ class Archive:
         logger.info("Создан архивный канал %s", self._channel_id)
         return self._entity
 
-    async def forward(self, message: Any, from_peer: Any) -> ForwardResult:
-        """Переслать сообщение в архив и понять, сохранилась ли ссылка на автора."""
+    async def forward_many(
+        self, message_ids: list[int], from_peer: Any
+    ) -> list[ForwardResult]:
+        """Переслать пачку сообщений одного чата одним запросом.
+
+        Telegram принимает список id за раз и создаёт в приёмнике отдельное
+        сообщение на каждый, поэтому карточки остаются раздельными, а вызов
+        один. Результаты возвращаются в том же порядке, что и вход.
+        """
+        if not message_ids:
+            return []
+
+        def failure(reason: str) -> list[ForwardResult]:
+            return [ForwardResult(None, False, reason) for _ in message_ids]
+
         try:
             entity = await self.ensure()
+        except (ScanAborted, AccountFlagged):
+            raise
         except (RPCError, RuntimeError) as exc:
-            return ForwardResult(link=None, anonymized=False, error=str(exc))
+            return failure(str(exc))
 
         try:
             sent = await self._guard.call(
-                "write",
-                self._client.forward_messages,
-                entity,
-                message.id,
-                from_peer,
+                "write", self._client.forward_messages, entity, message_ids, from_peer
             )
+        except (ScanAborted, AccountFlagged):
+            # Прерывание прогона не должно выглядеть как неудачная пересылка.
+            raise
         except ChatForwardsRestrictedError:
             # В чате включена защита контента — пересылка запрещена целиком.
-            return ForwardResult(
-                link=None, anonymized=False, error="в чате запрещена пересылка"
-            )
+            return failure("в чате запрещена пересылка")
         except ChatWriteForbiddenError as exc:
-            return ForwardResult(link=None, anonymized=False, error=str(exc))
+            return failure(str(exc))
         except RPCError as exc:
             logger.warning("Пересылка не удалась: %s", exc)
-            return ForwardResult(link=None, anonymized=False, error=str(exc))
+            return failure(str(exc))
 
-        forwarded = sent[0] if isinstance(sent, list) else sent
-        if forwarded is None:
-            return ForwardResult(link=None, anonymized=False, error="Telegram не вернул сообщение")
-
-        fwd = getattr(forwarded, "fwd_from", None)
-        anonymized = fwd is not None and getattr(fwd, "from_id", None) is None
-        link = message_link(forwarded.id, chat_id=self._channel_id)
-        return ForwardResult(link=link, anonymized=anonymized)
+        forwarded = sent if isinstance(sent, list) else [sent]
+        results: list[ForwardResult] = []
+        for index in range(len(message_ids)):
+            item = forwarded[index] if index < len(forwarded) else None
+            if item is None:
+                results.append(ForwardResult(None, False, "Telegram не вернул сообщение"))
+                continue
+            fwd = getattr(item, "fwd_from", None)
+            anonymized = fwd is not None and getattr(fwd, "from_id", None) is None
+            results.append(
+                ForwardResult(
+                    link=message_link(item.id, chat_id=self._channel_id),
+                    anonymized=anonymized,
+                )
+            )
+        return results
 
     async def post(self, text: str) -> None:
         """Сводка в канал. Ошибки не критичны — прогон из-за них не рушим."""
         try:
             entity = await self.ensure()
             await self._guard.call("write", self._client.send_message, entity, text)
+        except (ScanAborted, AccountFlagged):
+            raise
         except (RPCError, RuntimeError) as exc:
             logger.warning("Не удалось написать в архивный канал: %s", exc)

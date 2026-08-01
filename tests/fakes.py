@@ -67,7 +67,10 @@ class FakeTelegramClient:
         self._by_raw_id = {f.entity.id: f for f in fixtures}
         self._users = users
         self.calls: list[str] = []
-        self.forwarded: list[tuple[int, int]] = []
+        # Каждый элемент — один вызов пересылки: (чат, список id).
+        self.forwarded: list[tuple[int, list[int]]] = []
+        # Плоский список всех пересланных сообщений.
+        self.forwarded_ids: list[int] = []
         self.created_channels = 0
         self.sent_messages: list[str] = []
         self._archive = make_channel(555000111, title="Архив", megagroup=False, broadcast=True)
@@ -95,14 +98,22 @@ class FakeTelegramClient:
             raise ValueError(f"нет такой сущности: {ident}")
         return ident
 
-    async def forward_messages(self, entity: Any, message_id: int, from_peer: Any):
+    async def forward_messages(self, entity: Any, message_ids: Any, from_peer: Any):
+        """Как настоящий Telethon: на список id отвечает списком сообщений."""
         self.calls.append("forward_messages")
         fixture = self._fixtures.get(get_peer_id(from_peer))
         if fixture is not None and fixture.forward_error is not None:
             raise fixture.forward_error
-        self.forwarded.append((get_peer_id(from_peer), message_id))
+
+        batch = list(message_ids) if isinstance(message_ids, (list, tuple)) else [message_ids]
+        self.forwarded.append((get_peer_id(from_peer), batch))
         anonymized = fixture.forward_anonymized if fixture else False
-        return make_forwarded(9000 + len(self.forwarded), anonymized=anonymized)
+        sent = [
+            make_forwarded(9000 + len(self.forwarded_ids) + index, anonymized=anonymized)
+            for index in range(len(batch))
+        ]
+        self.forwarded_ids.extend(batch)
+        return sent if isinstance(message_ids, (list, tuple)) else sent[0]
 
     async def send_message(self, entity: Any, text: str):
         self.calls.append("send_message")

@@ -142,6 +142,7 @@ class FloodGuard:
 def build_buckets(
     roster_per_hour: int,
     history_per_hour: int,
+    write_per_hour: int = 120,
     clock: Callable[[], float] | None = None,
 ) -> dict[str, Any]:
     """Бюджеты по типам запросов.
@@ -156,5 +157,5 @@ def build_buckets(
         "roster": TokenBucket(roster_per_hour, **kwargs),
         "history": TokenBucket(history_per_hour, **kwargs),
         "meta": TokenBucket(max(60, history_per_hour), **kwargs),
-        "write": TokenBucket(max(30, history_per_hour // 4), **kwargs),
+        "write": TokenBucket(write_per_hour, **kwargs),
     }

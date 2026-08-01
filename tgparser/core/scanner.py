@@ -24,7 +24,7 @@ from tgparser.core.util import (
     message_link,
     snippet,
 )
-from tgparser.db.models import ChatKind, ChatState, SourceKind
+from tgparser.db.models import ChatKind, ChatState, Lead, SourceKind
 from tgparser.db.repo import ChatStateRepo, CollectedUser, LeadRepo, as_aware
 from tgparser.db.settings_store import ScanSettings
 from tgparser.ratelimit.guard import AccountFlagged, FloodGuard, ScanAborted
@@ -35,6 +35,10 @@ ProgressCallback = Callable[[str], Awaitable[None]]
 
 # Как часто сбрасывать накопленное в БД.
 FLUSH_EVERY = 50
+
+# Сколько сообщений пересылать одним вызовом. Telegram принимает до 100,
+# берём с запасом, чтобы одна неудача стоила меньше.
+FORWARD_BATCH = 20
 
 
 @dataclass(slots=True)
@@ -69,6 +73,11 @@ class ScanReport:
     @property
     def new_leads(self) -> int:
         return sum(c.collected for c in self.chats)
+
+    # Синоним для читаемости в тестах и отчётах.
+    @property
+    def collected_total(self) -> int:
+        return self.new_leads
 
     @property
     def scanned_messages(self) -> int:
@@ -114,7 +123,11 @@ class Scanner:
         self._archive = archive
         self._on_progress = on_progress
         self._seen: set[int] = set()
-        self._pending: list[tuple[CollectedUser, Any]] = []
+        self._pending: list[CollectedUser] = []
+        # Очередь на пересылку: (lead_id, message_id, peer). Наполняется уже
+        # после того, как лид записан, поэтому медленная пересылка не может
+        # задержать сохранение собранного.
+        self._to_forward: list[tuple[int, int, Any]] = []
         self._report = ScanReport()
         self._current: ChatReport | None = None
 
@@ -147,7 +160,7 @@ class Scanner:
             self._report.aborted = True
             self._report.abort_reason = str(exc)
         finally:
-            await self._flush()
+            await self._finish_writes()
             self._report.finished_at = datetime.now(UTC)
 
         return self._report
@@ -243,9 +256,15 @@ class Scanner:
             logger.warning("Ошибка на чате %s: %s", target.title, exc)
             report.error = str(exc)
 
-        # Дописываем остаток буфера, пока отчёт этого чата ещё актуален.
-        await self._flush()
+        # Дописываем остаток и пересылаем карточки, пока отчёт этого
+        # чата ещё актуален.
+        await self._finish_writes()
         await self._save_state(state_id, collected=report.collected)
+        logger.info(
+            "Чат %r: собрано %s, просмотрено сообщений %s%s",
+            target.title, report.collected, report.scanned_messages,
+            f", пропущен: {report.skipped}" if report.skipped else "",
+        )
         return report
 
     async def _scan_channel(
@@ -499,32 +518,85 @@ class Scanner:
             and message is not None
             and peer is not None
         )
-        self._pending.append((collected, (message, peer) if needs_forward else None))
+        collected.forward_peer = peer if needs_forward else None
+        self._pending.append(collected)
 
         if len(self._pending) >= FLUSH_EVERY:
             await self._flush()
 
     async def _flush(self) -> None:
+        """Записать собранное. Только БД, без сетевых вызовов.
+
+        Пересылка вынесена отдельно: держать транзакцию открытой, пока идут
+        медленные запросы к Telegram, значит терять всю пачку при обрыве и
+        не показывать пользователю ничего до конца пересылок.
+        """
         if not self._pending:
             return
         batch = self._pending
         self._pending = []
-        report = self._current
 
         async with self._db.session() as session:
             repo = LeadRepo(session, self._owner_id)
-            for collected, forward_args in batch:
+            for collected in batch:
                 lead = await repo.add(collected)
-                if lead is None or forward_args is None:
+                if lead is None:
                     continue
-                message, peer = forward_args
-                result = await self._archive.forward(message, peer)
-                if result.ok:
-                    await repo.set_archive(lead, result.link, result.anonymized)
-                    if report is not None:
-                        report.forwarded += 1
-                        if result.anonymized:
-                            report.anonymized += 1
+                if collected.forward_peer is not None and collected.message_id:
+                    self._to_forward.append(
+                        (lead.id, collected.message_id, collected.forward_peer)
+                    )
+        logger.info(
+            "Записано %s, в очереди на пересылку %s", len(batch), len(self._to_forward)
+        )
+
+    async def _drain_forwards(self) -> None:
+        """Переслать накопленные карточки пачками — по одному вызову на чат."""
+        if not self._to_forward:
+            return
+
+        queue = self._to_forward
+        self._to_forward = []
+        report = self._current
+
+        grouped: dict[int, tuple[Any, list[tuple[int, int]]]] = {}
+        for lead_id, message_id, peer in queue:
+            key = get_peer_id(peer)
+            grouped.setdefault(key, (peer, []))[1].append((lead_id, message_id))
+
+        for peer, items in grouped.values():
+            for start in range(0, len(items), FORWARD_BATCH):
+                chunk = items[start : start + FORWARD_BATCH]
+                results = await self._archive.forward_many(
+                    [message_id for _, message_id in chunk], peer
+                )
+                async with self._db.session() as session:
+                    repo = LeadRepo(session, self._owner_id)
+                    for (lead_id, _), result in zip(chunk, results, strict=False):
+                        if not result.ok:
+                            continue
+                        lead = await session.get(Lead, lead_id)
+                        if lead is None:
+                            continue
+                        await repo.set_archive(lead, result.link, result.anonymized)
+                        if report is not None:
+                            report.forwarded += 1
+                            if result.anonymized:
+                                report.anonymized += 1
+
+    async def _finish_writes(self) -> None:
+        """Дописать буфер и разгрести очередь пересылок.
+
+        Пересылка может упереться в бюджет или FloodWait, но собранное к этому
+        моменту уже лежит в базе, поэтому её неудача ничего не теряет.
+        """
+        await self._flush()
+        try:
+            await self._drain_forwards()
+        except (AccountFlagged, ScanAborted):
+            raise
+        except Exception:
+            logger.exception("Не удалось переслать часть карточек")
 
     async def _save_state(self, state_id: int, **updates: Any) -> None:
         if not updates:

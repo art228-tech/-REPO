@@ -434,7 +434,7 @@ class TestArchiveForwarding:
         report = await run_scanner(client, db, scan_settings)
 
         assert client.created_channels == 1
-        assert client.forwarded == [(chat.peer_id, 42)]
+        assert client.forwarded == [(chat.peer_id, [42])]
         assert report.forwarded == 1
         stored = await leads_in(db)
         assert stored[0].archive_link is not None
@@ -491,6 +491,58 @@ class TestArchiveForwarding:
         assert client.forwarded == []
         assert len(await leads_in(db)) == 1
 
+    async def test_leads_are_saved_even_if_forwarding_fails(self, db, scan_settings):
+        """Регресс: пересылка шла внутри транзакции и не давала сохранить сбор.
+
+        Из-за этого прогон мог час собирать людей, а в базе оставался ноль.
+        """
+        from telethon.errors import RPCError
+
+        users = {i: make_user(i, username=None) for i in range(1, 6)}
+        chat = ChatFixture(
+            entity=make_channel(1001),
+            messages=[make_message(50 - i, i) for i in range(1, 6)],
+            forward_error=RPCError(request=None, message="упало"),
+        )
+        report = await run_scanner(FakeTelegramClient([chat], users), db, scan_settings)
+
+        assert report.collected_total == 5
+        assert len(await leads_in(db)) == 5
+        assert report.forwarded == 0
+
+    async def test_leads_land_in_db_before_forwarding_budget_runs_out(
+        self, db, scan_settings
+    ):
+        """Запись не должна зависеть от скорости пересылки."""
+        from tgparser.ratelimit.guard import FloodGuard, build_buckets
+
+        users = {i: make_user(i, username=None) for i in range(1, 4)}
+        chat = ChatFixture(
+            entity=make_channel(1001),
+            messages=[make_message(50 - i, i) for i in range(1, 4)],
+        )
+        client = FakeTelegramClient([chat], users)
+
+        # Бюджет записи исчерпан: пересылки будут ждать, сбор — нет.
+        guard = FloodGuard(
+            buckets=build_buckets(10_000, 10_000, write_per_hour=3600),
+            min_delay=0.0,
+            max_delay=0.0,
+            sleeper=_noop_sleep,
+        )
+        scanner = Scanner(
+            client=client,
+            guard=guard,
+            settings=scan_settings,
+            db=db,
+            account_id=1,
+            owner_id=OWNER_A,
+            self_id=SELF_ID,
+            archive=Archive(client, guard),
+        )
+        await scanner.run()
+        assert len(await leads_in(db)) == 3
+
     async def test_channel_created_once_for_many_users(self, db, scan_settings):
         users = {i: make_user(i, username=None) for i in range(1, 6)}
         chat = ChatFixture(
@@ -502,7 +554,9 @@ class TestArchiveForwarding:
         await run_scanner(client, db, scan_settings)
 
         assert client.created_channels == 1
-        assert len(client.forwarded) == 5
+        # Пять карточек уезжают одним вызовом, а не пятью.
+        assert len(client.forwarded) == 1
+        assert len(client.forwarded_ids) == 5
 
 
 class TestFloodHandling:

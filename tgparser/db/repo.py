@@ -43,6 +43,10 @@ class CollectedUser:
     snippet: str | None = None
     source: SourceKind = SourceKind.HISTORY
 
+    # Чат, из которого пересылать карточку. Заполняется только для тех, у кого
+    # нет тега; в БД не сохраняется.
+    forward_peer: object | None = None
+
     @property
     def has_username(self) -> bool:
         return bool(self.username)
