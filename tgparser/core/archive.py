@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -45,11 +46,20 @@ class ForwardResult:
 
 
 class Archive:
-    def __init__(self, client: Any, guard: FloodGuard, channel_id: int | None = None) -> None:
+    def __init__(
+        self,
+        client: Any,
+        guard: FloodGuard,
+        channel_id: int | None = None,
+        on_created: Callable[[int], Awaitable[None]] | None = None,
+    ) -> None:
         self._client = client
         self._guard = guard
         self._channel_id = channel_id
         self._entity: Any | None = None
+        # Канал нужно запомнить сразу: если прогон прервётся, следующий не
+        # должен создавать ещё один.
+        self._on_created = on_created
 
     @property
     def channel_id(self) -> int | None:
@@ -88,6 +98,8 @@ class Archive:
 
         self._channel_id = get_peer_id(self._entity)
         logger.info("Создан архивный канал %s", self._channel_id)
+        if self._on_created is not None:
+            await self._on_created(self._channel_id)
         return self._entity
 
     async def forward_many(

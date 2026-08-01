@@ -543,6 +543,74 @@ class TestArchiveForwarding:
         await scanner.run()
         assert len(await leads_in(db)) == 3
 
+    async def test_new_channel_is_reported_immediately(self, db, scan_settings):
+        """Регресс: id канала сохранялся только в конце прогона.
+
+        Прерванный прогон оставлял его незаписанным, и следующий создавал
+        второй архивный канал.
+        """
+        from tgparser.ratelimit.guard import FloodGuard, build_buckets
+
+        remembered: list[int] = []
+
+        async def on_created(channel_id: int) -> None:
+            remembered.append(channel_id)
+
+        users = {1: make_user(1, username=None)}
+        chat = ChatFixture(entity=make_channel(1001), messages=[make_message(42, 1)])
+        client = FakeTelegramClient([chat], users)
+        guard = FloodGuard(
+            buckets=build_buckets(10_000, 10_000),
+            min_delay=0.0,
+            max_delay=0.0,
+            sleeper=_noop_sleep,
+        )
+        scanner = Scanner(
+            client=client,
+            guard=guard,
+            settings=scan_settings,
+            db=db,
+            account_id=1,
+            owner_id=OWNER_A,
+            self_id=SELF_ID,
+            archive=Archive(client, guard, None, on_created),
+        )
+        await scanner.run()
+
+        assert client.created_channels == 1
+        assert len(remembered) == 1
+
+    async def test_existing_channel_is_not_recreated(self, db, scan_settings):
+        users = {1: make_user(1, username=None)}
+        chat = ChatFixture(entity=make_channel(1001), messages=[make_message(42, 1)])
+        client = FakeTelegramClient([chat], users)
+
+        from telethon.utils import get_peer_id as peer_id
+
+        from tgparser.ratelimit.guard import FloodGuard, build_buckets
+
+        guard = FloodGuard(
+            buckets=build_buckets(10_000, 10_000),
+            min_delay=0.0,
+            max_delay=0.0,
+            sleeper=_noop_sleep,
+        )
+        known = peer_id(client._archive)
+        scanner = Scanner(
+            client=client,
+            guard=guard,
+            settings=scan_settings,
+            db=db,
+            account_id=1,
+            owner_id=OWNER_A,
+            self_id=SELF_ID,
+            archive=Archive(client, guard, known),
+        )
+        await scanner.run()
+
+        assert client.created_channels == 0
+        assert len(client.forwarded_ids) == 1
+
     async def test_channel_created_once_for_many_users(self, db, scan_settings):
         users = {i: make_user(i, username=None) for i in range(1, 6)}
         chat = ChatFixture(

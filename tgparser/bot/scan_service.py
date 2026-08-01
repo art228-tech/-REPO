@@ -145,7 +145,13 @@ class ScanService:
                 max_delay=scan_settings.max_delay_sec,
                 max_flood_wait=scan_settings.max_flood_wait_sec,
             )
-            archive = Archive(client, guard, archive_channel_id)
+            async def remember_archive(channel_id: int) -> None:
+                async with self._db.session() as session:
+                    account = await AccountRepo(session, owner_id).get(account_id)
+                    if account is not None:
+                        account.archive_channel_id = channel_id
+
+            archive = Archive(client, guard, archive_channel_id, remember_archive)
 
             if scan_settings.in_warmup:
                 await on_progress(

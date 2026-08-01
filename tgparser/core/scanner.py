@@ -40,6 +40,9 @@ FLUSH_EVERY = 50
 # берём с запасом, чтобы одна неудача стоила меньше.
 FORWARD_BATCH = 20
 
+# Как часто отмечаться в логах внутри одного чата.
+LOG_EVERY_PAGES = 10
+
 
 @dataclass(slots=True)
 class ChatReport:
@@ -325,6 +328,7 @@ class Scanner:
         allowed_topics = self._allowed_topic_ids(target)
 
         oldest_seen = offset_id
+        pages = 0
         while True:
             result = await self._guard.call(
                 "history",
@@ -384,8 +388,21 @@ class Scanner:
                 )
 
             offset_id = oldest_seen
+            pages += 1
             if state_id is not None:
                 await self._save_state(state_id, oldest_message_id=oldest_seen)
+
+            # Крупный чат идёт часами, и без периодической отметки логи
+            # выглядят так, будто прогон висит.
+            if pages % LOG_EVERY_PAGES == 0:
+                logger.info(
+                    "%r: страниц %s, сообщений %s, собрано %s, до сообщения %s",
+                    target.title,
+                    pages,
+                    report.scanned_messages,
+                    report.collected,
+                    oldest_seen,
+                )
 
             if reached_cutoff or len(messages) < batch:
                 if state_id is not None:
