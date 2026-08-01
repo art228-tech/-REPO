@@ -1,0 +1,14 @@
+services:
+  bot:
+    build: .
+    container_name: tgparser
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    # Логи не должны съесть диск на маленьком VPS.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
