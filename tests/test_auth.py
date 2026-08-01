@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 from telethon.errors import (
+    ApiIdInvalidError,
+    ApiIdPublishedFloodError,
     PhoneCodeExpiredError,
     PhoneCodeInvalidError,
     PhoneNumberBannedError,
@@ -382,6 +384,20 @@ class TestStart:
         result = await manager.start_telegram(OWNER, "+79991234567", None)
         assert result.outcome is Outcome.ERROR
         assert "заблокирован" in result.message
+
+    async def test_published_api_id_is_explained(self, manager):
+        """Засвеченный ключ Telegram ограничивает — это нужно назвать прямо."""
+        manager.fake_client.send_code_error = ApiIdPublishedFloodError(request=None)
+        result = await manager.start_telegram(OWNER, "+79991234567", None)
+        assert result.outcome is Outcome.ERROR
+        assert "API_ID_PUBLISHED_FLOOD" in result.message
+        assert "my.telegram.org" in result.message
+
+    async def test_invalid_api_id_is_explained(self, manager):
+        manager.fake_client.send_code_error = ApiIdInvalidError(request=None)
+        result = await manager.start_telegram(OWNER, "+79991234567", None)
+        assert result.outcome is Outcome.ERROR
+        assert "api_id" in result.message
 
 
 class TestKeypad:

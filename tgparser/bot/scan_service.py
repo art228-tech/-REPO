@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from telethon.errors import AuthKeyError, RPCError
+from telethon.errors import ApiIdPublishedFloodError, AuthKeyError, RPCError
 
 from tgparser.config import Settings
 from tgparser.core.archive import Archive
@@ -193,6 +193,15 @@ class ScanService:
             raise
         except SessionCipherError as exc:
             await self._fail(owner_id, on_progress, str(exc))
+        except ApiIdPublishedFloodError:
+            logger.warning("api_id аккаунта %s ограничен как засвеченный", owner_id)
+            await self._fail(
+                owner_id,
+                on_progress,
+                "Telegram ограничил api_id как засвеченный в открытом доступе "
+                "(API_ID_PUBLISHED_FLOOD). Подключите аккаунт заново со своим "
+                "ключом с my.telegram.org.",
+            )
         except (AuthKeyError, RPCError) as exc:
             logger.exception("Обход %s упал", owner_id)
             await self._fail(owner_id, on_progress, f"Ошибка Telegram: {exc}")

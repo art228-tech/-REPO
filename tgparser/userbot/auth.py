@@ -22,6 +22,7 @@ from typing import Any
 
 from telethon.errors import (
     ApiIdInvalidError,
+    ApiIdPublishedFloodError,
     FloodWaitError,
     PasswordHashInvalidError,
     PhoneCodeEmptyError,
@@ -265,6 +266,14 @@ class AuthManager:
                 Outcome.ERROR,
                 "Telegram не принял api_id и api_hash. Проверьте значения "
                 "с my.telegram.org.",
+            )
+        except ApiIdPublishedFloodError:
+            await self.cancel(owner_id)
+            return AuthResult(
+                Outcome.ERROR,
+                "Этот api_id засвечен в открытом доступе, и Telegram его "
+                "ограничил (API_ID_PUBLISHED_FLOOD). Работать он не будет — "
+                "нужен свой ключ с my.telegram.org.",
             )
         except PhoneNumberInvalidError:
             await self.cancel(owner_id)
