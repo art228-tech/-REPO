@@ -10,7 +10,7 @@ from aiogram import BaseMiddleware, Bot, Dispatcher, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery, Message, TelegramObject
+from aiogram.types import BotCommand, CallbackQuery, Message, TelegramObject
 
 from tgparser.bot.context import BotContext
 from tgparser.bot.handlers import (
@@ -109,6 +109,15 @@ async def run(app_settings: Settings) -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dispatcher = build_dispatcher(ctx)
+
+    await bot.set_my_commands(
+        [
+            BotCommand(command="start", description="Начать и открыть меню"),
+            BotCommand(command="menu", description="Главное меню"),
+            BotCommand(command="login", description="Подключить аккаунт"),
+            BotCommand(command="cancel", description="Отменить текущее действие"),
+        ]
+    )
 
     me = await bot.get_me()
     access = (
