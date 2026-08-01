@@ -5,7 +5,12 @@ import json
 import pytest
 
 from tgparser.crypto import SessionCipher, SessionCipherError, generate_key
-from tgparser.db.settings_store import ScanSettings, load_settings, save_settings
+from tgparser.db.settings_store import (
+    Pace,
+    ScanSettings,
+    load_settings,
+    save_settings,
+)
 
 OWNER_A = 1001
 OWNER_B = 2002
@@ -52,23 +57,65 @@ class TestDefaults:
         assert ScanSettings().forum_busiest_topic_only is False
 
 
-class TestWarmup:
-    def test_new_install_is_in_warmup(self):
-        assert ScanSettings().in_warmup is True
+class TestPace:
+    """Разгон считается по числу успешных запросов, а не по прогонам.
+
+    Регресс: раньше счётчик рос только у прогона, доведённого до конца, а
+    полный обход большого набора чатов идёт сутками — из-за этого темп
+    оставался пониженным навсегда.
+    """
+
+    def test_fresh_account_is_throttled(self):
+        pace = Pace(ScanSettings(), calls_done=0)
+        assert pace.in_warmup is True
+        assert pace.throttled is True
 
     def test_warmup_lowers_budgets(self):
-        settings = ScanSettings(roster_calls_per_hour=20, history_calls_per_hour=240)
-        assert settings.effective_roster_budget() == 5
-        assert settings.effective_history_budget() == 60
+        settings = ScanSettings(
+            roster_calls_per_hour=20, history_calls_per_hour=240, write_calls_per_hour=120
+        )
+        pace = Pace(settings, calls_done=0)
+        assert pace.roster == 5
+        assert pace.history == 60
+        assert pace.write == 30
 
-    def test_full_budget_after_warmup(self):
-        settings = ScanSettings(warmup_runs_done=3, warmup_runs_required=3)
-        assert settings.in_warmup is False
-        assert settings.effective_roster_budget() == settings.roster_calls_per_hour
+    def test_full_budget_after_enough_calls(self):
+        settings = ScanSettings(warmup_calls_required=200)
+        pace = Pace(settings, calls_done=200)
+        assert pace.in_warmup is False
+        assert pace.throttled is False
+        assert pace.history == settings.history_calls_per_hour
+        assert pace.roster == settings.roster_calls_per_hour
+
+    def test_partial_progress_still_throttled(self):
+        pace = Pace(ScanSettings(warmup_calls_required=200), calls_done=199)
+        assert pace.throttled is True
+
+    def test_flood_events_keep_budget_down(self):
+        """Если Telegram уже присылал FloodWait, темп повышать бессмысленно."""
+        pace = Pace(ScanSettings(), calls_done=100_000, flood_events=1)
+        assert pace.in_warmup is False
+        assert pace.throttled is True
+        assert pace.history < pace.settings.history_calls_per_hour
 
     def test_budget_never_drops_to_zero(self):
-        settings = ScanSettings(roster_calls_per_hour=1, warmup_factor=0.01)
-        assert settings.effective_roster_budget() >= 1
+        pace = Pace(
+            ScanSettings(roster_calls_per_hour=1, warmup_factor=0.01), calls_done=0
+        )
+        assert pace.roster >= 1
+        assert pace.history >= 30
+
+    def test_reason_mentions_progress(self):
+        pace = Pace(ScanSettings(warmup_calls_required=200), calls_done=50)
+        assert "50" in pace.reason
+        assert "200" in pace.reason
+
+    def test_reason_mentions_flood(self):
+        pace = Pace(ScanSettings(), calls_done=100_000, flood_events=3)
+        assert "FloodWait" in pace.reason
+
+    def test_no_reason_at_full_speed(self):
+        assert Pace(ScanSettings(), calls_done=100_000).reason is None
 
 
 class TestSettingsStore:

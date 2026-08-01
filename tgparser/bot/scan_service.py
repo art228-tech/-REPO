@@ -20,7 +20,7 @@ from tgparser.core.scanner import Scanner, ScanReport
 from tgparser.core.util import humanize_seconds
 from tgparser.crypto import SessionCipher, SessionCipherError
 from tgparser.db.repo import AccountRepo, ChatStateRepo
-from tgparser.db.settings_store import load_settings, save_settings
+from tgparser.db.settings_store import Pace, load_settings
 from tgparser.ratelimit.guard import FloodGuard, build_buckets
 
 logger = logging.getLogger(__name__)
@@ -97,6 +97,8 @@ class ScanService:
 
     async def _run(self, owner_id: int, resume: bool, on_progress: Any) -> None:
         client = None
+        guard: FloodGuard | None = None
+        account_id: int | None = None
         try:
             async with self._db.session() as session:
                 account = await AccountRepo(session, owner_id).first_active()
@@ -118,6 +120,7 @@ class ScanService:
                         await on_progress(f"Чекпоинты сброшены ({reset} чатов).")
                 account_id = account.id
                 archive_channel_id = account.archive_channel_id
+                pace = Pace(scan_settings, account.calls_done, account.flood_events)
 
             from tgparser.userbot.client import client_for_account
 
@@ -136,11 +139,7 @@ class ScanService:
 
             me = await client.get_me()
             guard = FloodGuard(
-                buckets=build_buckets(
-                    scan_settings.effective_roster_budget(),
-                    scan_settings.effective_history_budget(),
-                    scan_settings.effective_write_budget(),
-                ),
+                buckets=build_buckets(pace.roster, pace.history, pace.write),
                 min_delay=scan_settings.min_delay_sec,
                 max_delay=scan_settings.max_delay_sec,
                 max_flood_wait=scan_settings.max_flood_wait_sec,
@@ -153,11 +152,8 @@ class ScanService:
 
             archive = Archive(client, guard, archive_channel_id, remember_archive)
 
-            if scan_settings.in_warmup:
-                await on_progress(
-                    "Режим разгона: бюджет запросов снижен "
-                    f"до {int(scan_settings.warmup_factor * 100)}%."
-                )
+            if pace.reason:
+                await on_progress(pace.reason.capitalize() + ".")
 
             scanner = Scanner(
                 client=client,
@@ -184,11 +180,6 @@ class ScanService:
                         scan_settings.peer_flood_cooldown_hours,
                         "PeerFlood: Telegram счёл активность спам-риском",
                     )
-                if not report.aborted:
-                    fresh = await load_settings(session, owner_id)
-                    if fresh.in_warmup:
-                        fresh.warmup_runs_done += 1
-                        await save_settings(session, owner_id, fresh)
 
             summary = format_report(report, guard)
             await on_progress(summary)
@@ -216,11 +207,36 @@ class ScanService:
             logger.exception("Обход %s упал", owner_id)
             await self._fail(owner_id, on_progress, f"Неожиданная ошибка: {exc}")
         finally:
+            # Статистика темпа копится и у прерванного прогона: иначе разгон
+            # не снимется никогда, ведь полный обход идёт сутками и до конца
+            # может не дойти ни разу.
+            await self._record_pace(owner_id, account_id, guard)
             if client is not None:
                 try:
                     await client.disconnect()
                 except Exception:
                     logger.debug("Не удалось отключить клиент", exc_info=True)
+
+    async def _record_pace(
+        self, owner_id: int, account_id: int | None, guard: FloodGuard | None
+    ) -> None:
+        if account_id is None or guard is None or not guard.stats.total_calls:
+            return
+        try:
+            async with self._db.session() as session:
+                account = await AccountRepo(session, owner_id).get(account_id)
+                if account is None:
+                    return
+                account.calls_done += guard.stats.total_calls
+                account.flood_events += guard.stats.flood_events
+                logger.info(
+                    "Аккаунт %s: запросов всего %s, FloodWait всего %s",
+                    owner_id,
+                    account.calls_done,
+                    account.flood_events,
+                )
+        except Exception:
+            logger.exception("Не удалось сохранить статистику темпа")
 
     async def _fail(self, owner_id: int, on_progress: Any, text: str) -> None:
         self._note(owner_id, error=text)

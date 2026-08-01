@@ -195,7 +195,7 @@ class TestScannerIsolation:
         scanner = Scanner(
             client=client,
             guard=guard,
-            settings=ScanSettings(min_delay_sec=0.0, max_delay_sec=0.0, warmup_runs_done=9),
+            settings=ScanSettings(min_delay_sec=0.0, max_delay_sec=0.0),
             db=db,
             account_id=owner_id,
             owner_id=owner_id,

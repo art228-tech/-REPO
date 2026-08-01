@@ -16,7 +16,8 @@ from tgparser.bot.keyboards import (
 )
 from tgparser.bot.states import SettingsFlow
 from tgparser.core.util import parse_chat_list
-from tgparser.db.settings_store import load_settings, save_settings
+from tgparser.db.repo import AccountRepo
+from tgparser.db.settings_store import Pace, ScanSettings, load_settings, save_settings
 
 router = Router(name="settings")
 
@@ -246,21 +247,45 @@ async def on_min_participants(message: Message, ctx: BotContext, state: FSMConte
     )
 
 
+async def _pace_of(ctx: BotContext, owner_id: int) -> tuple[ScanSettings, Pace]:
+    async with ctx.db.session() as session:
+        scan_settings = await load_settings(session, owner_id)
+        account = await AccountRepo(session, owner_id).first_active()
+    return scan_settings, Pace(
+        scan_settings,
+        account.calls_done if account else 0,
+        account.flood_events if account else 0,
+    )
+
+
 @router.callback_query(F.data == "settings:pace")
 async def on_pace_menu(call: CallbackQuery, ctx: BotContext) -> None:
-    async with ctx.db.session() as session:
-        scan_settings = await load_settings(session, call.from_user.id)
+    scan_settings, pace = await _pace_of(ctx, call.from_user.id)
+
+    lines = [
+        "<b>Темп и лимиты</b>",
+        "",
+        "Бюджеты запросов в час. История — обычное поведение клиента, ей "
+        "бюджет щедрый. Перебор участников придушен намеренно.",
+        "",
+        f"Сейчас действует: история {pace.history}/час, "
+        f"ростер {pace.roster}/час, запись {pace.write}/час.",
+    ]
+    if pace.reason:
+        lines.append(f"Причина понижения — {pace.reason}.")
+    else:
+        lines.append("Темп полный.")
+    lines += [
+        "",
+        f"Пауза между запросами: {scan_settings.min_delay_sec}–"
+        f"{scan_settings.max_delay_sec} с (случайная).",
+        f"Порог FloodWait: {scan_settings.max_flood_wait_sec} с — дольше не "
+        "пересиживаем, а прерываем прогон.",
+        f"Пауза после PeerFlood: {scan_settings.peer_flood_cooldown_hours} ч.",
+    ]
 
     await call.message.edit_text(
-        "<b>Темп и лимиты</b>\n\n"
-        "Бюджеты запросов в час. История — обычное поведение клиента, ей "
-        "бюджет щедрый. Перебор участников бюджетом придушен намеренно.\n\n"
-        f"Пауза между запросами: {scan_settings.min_delay_sec}–"
-        f"{scan_settings.max_delay_sec} с (случайная).\n"
-        f"Порог FloodWait: {scan_settings.max_flood_wait_sec} с — дольше не "
-        "пересиживаем, а прерываем прогон.\n"
-        f"Пауза после PeerFlood: {scan_settings.peer_flood_cooldown_hours} ч.",
-        reply_markup=pace_menu(scan_settings),
+        "\n".join(lines), reply_markup=pace_menu(scan_settings, pace)
     )
     await call.answer()
 
@@ -291,19 +316,29 @@ async def on_history_budget(call: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "settings:pace:warmup")
-async def on_warmup_reset(call: CallbackQuery, ctx: BotContext) -> None:
+async def on_clear_throttle(call: CallbackQuery, ctx: BotContext) -> None:
+    """Снять понижение вручную.
+
+    Обнуляем счётчик FloodWait и добиваем разгон: значения накопленные, и
+    один старый флуд иначе держал бы темп пониженным навсегда.
+    """
     owner_id = call.from_user.id
     async with ctx.db.session() as session:
         scan_settings = await load_settings(session, owner_id)
-        if scan_settings.in_warmup:
-            scan_settings.warmup_runs_done = scan_settings.warmup_runs_required
-            note = "Разгон снят, следующий прогон пойдёт на полном бюджете."
-        else:
-            scan_settings.warmup_runs_done = 0
-            note = "Разгон включён снова: ближайшие прогоны на четверти бюджета."
-        await save_settings(session, owner_id, scan_settings)
+        account = await AccountRepo(session, owner_id).first_active()
+        if account is None:
+            await call.answer("Аккаунт не подключён.", show_alert=True)
+            return
+        account.flood_events = 0
+        account.calls_done = max(
+            account.calls_done, scan_settings.warmup_calls_required
+        )
 
-    await call.answer(note, show_alert=True)
+    await call.answer(
+        "Темп поднят до полного. Если Telegram снова начнёт присылать "
+        "FloodWait, бюджет опустится сам.",
+        show_alert=True,
+    )
     await on_pace_menu(call, ctx)
 
 

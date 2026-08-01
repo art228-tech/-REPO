@@ -77,5 +77,4 @@ def scan_settings() -> ScanSettings:
         forward_untagged=True,
         min_delay_sec=0.0,
         max_delay_sec=0.0,
-        warmup_runs_done=99,
     )

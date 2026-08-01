@@ -77,13 +77,14 @@ class ScanSettings:
     # На сколько часов аккаунт выводится из работы после PeerFlood.
     peer_flood_cooldown_hours: int = 24
 
-    # Множитель бюджета для первых прогонов: разгон вместо выхода
-    # сразу на полную скорость.
+    # Множитель бюджета на время разгона: свежая сессия не должна сразу
+    # выходить на полную скорость.
     warmup_factor: float = 0.25
 
-    # После скольких успешных прогонов снимать разгон.
-    warmup_runs_done: int = 0
-    warmup_runs_required: int = 3
+    # Сколько успешных запросов должно пройти, чтобы разгон снялся.
+    # Считаем запросы, а не прогоны: обход большого набора чатов идёт сутками
+    # и до конца может не дойти ни разу, а разгон при этом не снимется никогда.
+    warmup_calls_required: int = 200
 
     # Серверный потолок всё равно 10 000, но можно ограничить сильнее.
     roster_limit_per_chat: int = 10_000
@@ -96,22 +97,6 @@ class ScanSettings:
     csv_delimiter: str = ";"
     csv_bom: bool = True
 
-    @property
-    def in_warmup(self) -> bool:
-        return self.warmup_runs_done < self.warmup_runs_required
-
-    def effective_roster_budget(self) -> int:
-        base = self.roster_calls_per_hour
-        return max(1, int(base * self.warmup_factor)) if self.in_warmup else base
-
-    def effective_history_budget(self) -> int:
-        base = self.history_calls_per_hour
-        return max(10, int(base * self.warmup_factor)) if self.in_warmup else base
-
-    def effective_write_budget(self) -> int:
-        base = self.write_calls_per_hour
-        return max(20, int(base * self.warmup_factor)) if self.in_warmup else base
-
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
 
@@ -120,6 +105,58 @@ class ScanSettings:
         data = json.loads(raw)
         known = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in data.items() if k in known})
+
+
+@dataclass(slots=True)
+class Pace:
+    """Действующие бюджеты с учётом накопленной статистики аккаунта.
+
+    Разгон снимается по числу успешных запросов. Если Telegram уже присылал
+    FloodWait, бюджет остаётся пониженным: это значит, что выбранный темп
+    аккаунту не подошёл, и повышать его бессмысленно.
+    """
+
+    settings: ScanSettings
+    calls_done: int = 0
+    flood_events: int = 0
+
+    @property
+    def in_warmup(self) -> bool:
+        return self.calls_done < self.settings.warmup_calls_required
+
+    @property
+    def throttled(self) -> bool:
+        return self.in_warmup or self.flood_events > 0
+
+    @property
+    def reason(self) -> str | None:
+        if self.flood_events:
+            return (
+                f"темп понижен: Telegram присылал FloodWait "
+                f"{self.flood_events} раз"
+            )
+        if self.in_warmup:
+            done = self.calls_done
+            need = self.settings.warmup_calls_required
+            return f"разгон: {done} из {need} запросов, бюджет {int(self.settings.warmup_factor * 100)}%"
+        return None
+
+    def _scaled(self, base: int, floor: int) -> int:
+        if not self.throttled:
+            return base
+        return max(floor, int(base * self.settings.warmup_factor))
+
+    @property
+    def history(self) -> int:
+        return self._scaled(self.settings.history_calls_per_hour, 30)
+
+    @property
+    def roster(self) -> int:
+        return self._scaled(self.settings.roster_calls_per_hour, 1)
+
+    @property
+    def write(self) -> int:
+        return self._scaled(self.settings.write_calls_per_hour, 20)
 
 
 async def load_settings(session: AsyncSession, owner_id: int) -> ScanSettings:

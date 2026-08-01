@@ -5,7 +5,7 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from tgparser.db.settings_store import ScanSettings
+from tgparser.db.settings_store import Pace, ScanSettings
 
 
 def main_menu(has_account: bool, scanning: bool) -> InlineKeyboardMarkup:
@@ -143,7 +143,7 @@ def depth_menu() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def pace_menu(s: ScanSettings) -> InlineKeyboardMarkup:
+def pace_menu(s: ScanSettings, pace: Pace | None = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
         text=f"Ростер: {s.roster_calls_per_hour} запр./час",
@@ -153,10 +153,10 @@ def pace_menu(s: ScanSettings) -> InlineKeyboardMarkup:
         text=f"История: {s.history_calls_per_hour} запр./час",
         callback_data="settings:pace:history",
     )
-    builder.button(
-        text=f"Разгон: {'да' if s.in_warmup else 'завершён'}",
-        callback_data="settings:pace:warmup",
-    )
+    if pace is not None and pace.throttled:
+        builder.button(
+            text="Снять понижение темпа", callback_data="settings:pace:warmup"
+        )
     builder.button(text="Назад", callback_data="settings:menu")
     builder.adjust(1)
     return builder.as_markup()

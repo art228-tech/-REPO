@@ -79,6 +79,12 @@ class Account(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
+    # Накопленная статистика темпа. Нужна, чтобы разгон опирался на число
+    # успешных запросов, а не на завершённые прогоны: полный обход большого
+    # набора чатов идёт сутками и до конца может не дойти ни разу.
+    calls_done: Mapped[int] = mapped_column(Integer, default=0)
+    flood_events: Mapped[int] = mapped_column(Integer, default=0)
+
     # Circuit breaker: до какого момента аккаунт выведен из работы после PeerFlood.
     blocked_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
