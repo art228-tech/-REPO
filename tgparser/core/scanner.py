@@ -115,6 +115,7 @@ class Scanner:
         self_id: int,
         archive: Archive,
         on_progress: ProgressCallback | None = None,
+        on_status: ProgressCallback | None = None,
     ) -> None:
         self._client = client
         self._guard = guard
@@ -125,6 +126,8 @@ class Scanner:
         self._self_id = self_id
         self._archive = archive
         self._on_progress = on_progress
+        self._on_status = on_status
+        self._position = ""
         self._seen: set[int] = set()
         self._pending: list[CollectedUser] = []
         # Очередь на пересылку: (lead_id, message_id, peer). Наполняется уже
@@ -140,6 +143,18 @@ class Scanner:
                 await self._on_progress(text)
             except Exception:
                 logger.debug("Не удалось отправить прогресс", exc_info=True)
+
+    async def _status(self, text: str) -> None:
+        """Обновить живую строку состояния.
+
+        Без неё на крупном чате сообщение в боте часами не менялось, и обход
+        выглядел зависшим.
+        """
+        if self._on_status is not None:
+            try:
+                await self._on_status(text)
+            except Exception:
+                logger.debug("Не удалось обновить статус", exc_info=True)
 
     async def run(self) -> ScanReport:
         async with self._db.session() as session:
@@ -223,10 +238,12 @@ class Scanner:
             report.skipped = f"участников меньше {self._settings.min_participants}"
             return report
 
+        self._position = f"[{index}/{total}]"
         await self._progress(
             f"[{index}/{total}] {target.title} — {target.kind.value}, "
             f"участники {'видны' if target.participants_visible else 'скрыты'}"
         )
+        await self._status(f"{self._position} {target.title} · начинаю")
 
         async with self._db.session() as session:
             state = await ChatStateRepo(session).get_or_create(
@@ -402,6 +419,11 @@ class Scanner:
                     report.scanned_messages,
                     report.collected,
                     oldest_seen,
+                )
+                await self._status(
+                    f"{self._position} {target.title} · сообщений "
+                    f"{report.scanned_messages}, найдено {report.collected}, "
+                    f"всего за прогон {self._report.new_leads + report.collected}"
                 )
 
             if reached_cutoff or len(messages) < batch:

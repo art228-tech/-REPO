@@ -61,12 +61,14 @@ class ScanService:
         slot = self._slots.get(owner_id)
         return slot.error if slot else None
 
-    async def start(self, owner_id: int, resume: bool, on_progress: Any) -> None:
+    async def start(
+        self, owner_id: int, resume: bool, on_progress: Any, on_status: Any = None
+    ) -> None:
         if self.is_running(owner_id):
             raise ScanBusyError("Обход уже идёт")
         # create_task не выполняет корутину синхронно, поэтому слот успевает
         # зарегистрироваться раньше, чем _run дойдёт до первого await.
-        task = asyncio.create_task(self._run(owner_id, resume, on_progress))
+        task = asyncio.create_task(self._run(owner_id, resume, on_progress, on_status))
         self._slots[owner_id] = ScanSlot(task=task)
 
     async def stop(self, owner_id: int) -> bool:
@@ -95,7 +97,9 @@ class ScanService:
         if report is not None:
             slot.report = report
 
-    async def _run(self, owner_id: int, resume: bool, on_progress: Any) -> None:
+    async def _run(
+        self, owner_id: int, resume: bool, on_progress: Any, on_status: Any = None
+    ) -> None:
         client = None
         guard: FloodGuard | None = None
         account_id: int | None = None
@@ -165,6 +169,7 @@ class ScanService:
                 self_id=getattr(me, "id", 0),
                 archive=archive,
                 on_progress=on_progress,
+                on_status=on_status,
             )
             report = await scanner.run()
             self._note(owner_id, report=report)

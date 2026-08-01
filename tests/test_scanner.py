@@ -698,6 +698,104 @@ class TestCheckpoints:
         assert second_client.count("GetHistory") >= 1
 
 
+class TestLiveStatus:
+    """Живая строка состояния: без неё крупный чат выглядит как зависший."""
+
+    async def _run_with_status(self, db, settings, messages_count: int):
+        from tgparser.ratelimit.guard import FloodGuard, build_buckets
+
+        statuses: list[str] = []
+
+        async def on_status(text: str) -> None:
+            statuses.append(text)
+
+        users = {i: make_user(i, f"user_{i:04d}") for i in range(1, messages_count + 1)}
+        chat = ChatFixture(
+            entity=make_channel(1001, "Большой чат"),
+            messages=[
+                make_message(messages_count + 1 - i, i)
+                for i in range(1, messages_count + 1)
+            ],
+        )
+        client = FakeTelegramClient([chat], users)
+        guard = FloodGuard(
+            buckets=build_buckets(10_000, 10_000),
+            min_delay=0.0,
+            max_delay=0.0,
+            sleeper=_noop_sleep,
+        )
+        scanner = Scanner(
+            client=client,
+            guard=guard,
+            settings=settings,
+            db=db,
+            account_id=1,
+            owner_id=OWNER_A,
+            self_id=SELF_ID,
+            archive=Archive(client, guard),
+            on_status=on_status,
+        )
+        await scanner.run()
+        return statuses
+
+    async def test_status_reported_at_chat_start(self, db, scan_settings):
+        statuses = await self._run_with_status(db, scan_settings, 5)
+        assert statuses
+        assert "Большой чат" in statuses[0]
+        assert "[1/1]" in statuses[0]
+
+    async def test_status_updates_while_paging(self, db, scan_settings):
+        scan_settings.history_batch_size = 10
+        statuses = await self._run_with_status(db, scan_settings, 250)
+
+        # Отметка каждые 10 страниц: на 25 страницах их должно быть несколько.
+        assert len(statuses) >= 3
+        progress = [s for s in statuses if "сообщений" in s]
+        assert progress
+        assert "найдено" in progress[-1]
+
+    async def test_status_shows_growing_counts(self, db, scan_settings):
+        scan_settings.history_batch_size = 10
+        statuses = await self._run_with_status(db, scan_settings, 250)
+        numbers = [
+            int(s.split("сообщений")[1].split(",")[0])
+            for s in statuses
+            if "сообщений" in s
+        ]
+        assert numbers == sorted(numbers)
+        assert numbers[-1] > numbers[0]
+
+    async def test_broken_status_callback_does_not_stop_scan(self, db, scan_settings):
+        from tgparser.ratelimit.guard import FloodGuard, build_buckets
+
+        async def on_status(text: str) -> None:
+            raise RuntimeError("телеграм не принял правку")
+
+        users = {1: make_user(1, "alpha_tag")}
+        chat = ChatFixture(entity=make_channel(1001), messages=[make_message(9, 1)])
+        client = FakeTelegramClient([chat], users)
+        guard = FloodGuard(
+            buckets=build_buckets(10_000, 10_000),
+            min_delay=0.0,
+            max_delay=0.0,
+            sleeper=_noop_sleep,
+        )
+        scanner = Scanner(
+            client=client,
+            guard=guard,
+            settings=scan_settings,
+            db=db,
+            account_id=1,
+            owner_id=OWNER_A,
+            self_id=SELF_ID,
+            archive=Archive(client, guard),
+            on_status=on_status,
+        )
+        report = await scanner.run()
+        assert report.aborted is False
+        assert len(await leads_in(db)) == 1
+
+
 class TestPagination:
     @pytest.mark.parametrize("total", [1, 99, 100, 101, 250])
     async def test_all_messages_are_walked(self, db, scan_settings, total):

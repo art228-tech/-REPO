@@ -47,7 +47,12 @@ async def on_scan_start(call: CallbackQuery, ctx: BotContext) -> None:
     reporter = ProgressReporter(message, header)
 
     try:
-        await ctx.scan.start(owner_id, resume=resume, on_progress=reporter)
+        await ctx.scan.start(
+            owner_id,
+            resume=resume,
+            on_progress=reporter,
+            on_status=reporter.status,
+        )
     except ScanBusyError:
         await call.answer("Обход уже идёт.", show_alert=True)
         return
