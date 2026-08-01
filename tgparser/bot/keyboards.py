@@ -27,6 +27,26 @@ def main_menu(has_account: bool, scanning: bool) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def keys_choice(has_shared: bool) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Получить ключи автоматически", callback_data="keys:auto")
+    builder.button(text="Ввести свои api_id и api_hash", callback_data="keys:manual")
+    if has_shared:
+        builder.button(text="Использовать общие ключи бота", callback_data="keys:shared")
+    builder.button(text="Отмена", callback_data="menu:main")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def keys_retry() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Попробовать снова", callback_data="keys:auto")
+    builder.button(text="Ввести ключи руками", callback_data="keys:manual")
+    builder.button(text="Отмена", callback_data="menu:main")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 def code_keypad(masked: str) -> InlineKeyboardMarkup:
     """Пад для ввода кода.
 

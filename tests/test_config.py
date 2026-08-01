@@ -49,8 +49,11 @@ class TestBlankNumericFields:
         assert build(ADMIN_ID=blank).admin_id == 0
 
     def test_blank_values_are_reported_as_missing(self):
-        settings = build(API_ID="", BOT_TOKEN="")
-        assert set(settings.missing_required()) == {"API_ID", "BOT_TOKEN"}
+        settings = build(BOT_TOKEN="", SESSION_ENCRYPTION_KEY="")
+        assert set(settings.missing_required()) == {
+            "BOT_TOKEN",
+            "SESSION_ENCRYPTION_KEY",
+        }
 
     def test_real_values_still_parse(self):
         assert build(API_ID="12345").api_id == 12345
@@ -71,10 +74,17 @@ class TestMissingRequired:
         settings = Settings(_env_file=None)
         assert set(settings.missing_required()) == {
             "BOT_TOKEN",
-            "API_ID",
-            "API_HASH",
             "SESSION_ENCRYPTION_KEY",
         }
+
+    def test_app_keys_are_optional(self):
+        """Каждый пользователь может получить свои ключи при подключении."""
+        settings = build(API_ID="", API_HASH="")
+        assert settings.missing_required() == []
+        assert settings.has_shared_keys is False
+
+    def test_shared_keys_detected_when_present(self):
+        assert build().has_shared_keys is True
 
     def test_allowlist_without_ids_is_incomplete(self):
         settings = build(ACCESS_MODE="allowlist", ALLOWED_USER_IDS="")

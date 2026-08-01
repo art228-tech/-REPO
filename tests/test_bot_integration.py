@@ -222,9 +222,19 @@ class TestLoginFlow:
         from tgparser.db.repo import AccountRepo
 
         await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
-        assert "код" in " ".join(session.texts()).lower()
+        assert "номер" in " ".join(session.texts()).lower()
 
         await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        # Сначала бот спрашивает, откуда взять ключи приложения.
+        choice = session.last_of(SendMessage).reply_markup
+        options = [
+            b.callback_data for row in choice.inline_keyboard for b in row if b.callback_data
+        ]
+        assert "keys:auto" in options
+        assert "keys:manual" in options
+        assert "keys:shared" in options
+
+        await dispatcher.feed_update(bot, callback_update("keys:shared", update_id=3))
         keypad = session.last_of(SendMessage).reply_markup
         digits = [
             b.callback_data
@@ -234,7 +244,7 @@ class TestLoginFlow:
         ]
         assert len(digits) == 10
 
-        for index, digit in enumerate("12345", start=3):
+        for index, digit in enumerate("12345", start=4):
             await dispatcher.feed_update(
                 bot, callback_update(f"code:digit:{digit}", update_id=index)
             )
@@ -244,16 +254,56 @@ class TestLoginFlow:
             account = await AccountRepo(db_session, OWNER).first_active()
         assert account is not None
         assert account.phone == "+79991234567"
+        # Общие ключи не копируются на аккаунт: он продолжает следовать конфигу.
+        assert account.api_id is None
+
+    async def test_manual_keys_are_saved_with_the_account(self, dispatcher, bot, db):
+        from tgparser.db.repo import AccountRepo
+
+        await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
+        await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        await dispatcher.feed_update(bot, callback_update("keys:manual", update_id=3))
+        await dispatcher.feed_update(
+            bot,
+            message_update(
+                "27482913 a1b2c3d4e5f60718293a4b5c6d7e8f90", update_id=4
+            ),
+        )
+        for index, digit in enumerate("12345", start=5):
+            await dispatcher.feed_update(
+                bot, callback_update(f"code:digit:{digit}", update_id=index)
+            )
+        await dispatcher.feed_update(bot, callback_update("code:submit", update_id=20))
+
+        async with db.session() as db_session:
+            account = await AccountRepo(db_session, OWNER).first_active()
+        assert account is not None
+        assert account.api_id == 27482913
+        # api_hash — секрет, поэтому в базе лежит зашифрованным.
+        assert b"a1b2c3d4" not in (account.api_hash_enc or b"")
+
+    async def test_malformed_manual_keys_are_rejected(self, dispatcher, bot, session, db):
+        from tgparser.db.repo import AccountRepo
+
+        await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
+        await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        await dispatcher.feed_update(bot, callback_update("keys:manual", update_id=3))
+        await dispatcher.feed_update(bot, message_update("абракадабра", update_id=4))
+
+        assert "Не разобрал" in " ".join(session.texts())
+        async with db.session() as db_session:
+            assert await AccountRepo(db_session, OWNER).first_active() is None
 
     async def test_code_never_travels_as_a_message(self, dispatcher, bot, session):
         """Код набирается кнопками: бот не должен ждать его сообщением."""
         await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
         await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        await dispatcher.feed_update(bot, callback_update("keys:shared", update_id=3))
         session.calls.clear()
 
         # Пользователь всё-таки прислал код текстом — он попадает в fallback,
         # а не в обработчик входа.
-        await dispatcher.feed_update(bot, message_update("12345", update_id=3))
+        await dispatcher.feed_update(bot, message_update("12345", update_id=4))
         assert "/menu" in " ".join(session.texts())
 
     async def test_bad_phone_is_rejected(self, dispatcher, bot, session):
@@ -264,7 +314,8 @@ class TestLoginFlow:
     async def test_keypad_updates_on_digit(self, dispatcher, bot, session):
         await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
         await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
-        await dispatcher.feed_update(bot, callback_update("code:digit:7", update_id=3))
+        await dispatcher.feed_update(bot, callback_update("keys:shared", update_id=3))
+        await dispatcher.feed_update(bot, callback_update("code:digit:7", update_id=4))
 
         edit = session.last_of(EditMessageReplyMarkup)
         assert edit is not None
@@ -274,7 +325,8 @@ class TestLoginFlow:
     async def test_cancel_clears_session(self, dispatcher, bot, session):
         await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
         await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
-        await dispatcher.feed_update(bot, callback_update("code:cancel", update_id=3))
+        await dispatcher.feed_update(bot, callback_update("keys:shared", update_id=3))
+        await dispatcher.feed_update(bot, callback_update("code:cancel", update_id=4))
         assert "отменён" in " ".join(session.texts()).lower()
 
 

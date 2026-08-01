@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     )
 
     bot_token: str = Field(default="", alias="BOT_TOKEN")
+
+    # Необязательные общие ключи приложения. Если пусто, каждый пользователь
+    # получает свои при подключении аккаунта — через my.telegram.org
+    # автоматически либо вводит руками.
     api_id: int = Field(default=0, alias="API_ID")
     api_hash: str = Field(default="", alias="API_HASH")
 
@@ -89,15 +93,15 @@ class Settings(BaseSettings):
         missing = []
         if not self.bot_token:
             missing.append("BOT_TOKEN")
-        if not self.api_id:
-            missing.append("API_ID")
-        if not self.api_hash:
-            missing.append("API_HASH")
         if not self.session_encryption_key:
             missing.append("SESSION_ENCRYPTION_KEY")
         if self.access_mode == "allowlist" and not self.allowed_user_ids:
             missing.append("ALLOWED_USER_IDS")
         return missing
+
+    @property
+    def has_shared_keys(self) -> bool:
+        return bool(self.api_id and self.api_hash)
 
     def is_allowed(self, user_id: int) -> bool:
         if self.access_mode == "allowlist":

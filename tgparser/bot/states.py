@@ -7,6 +7,8 @@ from aiogram.fsm.state import State, StatesGroup
 
 class AuthFlow(StatesGroup):
     phone = State()
+    keys = State()
+    manual_keys = State()
     password = State()
 
 

@@ -68,6 +68,13 @@ class Account(Base):
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     session_enc: Mapped[bytes] = mapped_column(LargeBinary)
     proxy: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Свои ключи приложения. Telegram выдаёт один api_id на номер, поэтому у
+    # каждого аккаунта он может быть собственным — тогда ограничения на чужом
+    # ключе не задевают остальных пользователей бота. Пусто — берём общие
+    # ключи из окружения.
+    api_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    api_hash_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     archive_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -259,6 +259,8 @@ class AccountRepo:
         tg_user_id: int | None,
         username: str | None,
         proxy: str | None = None,
+        api_id: int | None = None,
+        api_hash_enc: bytes | None = None,
     ) -> Account:
         account = await self.get_by_phone(phone)
         if account is None:
@@ -269,6 +271,8 @@ class AccountRepo:
                 tg_user_id=tg_user_id,
                 username=username,
                 proxy=proxy,
+                api_id=api_id,
+                api_hash_enc=api_hash_enc,
             )
             self.session.add(account)
         else:
@@ -279,6 +283,9 @@ class AccountRepo:
             account.is_active = True
             account.blocked_until = None
             account.block_reason = None
+            if api_id is not None:
+                account.api_id = api_id
+                account.api_hash_enc = api_hash_enc
         await self.session.flush()
         return account
 

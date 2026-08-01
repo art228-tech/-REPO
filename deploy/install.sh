@@ -45,9 +45,10 @@ if [[ ! -f .env ]]; then
 
   cat <<'EOF'
 
-Заполните в .env: BOT_TOKEN, API_ID, API_HASH.
-  BOT_TOKEN        — у @BotFather
-  API_ID/API_HASH  — my.telegram.org → API development tools
+Заполните в .env: BOT_TOKEN — токен у @BotFather.
+
+api_id и api_hash заранее не нужны: бот получит их при подключении
+аккаунта через my.telegram.org либо примет введённые руками.
 
 Доступ по умолчанию открытый: бот пускает любого, у каждого своя
 изолированная база. Чтобы сузить — ACCESS_MODE=allowlist и
