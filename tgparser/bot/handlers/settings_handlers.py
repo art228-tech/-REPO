@@ -32,8 +32,9 @@ SETTINGS_HEADER = "<b>Настройки</b>\n\nЧто собираем и ка�
 
 
 async def _render(call: CallbackQuery, ctx: BotContext) -> None:
+    owner_id = call.from_user.id
     async with ctx.db.session() as session:
-        scan_settings = await load_settings(session)
+        scan_settings = await load_settings(session, owner_id)
     text = SETTINGS_HEADER
     if scan_settings.collect_roster:
         text += ROSTER_WARNING
@@ -54,10 +55,11 @@ async def on_toggle(call: CallbackQuery, ctx: BotContext) -> None:
         await call.answer("Неизвестная настройка.", show_alert=True)
         return
 
+    owner_id = call.from_user.id
     async with ctx.db.session() as session:
-        scan_settings = await load_settings(session)
+        scan_settings = await load_settings(session, owner_id)
         setattr(scan_settings, field, not getattr(scan_settings, field))
-        await save_settings(session, scan_settings)
+        await save_settings(session, owner_id, scan_settings)
 
     await _render(call, ctx)
     await call.answer()
@@ -83,10 +85,11 @@ async def on_depth_set(call: CallbackQuery, ctx: BotContext) -> None:
         await call.answer("Не понял значение.", show_alert=True)
         return
 
+    owner_id = call.from_user.id
     async with ctx.db.session() as session:
-        scan_settings = await load_settings(session)
+        scan_settings = await load_settings(session, owner_id)
         scan_settings.history_depth_days = max(0, days)
-        await save_settings(session, scan_settings)
+        await save_settings(session, owner_id, scan_settings)
 
     await _render(call, ctx)
     await call.answer("Сохранил.")
@@ -95,7 +98,7 @@ async def on_depth_set(call: CallbackQuery, ctx: BotContext) -> None:
 @router.callback_query(F.data == "settings:pace")
 async def on_pace_menu(call: CallbackQuery, ctx: BotContext) -> None:
     async with ctx.db.session() as session:
-        scan_settings = await load_settings(session)
+        scan_settings = await load_settings(session, call.from_user.id)
 
     await call.message.edit_text(
         "<b>Темп и лимиты</b>\n\n"
@@ -138,15 +141,16 @@ async def on_history_budget(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "settings:pace:warmup")
 async def on_warmup_reset(call: CallbackQuery, ctx: BotContext) -> None:
+    owner_id = call.from_user.id
     async with ctx.db.session() as session:
-        scan_settings = await load_settings(session)
+        scan_settings = await load_settings(session, owner_id)
         if scan_settings.in_warmup:
             scan_settings.warmup_runs_done = scan_settings.warmup_runs_required
             note = "Разгон снят, следующий прогон пойдёт на полном бюджете."
         else:
             scan_settings.warmup_runs_done = 0
             note = "Разгон включён снова: ближайшие прогоны на четверти бюджета."
-        await save_settings(session, scan_settings)
+        await save_settings(session, owner_id, scan_settings)
 
     await call.answer(note, show_alert=True)
     await on_pace_menu(call, ctx)
@@ -179,10 +183,11 @@ async def _set_budget(
         await message.answer(f"Значение должно быть от {low} до {high}.")
         return
 
+    owner_id = message.from_user.id
     async with ctx.db.session() as session:
-        scan_settings = await load_settings(session)
+        scan_settings = await load_settings(session, owner_id)
         setattr(scan_settings, field, value)
-        await save_settings(session, scan_settings)
+        await save_settings(session, owner_id, scan_settings)
 
     await state.clear()
     await message.answer(

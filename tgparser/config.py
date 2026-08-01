@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,8 +25,12 @@ class Settings(BaseSettings):
     # Ключ Fernet для шифрования session string в БД.
     session_encryption_key: str = Field(default="", alias="SESSION_ENCRYPTION_KEY")
 
-    # Telegram user id владельца бота. Остальные к боту не допускаются.
-    owner_id: int = Field(default=0, alias="OWNER_ID")
+    # open — бот доступен любому, allowlist — только id из allowed_user_ids.
+    access_mode: Literal["open", "allowlist"] = Field(default="open", alias="ACCESS_MODE")
+    allowed_user_ids: list[int] = Field(default_factory=list, alias="ALLOWED_USER_IDS")
+
+    # Необязательный администратор: видит сводку по всем пользователям.
+    admin_id: int = Field(default=0, alias="ADMIN_ID")
 
     db_path: Path = Field(default=PROJECT_ROOT / "data" / "tgparser.sqlite3", alias="DB_PATH")
     export_dir: Path = Field(default=PROJECT_ROOT / "data" / "exports", alias="EXPORT_DIR")
@@ -37,7 +42,7 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
-    @field_validator("api_id", "owner_id", mode="before")
+    @field_validator("api_id", "admin_id", mode="before")
     @classmethod
     def _blank_is_zero(cls, value: object) -> object:
         """Пустое значение в .env — это «не заполнено», а не ошибка типа.
@@ -48,6 +53,22 @@ class Settings(BaseSettings):
         """
         if isinstance(value, str) and not value.strip():
             return 0
+        return value
+
+    @field_validator("allowed_user_ids", mode="before")
+    @classmethod
+    def _parse_id_list(cls, value: object) -> object:
+        """Список id приходит строкой вида `1,2,3`."""
+        if isinstance(value, str):
+            return [int(part) for part in value.replace(";", ",").split(",") if part.strip()]
+        return value
+
+    @field_validator("access_mode", mode="before")
+    @classmethod
+    def _normalize_mode(cls, value: object) -> object:
+        if isinstance(value, str):
+            cleaned = value.strip().lower()
+            return cleaned or "open"
         return value
 
     @field_validator("db_path", "export_dir", mode="after")
@@ -72,11 +93,19 @@ class Settings(BaseSettings):
             missing.append("API_ID")
         if not self.api_hash:
             missing.append("API_HASH")
-        if not self.owner_id:
-            missing.append("OWNER_ID")
         if not self.session_encryption_key:
             missing.append("SESSION_ENCRYPTION_KEY")
+        if self.access_mode == "allowlist" and not self.allowed_user_ids:
+            missing.append("ALLOWED_USER_IDS")
         return missing
+
+    def is_allowed(self, user_id: int) -> bool:
+        if self.access_mode == "allowlist":
+            return user_id in self.allowed_user_ids
+        return True
+
+    def is_admin(self, user_id: int) -> bool:
+        return bool(self.admin_id) and user_id == self.admin_id
 
 
 _settings: Settings | None = None

@@ -39,6 +39,9 @@ def lead(
     )
     return item
 
+OWNER_A = 1001
+OWNER_B = 2002
+
 
 class TestCsv:
     def test_writes_bom_for_excel(self, tmp_path):
@@ -144,36 +147,36 @@ class TestFilters:
         from tgparser.db.repo import CollectedUser
 
         async with db.session() as session:
-            repo = LeadRepo(session)
+            repo = LeadRepo(session, OWNER_A)
             await repo.add(CollectedUser(tg_user_id=1, username="tagged"))
             await repo.add(CollectedUser(tg_user_id=2, username=None))
 
         async with db.session() as session:
-            found = await fetch_leads(session, ExportFilter(only_with_username=True))
+            found = await fetch_leads(session, OWNER_A, ExportFilter(only_with_username=True))
         assert [item.username for item in found] == ["tagged"]
 
     async def test_only_without_username(self, db):
         from tgparser.db.repo import CollectedUser
 
         async with db.session() as session:
-            repo = LeadRepo(session)
+            repo = LeadRepo(session, OWNER_A)
             await repo.add(CollectedUser(tg_user_id=1, username="tagged"))
             await repo.add(CollectedUser(tg_user_id=2, username=None))
 
         async with db.session() as session:
-            found = await fetch_leads(session, ExportFilter(only_without_username=True))
+            found = await fetch_leads(session, OWNER_A, ExportFilter(only_without_username=True))
         assert [item.tg_user_id for item in found] == [2]
 
     async def test_by_chat(self, db):
         from tgparser.db.repo import CollectedUser
 
         async with db.session() as session:
-            repo = LeadRepo(session)
+            repo = LeadRepo(session, OWNER_A)
             await repo.add(CollectedUser(tg_user_id=1, username="a_tag", chat_id=-100))
             await repo.add(CollectedUser(tg_user_id=2, username="b_tag", chat_id=-200))
 
         async with db.session() as session:
-            found = await fetch_leads(session, ExportFilter(chat_id=-200))
+            found = await fetch_leads(session, OWNER_A, ExportFilter(chat_id=-200))
         assert [item.tg_user_id for item in found] == [2]
 
     def test_describe(self):
@@ -185,17 +188,17 @@ class TestExportService:
     async def test_rejects_unknown_format(self, db, tmp_path):
         async with db.session() as session:
             with pytest.raises(ValueError, match="Неизвестный формат"):
-                await export(session, "pdf", tmp_path, ScanSettings())
+                await export(session, OWNER_A, "pdf", tmp_path, ScanSettings())
 
     @pytest.mark.parametrize("fmt", ["csv", "xlsx", "json", "txt"])
     async def test_all_formats_produce_file(self, db, tmp_path, fmt):
         from tgparser.db.repo import CollectedUser
 
         async with db.session() as session:
-            await LeadRepo(session).add(CollectedUser(tg_user_id=1, username="ivanov"))
+            await LeadRepo(session, OWNER_A).add(CollectedUser(tg_user_id=1, username="ivanov"))
 
         async with db.session() as session:
-            result = await export(session, fmt, tmp_path, ScanSettings())
+            result = await export(session, OWNER_A, fmt, tmp_path, ScanSettings())
 
         assert result.path.exists()
         assert result.path.stat().st_size > 0

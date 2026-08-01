@@ -7,6 +7,9 @@ import pytest
 from tgparser.db.models import SourceKind
 from tgparser.db.repo import AccountRepo, ChatStateRepo, CollectedUser, LeadRepo
 
+OWNER_A = 1001
+OWNER_B = 2002
+
 
 def user(uid: int, username: str | None = None, chat_id: int = -1001) -> CollectedUser:
     return CollectedUser(
@@ -24,40 +27,40 @@ def user(uid: int, username: str | None = None, chat_id: int = -1001) -> Collect
 class TestLeadDedup:
     async def test_adds_new_lead(self, db):
         async with db.session() as session:
-            lead = await LeadRepo(session).add(user(1, "ivanov"))
+            lead = await LeadRepo(session, OWNER_A).add(user(1, "ivanov"))
         assert lead is not None
         assert lead.username == "ivanov"
 
     async def test_second_add_returns_none(self, db):
         async with db.session() as session:
-            repo = LeadRepo(session)
+            repo = LeadRepo(session, OWNER_A)
             assert await repo.add(user(1, "ivanov")) is not None
             assert await repo.add(user(1, "ivanov")) is None
 
     async def test_same_person_in_other_chat_is_not_duplicated(self, db):
         async with db.session() as session:
-            repo = LeadRepo(session)
+            repo = LeadRepo(session, OWNER_A)
             await repo.add(user(1, "ivanov", chat_id=-1001))
             assert await repo.add(user(1, "ivanov", chat_id=-1002)) is None
             assert await repo.count() == 1
 
     async def test_keeps_first_chat_context(self, db):
         async with db.session() as session:
-            repo = LeadRepo(session)
+            repo = LeadRepo(session, OWNER_A)
             first = await repo.add(user(1, "ivanov", chat_id=-1001))
             await repo.add(user(1, "ivanov", chat_id=-1002))
             assert first.chat_id == -1001
 
     async def test_all_user_ids_returns_known(self, db):
         async with db.session() as session:
-            repo = LeadRepo(session)
+            repo = LeadRepo(session, OWNER_A)
             await repo.add(user(1))
             await repo.add(user(2))
             assert await repo.all_user_ids() == {1, 2}
 
     async def test_manual_entries_excluded_from_user_ids(self, db):
         async with db.session() as session:
-            repo = LeadRepo(session)
+            repo = LeadRepo(session, OWNER_A)
             await repo.add_manual("ivanov")
             assert await repo.all_user_ids() == set()
 
@@ -65,14 +68,14 @@ class TestLeadDedup:
 class TestManualAdd:
     async def test_creates_entry(self, db):
         async with db.session() as session:
-            lead, created = await LeadRepo(session).add_manual("@ivanov")
+            lead, created = await LeadRepo(session, OWNER_A).add_manual("@ivanov")
         assert created
         assert lead.username == "ivanov"
         assert lead.source == SourceKind.MANUAL.value
 
     async def test_duplicate_returns_existing(self, db):
         async with db.session() as session:
-            repo = LeadRepo(session)
+            repo = LeadRepo(session, OWNER_A)
             await repo.add_manual("ivanov")
             lead, created = await repo.add_manual("IVANOV")
         assert not created
@@ -80,14 +83,14 @@ class TestManualAdd:
 
     async def test_note_is_saved(self, db):
         async with db.session() as session:
-            lead, _ = await LeadRepo(session).add_manual("ivanov", note="с конференции")
+            lead, _ = await LeadRepo(session, OWNER_A).add_manual("ivanov", note="с конференции")
         assert lead.note == "с конференции"
 
 
 class TestStats:
     async def test_counts_by_category(self, db):
         async with db.session() as session:
-            repo = LeadRepo(session)
+            repo = LeadRepo(session, OWNER_A)
             await repo.add(user(1, "tagged"))
             untagged = await repo.add(user(2, None, chat_id=-1002))
             await repo.set_archive(untagged, "https://t.me/c/5/1", anonymized=True)
@@ -133,14 +136,14 @@ class TestChatState:
 class TestAccountBlocking:
     async def test_new_account_is_not_blocked(self, db):
         async with db.session() as session:
-            account = await AccountRepo(session).upsert_session(
+            account = await AccountRepo(session, OWNER_A).upsert_session(
                 "+79990000000", b"enc", 1, "ivanov"
             )
         assert not AccountRepo.is_blocked(account)
 
     async def test_block_sets_deadline(self, db):
         async with db.session() as session:
-            repo = AccountRepo(session)
+            repo = AccountRepo(session, OWNER_A)
             account = await repo.upsert_session("+79990000000", b"enc", 1, "ivanov")
             await repo.block(account, 24, "PeerFlood")
         assert AccountRepo.is_blocked(account)
@@ -148,7 +151,7 @@ class TestAccountBlocking:
 
     async def test_block_expires(self, db):
         async with db.session() as session:
-            repo = AccountRepo(session)
+            repo = AccountRepo(session, OWNER_A)
             account = await repo.upsert_session("+79990000000", b"enc", 1, "ivanov")
             await repo.block(account, 1, "PeerFlood")
         later = datetime.now(UTC) + timedelta(hours=2)
@@ -157,18 +160,18 @@ class TestAccountBlocking:
     async def test_naive_datetime_from_sqlite_is_handled(self, db):
         """SQLite отдаёт время без таймзоны — сравнение не должно падать."""
         async with db.session() as session:
-            repo = AccountRepo(session)
+            repo = AccountRepo(session, OWNER_A)
             account = await repo.upsert_session("+79990000000", b"enc", 1, "ivanov")
             await repo.block(account, 24, "PeerFlood")
             account_id = account.id
 
         async with db.session() as session:
-            reloaded = await AccountRepo(session).get(account_id)
+            reloaded = await AccountRepo(session, OWNER_A).get(account_id)
             assert AccountRepo.is_blocked(reloaded)
 
     async def test_upsert_reactivates_and_unblocks(self, db):
         async with db.session() as session:
-            repo = AccountRepo(session)
+            repo = AccountRepo(session, OWNER_A)
             account = await repo.upsert_session("+79990000000", b"enc", 1, "ivanov")
             await repo.block(account, 24, "PeerFlood")
             again = await repo.upsert_session("+79990000000", b"enc2", 1, "ivanov")
@@ -177,12 +180,12 @@ class TestAccountBlocking:
 
     async def test_first_active_returns_none_when_empty(self, db):
         async with db.session() as session:
-            assert await AccountRepo(session).first_active() is None
+            assert await AccountRepo(session, OWNER_A).first_active() is None
 
 
 @pytest.mark.parametrize("phone", ["+79990000001", "+79990000002"])
 async def test_lookup_by_phone(db, phone):
     async with db.session() as session:
-        repo = AccountRepo(session)
+        repo = AccountRepo(session, OWNER_A)
         await repo.upsert_session(phone, b"enc", 1, None)
         assert await repo.get_by_phone(phone) is not None

@@ -7,6 +7,9 @@ import pytest
 from tgparser.crypto import SessionCipher, SessionCipherError, generate_key
 from tgparser.db.settings_store import ScanSettings, load_settings, save_settings
 
+OWNER_A = 1001
+OWNER_B = 2002
+
 
 class TestScanSettingsSerialization:
     def test_round_trip(self):
@@ -71,38 +74,38 @@ class TestWarmup:
 class TestSettingsStore:
     async def test_defaults_when_empty(self, db):
         async with db.session() as session:
-            settings = await load_settings(session)
+            settings = await load_settings(session, OWNER_A)
         assert settings.history_depth_days == 30
 
     async def test_save_and_load(self, db):
         async with db.session() as session:
-            settings = await load_settings(session)
+            settings = await load_settings(session, OWNER_A)
             settings.history_depth_days = 7
             settings.excluded_chats = ["@spam"]
-            await save_settings(session, settings)
+            await save_settings(session, OWNER_A, settings)
 
         async with db.session() as session:
-            restored = await load_settings(session)
+            restored = await load_settings(session, OWNER_A)
         assert restored.history_depth_days == 7
         assert restored.excluded_chats == ["@spam"]
 
     async def test_overwrites_existing_row(self, db):
         async with db.session() as session:
-            await save_settings(session, ScanSettings(history_depth_days=7))
-            await save_settings(session, ScanSettings(history_depth_days=14))
+            await save_settings(session, OWNER_A, ScanSettings(history_depth_days=7))
+            await save_settings(session, OWNER_A, ScanSettings(history_depth_days=14))
 
         async with db.session() as session:
-            assert (await load_settings(session)).history_depth_days == 14
+            assert (await load_settings(session, OWNER_A)).history_depth_days == 14
 
     async def test_corrupted_value_falls_back(self, db):
         from tgparser.db.models import Setting
         from tgparser.db.settings_store import SETTINGS_KEY
 
         async with db.session() as session:
-            session.add(Setting(key=SETTINGS_KEY, value="не json"))
+            session.add(Setting(owner_id=OWNER_A, key=SETTINGS_KEY, value="не json"))
 
         async with db.session() as session:
-            assert (await load_settings(session)).history_depth_days == 30
+            assert (await load_settings(session, OWNER_A)).history_depth_days == 30
 
 
 class TestSessionCipher:

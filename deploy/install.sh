@@ -45,10 +45,14 @@ if [[ ! -f .env ]]; then
 
   cat <<'EOF'
 
-Заполните в .env: BOT_TOKEN, API_ID, API_HASH, OWNER_ID.
+Заполните в .env: BOT_TOKEN, API_ID, API_HASH.
   BOT_TOKEN        — у @BotFather
   API_ID/API_HASH  — my.telegram.org → API development tools
-  OWNER_ID         — ваш id, узнать у @userinfobot
+
+Доступ по умолчанию открытый: бот пускает любого, у каждого своя
+изолированная база. Чтобы сузить — ACCESS_MODE=allowlist и
+ALLOWED_USER_IDS со списком id через запятую.
+Необязательно: ADMIN_ID для команды /admin со сводкой.
 
 Файл открыт правами 600. Потом запустите:
   cd /opt/tgparser && docker compose up -d --build

@@ -8,8 +8,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from tgparser.bot.context import BotContext
-from tgparser.bot.keyboards import main_menu
-from tgparser.db.repo import AccountRepo, LeadRepo
+from tgparser.bot.keyboards import back_to, main_menu
+from tgparser.db.repo import AccountRepo, LeadRepo, global_stats
 from tgparser.db.settings_store import load_settings
 
 router = Router(name="common")
@@ -23,11 +23,11 @@ WELCOME = (
 )
 
 
-async def menu_text(ctx: BotContext) -> str:
+async def menu_text(ctx: BotContext, owner_id: int, scanning: bool) -> str:
     async with ctx.db.session() as session:
-        account = await AccountRepo(session).first_active()
-        stats = await LeadRepo(session).stats()
-        scan_settings = await load_settings(session)
+        account = await AccountRepo(session, owner_id).first_active()
+        stats = await LeadRepo(session, owner_id).stats()
+        scan_settings = await load_settings(session, owner_id)
 
     lines = [WELCOME, ""]
     if account is None:
@@ -62,24 +62,34 @@ async def menu_text(ctx: BotContext) -> str:
         f"В базе: <b>{stats['leads']}</b> "
         f"(с тегом {stats['with_username']}, карточек {stats['archived_cards']})"
     )
-    if ctx.scan.is_running:
+    if scanning:
         lines.append("")
         lines.append("Обход идёт.")
     return "\n".join(lines)
 
 
+async def show_menu(target: Message | CallbackQuery, ctx: BotContext, edit: bool) -> None:
+    owner_id = target.from_user.id
+    scanning = ctx.scan.is_running(owner_id)
+    text = await menu_text(ctx, owner_id, scanning)
+    markup = main_menu(await ctx.has_account(owner_id), scanning)
+    if edit and isinstance(target, CallbackQuery):
+        await target.message.edit_text(text, reply_markup=markup)
+    else:
+        message = target.message if isinstance(target, CallbackQuery) else target
+        await message.answer(text, reply_markup=markup)
+
+
 @router.message(CommandStart())
 async def on_start(message: Message, ctx: BotContext, state: FSMContext) -> None:
     await state.clear()
-    await message.answer(
-        await menu_text(ctx),
-        reply_markup=main_menu(await ctx.has_account(), ctx.scan.is_running),
-    )
+    await show_menu(message, ctx, edit=False)
 
 
 @router.message(Command("menu"))
 async def on_menu(message: Message, ctx: BotContext, state: FSMContext) -> None:
-    await on_start(message, ctx, state)
+    await state.clear()
+    await show_menu(message, ctx, edit=False)
 
 
 @router.message(Command("cancel"))
@@ -89,11 +99,29 @@ async def on_cancel(message: Message, ctx: BotContext, state: FSMContext) -> Non
     await message.answer("Отменил. /menu — вернуться в меню.")
 
 
+@router.message(Command("admin"))
+async def on_admin(message: Message, ctx: BotContext) -> None:
+    if not ctx.app_settings.is_admin(message.from_user.id):
+        await message.answer("Не понял. /menu — открыть меню.")
+        return
+
+    async with ctx.db.session() as session:
+        stats = await global_stats(session)
+
+    await message.answer(
+        "<b>Сводка по боту</b>\n\n"
+        f"Пользователей: {stats['users']}\n"
+        f"Подключено аккаунтов: {stats['accounts']}\n"
+        f"Записей во всех базах: {stats['leads']}\n"
+        f"Аккаунтов под ограничением: {stats['blocked']}\n"
+        f"Обходов сейчас идёт: {ctx.scan.running_count}\n\n"
+        f"Режим доступа: {ctx.app_settings.access_mode}",
+        reply_markup=back_to("menu:main"),
+    )
+
+
 @router.callback_query(F.data == "menu:main")
 async def on_menu_callback(call: CallbackQuery, ctx: BotContext, state: FSMContext) -> None:
     await state.clear()
-    await call.message.edit_text(
-        await menu_text(ctx),
-        reply_markup=main_menu(await ctx.has_account(), ctx.scan.is_running),
-    )
+    await show_menu(call, ctx, edit=True)
     await call.answer()

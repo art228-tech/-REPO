@@ -115,8 +115,10 @@ class ScanSettings:
         return cls(**{k: v for k, v in data.items() if k in known})
 
 
-async def load_settings(session: AsyncSession) -> ScanSettings:
-    row = await session.scalar(select(Setting).where(Setting.key == SETTINGS_KEY))
+async def load_settings(session: AsyncSession, owner_id: int) -> ScanSettings:
+    row = await session.scalar(
+        select(Setting).where(Setting.owner_id == owner_id, Setting.key == SETTINGS_KEY)
+    )
     if row is None:
         return ScanSettings()
     try:
@@ -125,10 +127,16 @@ async def load_settings(session: AsyncSession) -> ScanSettings:
         return ScanSettings()
 
 
-async def save_settings(session: AsyncSession, settings: ScanSettings) -> None:
-    row = await session.scalar(select(Setting).where(Setting.key == SETTINGS_KEY))
+async def save_settings(
+    session: AsyncSession, owner_id: int, settings: ScanSettings
+) -> None:
+    row = await session.scalar(
+        select(Setting).where(Setting.owner_id == owner_id, Setting.key == SETTINGS_KEY)
+    )
     if row is None:
-        session.add(Setting(key=SETTINGS_KEY, value=settings.to_json()))
+        session.add(
+            Setting(owner_id=owner_id, key=SETTINGS_KEY, value=settings.to_json())
+        )
     else:
         row.value = settings.to_json()
     await session.flush()

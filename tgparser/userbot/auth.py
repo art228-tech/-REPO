@@ -260,7 +260,7 @@ class AuthManager:
         encrypted = self._cipher.encrypt(session_string)
 
         async with self._db.session() as session:
-            account = await AccountRepo(session).upsert_session(
+            account = await AccountRepo(session, owner_id).upsert_session(
                 phone=pending.phone,
                 session_enc=encrypted,
                 tg_user_id=getattr(me, "id", None),

@@ -1,9 +1,15 @@
-"""Запуск обхода в фоне и сведение результатов."""
+"""Запуск обходов в фоне и сведение результатов.
+
+Бот многопользовательский, поэтому прогоны идут параллельно и учитываются
+по владельцу: у каждого свой аккаунт, свои бюджеты и свой архивный канал.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from telethon.errors import AuthKeyError, RPCError
@@ -24,60 +30,88 @@ class ScanBusyError(RuntimeError):
     pass
 
 
+@dataclass(slots=True)
+class ScanSlot:
+    task: asyncio.Task
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    report: ScanReport | None = None
+    error: str | None = None
+
+
 class ScanService:
     def __init__(self, app_settings: Settings, cipher: SessionCipher, db: Any) -> None:
         self._app_settings = app_settings
         self._cipher = cipher
         self._db = db
-        self._task: asyncio.Task | None = None
-        self._cancel = asyncio.Event()
-        self.last_report: ScanReport | None = None
-        self.last_error: str | None = None
+        self._slots: dict[int, ScanSlot] = {}
+
+    def is_running(self, owner_id: int) -> bool:
+        slot = self._slots.get(owner_id)
+        return slot is not None and not slot.task.done()
 
     @property
-    def is_running(self) -> bool:
-        return self._task is not None and not self._task.done()
+    def running_count(self) -> int:
+        return sum(1 for slot in self._slots.values() if not slot.task.done())
 
-    async def start(self, resume: bool, on_progress: Any) -> None:
-        if self.is_running:
+    def last_report(self, owner_id: int) -> ScanReport | None:
+        slot = self._slots.get(owner_id)
+        return slot.report if slot else None
+
+    def last_error(self, owner_id: int) -> str | None:
+        slot = self._slots.get(owner_id)
+        return slot.error if slot else None
+
+    async def start(self, owner_id: int, resume: bool, on_progress: Any) -> None:
+        if self.is_running(owner_id):
             raise ScanBusyError("Обход уже идёт")
-        self._cancel.clear()
-        self.last_error = None
-        self._task = asyncio.create_task(self._run(resume, on_progress))
+        # create_task не выполняет корутину синхронно, поэтому слот успевает
+        # зарегистрироваться раньше, чем _run дойдёт до первого await.
+        task = asyncio.create_task(self._run(owner_id, resume, on_progress))
+        self._slots[owner_id] = ScanSlot(task=task)
 
-    async def stop(self) -> bool:
-        if not self.is_running:
+    async def stop(self, owner_id: int) -> bool:
+        if not self.is_running(owner_id):
             return False
-        self._cancel.set()
-        task = self._task
-        if task is None:
-            return False
+        task = self._slots[owner_id].task
         task.cancel()
         try:
             await task
         except asyncio.CancelledError:
-            logger.info("Обход отменён по запросу")
+            logger.info("Обход %s отменён по запросу", owner_id)
         except Exception:
-            logger.exception("Обход завершился ошибкой при остановке")
+            logger.exception("Обход %s завершился ошибкой при остановке", owner_id)
         return True
 
-    async def _run(self, resume: bool, on_progress: Any) -> None:
+    async def stop_all(self) -> None:
+        for owner_id in list(self._slots):
+            await self.stop(owner_id)
+
+    def _note(self, owner_id: int, *, error: str | None = None, report: ScanReport | None = None):
+        slot = self._slots.get(owner_id)
+        if slot is None:
+            return
+        if error is not None:
+            slot.error = error
+        if report is not None:
+            slot.report = report
+
+    async def _run(self, owner_id: int, resume: bool, on_progress: Any) -> None:
         client = None
         try:
             async with self._db.session() as session:
-                account = await AccountRepo(session).first_active()
+                account = await AccountRepo(session, owner_id).first_active()
                 if account is None:
-                    self.last_error = "Аккаунт не подключён."
-                    await on_progress(self.last_error)
+                    await self._fail(owner_id, on_progress, "Аккаунт не подключён.")
                     return
                 if AccountRepo.is_blocked(account):
-                    self.last_error = (
+                    await self._fail(
+                        owner_id,
+                        on_progress,
                         f"Аккаунт выведен из работы до "
-                        f"{account.blocked_until:%d.%m %H:%M} — {account.block_reason}."
+                        f"{account.blocked_until:%d.%m %H:%M} — {account.block_reason}.",
                     )
-                    await on_progress(self.last_error)
                     return
-                scan_settings = await load_settings(session)
+                scan_settings = await load_settings(session, owner_id)
                 if not resume:
                     reset = await ChatStateRepo(session).reset(account.id)
                     if reset:
@@ -88,15 +122,16 @@ class ScanService:
             from tgparser.userbot.client import client_for_account
 
             async with self._db.session() as session:
-                account = await AccountRepo(session).get(account_id)
+                account = await AccountRepo(session, owner_id).get(account_id)
                 client = await client_for_account(self._app_settings, account, self._cipher)
 
             if not await client.is_user_authorized():
-                self.last_error = (
+                await self._fail(
+                    owner_id,
+                    on_progress,
                     "Сессия недействительна — аккаунт вышел или сессия отозвана. "
-                    "Подключите аккаунт заново."
+                    "Подключите аккаунт заново.",
                 )
-                await on_progress(self.last_error)
                 return
 
             me = await client.get_me()
@@ -123,54 +158,57 @@ class ScanService:
                 settings=scan_settings,
                 db=self._db,
                 account_id=account_id,
+                owner_id=owner_id,
                 self_id=getattr(me, "id", 0),
                 archive=archive,
                 on_progress=on_progress,
             )
             report = await scanner.run()
-            self.last_report = report
+            self._note(owner_id, report=report)
 
             async with self._db.session() as session:
-                account = await AccountRepo(session).get(account_id)
+                repo = AccountRepo(session, owner_id)
+                account = await repo.get(account_id)
                 if account is not None and archive.channel_id:
                     account.archive_channel_id = archive.channel_id
                 if report.flagged and account is not None:
-                    await AccountRepo(session).block(
+                    await repo.block(
                         account,
                         scan_settings.peer_flood_cooldown_hours,
                         "PeerFlood: Telegram счёл активность спам-риском",
                     )
                 if not report.aborted:
-                    fresh = await load_settings(session)
+                    fresh = await load_settings(session, owner_id)
                     if fresh.in_warmup:
                         fresh.warmup_runs_done += 1
-                        await save_settings(session, fresh)
+                        await save_settings(session, owner_id, fresh)
 
             summary = format_report(report, guard)
             await on_progress(summary)
             await archive.post(summary)
 
         except asyncio.CancelledError:
-            self.last_error = "Обход остановлен вручную. Прогресс сохранён."
-            await on_progress(self.last_error)
+            self._note(owner_id, error="Обход остановлен вручную. Прогресс сохранён.")
+            await on_progress("Обход остановлен вручную. Прогресс сохранён.")
             raise
         except SessionCipherError as exc:
-            self.last_error = str(exc)
-            await on_progress(self.last_error)
+            await self._fail(owner_id, on_progress, str(exc))
         except (AuthKeyError, RPCError) as exc:
-            self.last_error = f"Ошибка Telegram: {exc}"
-            logger.exception("Обход упал")
-            await on_progress(self.last_error)
+            logger.exception("Обход %s упал", owner_id)
+            await self._fail(owner_id, on_progress, f"Ошибка Telegram: {exc}")
         except Exception as exc:
-            self.last_error = f"Неожиданная ошибка: {exc}"
-            logger.exception("Обход упал")
-            await on_progress(self.last_error)
+            logger.exception("Обход %s упал", owner_id)
+            await self._fail(owner_id, on_progress, f"Неожиданная ошибка: {exc}")
         finally:
             if client is not None:
                 try:
                     await client.disconnect()
                 except Exception:
                     logger.debug("Не удалось отключить клиент", exc_info=True)
+
+    async def _fail(self, owner_id: int, on_progress: Any, text: str) -> None:
+        self._note(owner_id, error=text)
+        await on_progress(text)
 
 
 def format_report(report: ScanReport, guard: FloodGuard | None = None) -> str:
@@ -180,9 +218,7 @@ def format_report(report: ScanReport, guard: FloodGuard | None = None) -> str:
 
     duration = ""
     if report.finished_at is not None:
-        duration = humanize_seconds(
-            (report.finished_at - report.started_at).total_seconds()
-        )
+        duration = humanize_seconds((report.finished_at - report.started_at).total_seconds())
 
     lines.append("")
     lines.append(f"Новых записей: <b>{report.new_leads}</b>")

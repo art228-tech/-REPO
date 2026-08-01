@@ -29,15 +29,16 @@ from tgparser.userbot.auth import AuthManager
 logger = logging.getLogger(__name__)
 
 
-class OwnerOnly(BaseMiddleware):
-    """Бот отвечает только владельцу.
+class AccessControl(BaseMiddleware):
+    """Кого пускать в бота.
 
-    Он логинится в аккаунт и держит собранную базу, поэтому открытый доступ
-    означал бы, что любой желающий получает и то, и другое.
+    В режиме ``open`` пускаются все: данные пользователей изолированы по
+    ``owner_id``, поэтому чужие аккаунты, настройки и записи не пересекаются.
+    Режим ``allowlist`` оставлен на случай, если доступ понадобится сузить.
     """
 
-    def __init__(self, owner_id: int) -> None:
-        self._owner_id = owner_id
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
 
     async def __call__(
         self,
@@ -46,9 +47,10 @@ class OwnerOnly(BaseMiddleware):
         data: dict[str, Any],
     ) -> Any:
         user = data.get("event_from_user")
-        if user is None or user.id != self._owner_id:
-            if user is not None:
-                logger.info("Отклонён запрос от %s (%s)", user.id, user.username)
+        if user is None:
+            return None
+        if not self._settings.is_allowed(user.id):
+            logger.info("Отклонён запрос от %s (%s)", user.id, user.username)
             return None
         return await handler(event, data)
 
@@ -68,7 +70,7 @@ async def unknown_message(message: Message) -> None:
 
 def build_dispatcher(ctx: BotContext) -> Dispatcher:
     dispatcher = Dispatcher(storage=MemoryStorage())
-    dispatcher.update.outer_middleware(OwnerOnly(ctx.app_settings.owner_id))
+    dispatcher.update.outer_middleware(AccessControl(ctx.app_settings))
     dispatcher["ctx"] = ctx
 
     dispatcher.include_router(common.router)
@@ -109,14 +111,19 @@ async def run(app_settings: Settings) -> None:
     dispatcher = build_dispatcher(ctx)
 
     me = await bot.get_me()
-    logger.info("Бот @%s запущен, владелец %s", me.username, app_settings.owner_id)
+    access = (
+        "открытый"
+        if app_settings.access_mode == "open"
+        else f"по списку ({len(app_settings.allowed_user_ids)} id)"
+    )
+    logger.info("Бот @%s запущен, доступ %s", me.username, access)
 
     try:
         await dispatcher.start_polling(
             bot, allowed_updates=["message", "callback_query"]
         )
     finally:
-        await ctx.scan.stop()
+        await ctx.scan.stop_all()
         await ctx.auth.close_all()
         await database.dispose()
         await bot.session.close()

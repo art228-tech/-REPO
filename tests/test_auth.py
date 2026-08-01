@@ -72,7 +72,6 @@ def app_settings(tmp_path) -> Settings:
         BOT_TOKEN="token",
         API_ID=12345,
         API_HASH="hash",
-        OWNER_ID=OWNER,
         SESSION_ENCRYPTION_KEY=generate_key(),
         DB_PATH=tmp_path / "db.sqlite3",
         EXPORT_DIR=tmp_path / "exports",
@@ -182,7 +181,7 @@ class TestSubmitCode:
 
         assert result.outcome is Outcome.SIGNED_IN
         async with db.session() as session:
-            account = await AccountRepo(session).first_active()
+            account = await AccountRepo(session, OWNER).first_active()
         assert account.tg_user_id == FakeMe.id
         assert account.username == "ivanov"
         # В базе лежит шифротекст, а не сама строка сессии.
@@ -240,7 +239,7 @@ class TestSubmitCode:
         result = await manager.submit_password(OWNER, "мойпароль")
         assert result.outcome is Outcome.SIGNED_IN
         async with db.session() as session:
-            assert await AccountRepo(session).first_active() is not None
+            assert await AccountRepo(session, OWNER).first_active() is not None
 
     async def test_password_without_stage_is_rejected(self, manager):
         await manager.start(OWNER, "+79991234567")

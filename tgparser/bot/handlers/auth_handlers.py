@@ -22,7 +22,12 @@ router = Router(name="auth")
 PHONE_PROMPT = (
     "Пришлите номер аккаунта в формате <code>+79991234567</code>.\n\n"
     "Код подтверждения потом набирается кнопками — присылать его сообщением "
-    "нельзя: Telegram гасит коды, отправленные внутри мессенджера."
+    "нельзя: Telegram гасит коды, отправленные внутри мессенджера.\n\n"
+    "<b>Что это значит.</b> Бот получает полный доступ к аккаунту и хранит "
+    "сессию в зашифрованном виде на сервере, где он запущен. Подключайте "
+    "аккаунт, только если доверяете владельцу этого сервера. Отключить можно "
+    "в любой момент кнопкой «Аккаунт», а завершить сессию принудительно — "
+    "в настройках Telegram, раздел «Устройства»."
 )
 
 CODE_PROMPT = (
@@ -89,7 +94,10 @@ async def on_cancel_code(call: CallbackQuery, ctx: BotContext) -> None:
     await ctx.auth.cancel(call.from_user.id)
     await call.message.edit_text(
         "Вход отменён.",
-        reply_markup=main_menu(await ctx.has_account(), ctx.scan.is_running),
+        reply_markup=main_menu(
+            await ctx.has_account(call.from_user.id),
+            ctx.scan.is_running(call.from_user.id),
+        ),
     )
     await call.answer()
 
@@ -102,7 +110,7 @@ async def on_submit(call: CallbackQuery, ctx: BotContext, state: FSMContext) -> 
     if result.outcome is Outcome.SIGNED_IN:
         await call.message.edit_text(
             f"{result.message}\n\nМожно запускать обход.",
-            reply_markup=main_menu(True, ctx.scan.is_running),
+            reply_markup=main_menu(True, ctx.scan.is_running(call.from_user.id)),
         )
         return
 
@@ -134,7 +142,7 @@ async def on_password(message: Message, ctx: BotContext, state: FSMContext) -> N
         await state.clear()
         await message.answer(
             f"{result.message}\n\nПароль удалил из чата. Можно запускать обход.",
-            reply_markup=main_menu(True, ctx.scan.is_running),
+            reply_markup=main_menu(True, ctx.scan.is_running(message.from_user.id)),
         )
         return
     if result.outcome is Outcome.INVALID_PASSWORD:
@@ -146,8 +154,9 @@ async def on_password(message: Message, ctx: BotContext, state: FSMContext) -> N
 
 @router.callback_query(F.data == "auth:info")
 async def on_account_info(call: CallbackQuery, ctx: BotContext) -> None:
+    owner_id = call.from_user.id
     async with ctx.db.session() as session:
-        account = await AccountRepo(session).first_active()
+        account = await AccountRepo(session, owner_id).first_active()
 
     if account is None:
         await call.message.edit_text(
@@ -183,7 +192,7 @@ async def on_account_info(call: CallbackQuery, ctx: BotContext) -> None:
 @router.callback_query(F.data == "auth:logout")
 async def on_logout(call: CallbackQuery, ctx: BotContext) -> None:
     async with ctx.db.session() as session:
-        repo = AccountRepo(session)
+        repo = AccountRepo(session, call.from_user.id)
         account = await repo.first_active()
         if account is not None:
             await repo.delete(account)

@@ -138,7 +138,9 @@ def app_settings(tmp_path) -> Settings:
         BOT_TOKEN="123456:AAFAKEfaketokenfaketokenfaketoken12",
         API_ID=12345,
         API_HASH="hash",
-        OWNER_ID=OWNER,
+        ADMIN_ID=OWNER,
+        ACCESS_MODE="allowlist",
+        ALLOWED_USER_IDS=[OWNER],
         SESSION_ENCRYPTION_KEY=generate_key(),
         DB_PATH=tmp_path / "db.sqlite3",
         EXPORT_DIR=tmp_path / "exports",
@@ -188,7 +190,7 @@ def dispatcher(app_settings, db, userbot_client):
     dispatcher.sub_routers.clear()
 
 
-class TestOwnerOnly:
+class TestAccessControl:
     async def test_owner_gets_menu(self, dispatcher, bot, session):
         await dispatcher.feed_update(bot, message_update("/start"))
         assert session.has(SendMessage)
@@ -239,7 +241,7 @@ class TestLoginFlow:
         await dispatcher.feed_update(bot, callback_update("code:submit", update_id=20))
 
         async with db.session() as db_session:
-            account = await AccountRepo(db_session).first_active()
+            account = await AccountRepo(db_session, OWNER).first_active()
         assert account is not None
         assert account.phone == "+79991234567"
 
@@ -284,7 +286,7 @@ class TestSettings:
             bot, callback_update("settings:toggle:collect_roster", update_id=1)
         )
         async with db.session() as db_session:
-            assert (await load_settings(db_session)).collect_roster is True
+            assert (await load_settings(db_session, OWNER)).collect_roster is True
 
     async def test_roster_toggle_shows_warning(self, dispatcher, bot, session):
         await dispatcher.feed_update(
@@ -297,7 +299,7 @@ class TestSettings:
 
         await dispatcher.feed_update(bot, callback_update("settings:depth:90", update_id=1))
         async with db.session() as db_session:
-            assert (await load_settings(db_session)).history_depth_days == 90
+            assert (await load_settings(db_session, OWNER)).history_depth_days == 90
 
     async def test_unknown_toggle_is_rejected(self, dispatcher, bot, session):
         await dispatcher.feed_update(
@@ -317,7 +319,7 @@ class TestManualEntry:
         )
 
         async with db.session() as db_session:
-            assert await LeadRepo(db_session).count() == 3
+            assert await LeadRepo(db_session, OWNER).count() == 3
         assert "Добавлено" in " ".join(session.texts())
 
     async def test_rejects_garbage(self, dispatcher, bot, session, db):
@@ -327,7 +329,7 @@ class TestManualEntry:
         await dispatcher.feed_update(bot, message_update("!!! 123 ???", update_id=2))
 
         async with db.session() as db_session:
-            assert await LeadRepo(db_session).count() == 0
+            assert await LeadRepo(db_session, OWNER).count() == 0
         assert "корректного тега" in " ".join(session.texts())
 
 
@@ -342,9 +344,12 @@ class TestScanGuards:
         from tgparser.db.settings_store import ScanSettings, save_settings
 
         async with db.session() as db_session:
-            await AccountRepo(db_session).upsert_session("+79990000000", b"enc", 1, "ivanov")
+            await AccountRepo(db_session, OWNER).upsert_session(
+                "+79990000000", b"enc", 1, "ivanov"
+            )
             await save_settings(
                 db_session,
+                OWNER,
                 ScanSettings(
                     collect_history=False, collect_comments=False, collect_roster=False
                 ),
@@ -358,13 +363,85 @@ class TestScanGuards:
         from tgparser.db.repo import AccountRepo
 
         async with db.session() as db_session:
-            repo = AccountRepo(db_session)
+            repo = AccountRepo(db_session, OWNER)
             account = await repo.upsert_session("+79990000000", b"enc", 1, "ivanov")
             await repo.block(account, 24, "PeerFlood")
 
         await dispatcher.feed_update(bot, callback_update("scan:start", update_id=1))
         answer = session.last_of(AnswerCallbackQuery)
         assert "PeerFlood" in answer.text
+
+
+class TestOpenAccess:
+    """Открытый режим: пускаем всех, но данные у каждого свои."""
+
+    @pytest.fixture
+    def open_dispatcher(self, app_settings, db, userbot_client):
+        app_settings.access_mode = "open"
+        app_settings.allowed_user_ids = []
+        cipher = SessionCipher(app_settings.session_encryption_key)
+        ctx = BotContext(
+            app_settings=app_settings,
+            db=db,
+            cipher=cipher,
+            auth=AuthManager(app_settings, cipher, db),
+            scan=ScanService(app_settings, cipher, db),
+        )
+        dispatcher = build_dispatcher(ctx)
+        yield dispatcher
+        for router in dispatcher.sub_routers:
+            router._parent_router = None
+        dispatcher.sub_routers.clear()
+
+    async def test_stranger_gets_a_menu(self, open_dispatcher, bot, session):
+        await open_dispatcher.feed_update(
+            bot, message_update("/start", user_id=STRANGER)
+        )
+        assert "Парсер тематических чатов" in " ".join(session.texts())
+
+    async def test_two_users_keep_separate_databases(self, open_dispatcher, bot, db):
+        from tgparser.db.repo import LeadRepo
+
+        for update_id, user_id, tag in (
+            (1, OWNER, "@alpha_one"),
+            (3, STRANGER, "@beta_two"),
+        ):
+            await open_dispatcher.feed_update(
+                bot, callback_update("db:add", user_id=user_id, update_id=update_id)
+            )
+            await open_dispatcher.feed_update(
+                bot, message_update(tag, user_id=user_id, update_id=update_id + 1)
+            )
+
+        async with db.session() as db_session:
+            owner_leads = await LeadRepo(db_session, OWNER).count()
+            stranger_leads = await LeadRepo(db_session, STRANGER).count()
+        assert owner_leads == 1
+        assert stranger_leads == 1
+
+    async def test_settings_of_one_user_do_not_affect_another(
+        self, open_dispatcher, bot, db
+    ):
+        from tgparser.db.settings_store import load_settings
+
+        await open_dispatcher.feed_update(
+            bot, callback_update("settings:depth:7", user_id=OWNER, update_id=1)
+        )
+        async with db.session() as db_session:
+            assert (await load_settings(db_session, OWNER)).history_depth_days == 7
+            assert (await load_settings(db_session, STRANGER)).history_depth_days == 30
+
+    async def test_admin_command_only_for_admin(self, open_dispatcher, bot, session):
+        await open_dispatcher.feed_update(
+            bot, message_update("/admin", user_id=STRANGER, update_id=1)
+        )
+        assert "Сводка по боту" not in " ".join(session.texts())
+
+        session.calls.clear()
+        await open_dispatcher.feed_update(
+            bot, message_update("/admin", user_id=OWNER, update_id=2)
+        )
+        assert "Сводка по боту" in " ".join(session.texts())
 
 
 class TestExport:
@@ -378,7 +455,9 @@ class TestExport:
         from tgparser.db.repo import CollectedUser, LeadRepo
 
         async with db.session() as db_session:
-            await LeadRepo(db_session).add(CollectedUser(tg_user_id=1, username="ivanov"))
+            await LeadRepo(db_session, OWNER).add(
+                CollectedUser(tg_user_id=1, username="ivanov")
+            )
 
         await dispatcher.feed_update(bot, callback_update("export:fmt:xlsx", update_id=1))
         assert session.has(SendDocument)

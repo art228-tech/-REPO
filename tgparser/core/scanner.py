@@ -99,6 +99,7 @@ class Scanner:
         settings: ScanSettings,
         db: Any,
         account_id: int,
+        owner_id: int,
         self_id: int,
         archive: Archive,
         on_progress: ProgressCallback | None = None,
@@ -108,6 +109,7 @@ class Scanner:
         self._settings = settings
         self._db = db
         self._account_id = account_id
+        self._owner_id = owner_id
         self._self_id = self_id
         self._archive = archive
         self._on_progress = on_progress
@@ -125,7 +127,7 @@ class Scanner:
 
     async def run(self) -> ScanReport:
         async with self._db.session() as session:
-            self._seen = await LeadRepo(session).all_user_ids()
+            self._seen = await LeadRepo(session, self._owner_id).all_user_ids()
         logger.info("В базе уже %s пользователей", len(self._seen))
 
         try:
@@ -510,7 +512,7 @@ class Scanner:
         report = self._current
 
         async with self._db.session() as session:
-            repo = LeadRepo(session)
+            repo = LeadRepo(session, self._owner_id)
             for collected, forward_args in batch:
                 lead = await repo.add(collected)
                 if lead is None or forward_args is None:

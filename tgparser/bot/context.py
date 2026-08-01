@@ -19,8 +19,8 @@ class BotContext:
     auth: AuthManager
     scan: ScanService
 
-    async def has_account(self) -> bool:
+    async def has_account(self, owner_id: int) -> bool:
         from tgparser.db.repo import AccountRepo
 
         async with self.db.session() as session:
-            return await AccountRepo(session).first_active() is not None
+            return await AccountRepo(session, owner_id).first_active() is not None

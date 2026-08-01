@@ -39,8 +39,10 @@ class ExportFilter:
         return ", ".join(parts) if parts else "без фильтров"
 
 
-async def fetch_leads(session: AsyncSession, flt: ExportFilter | None = None) -> list[Lead]:
-    query = select(Lead).order_by(Lead.id)
+async def fetch_leads(
+    session: AsyncSession, owner_id: int, flt: ExportFilter | None = None
+) -> list[Lead]:
+    query = select(Lead).where(Lead.owner_id == owner_id).order_by(Lead.id)
     if flt is not None:
         if flt.only_with_username:
             query = query.where(Lead.username.is_not(None))
@@ -56,13 +58,15 @@ async def fetch_leads(session: AsyncSession, flt: ExportFilter | None = None) ->
     return list(rows)
 
 
-def build_filename(fmt: str, now: datetime | None = None) -> str:
+def build_filename(fmt: str, owner_id: int | None = None, now: datetime | None = None) -> str:
     stamp = (now or datetime.now(UTC)).strftime("%Y%m%d-%H%M%S")
-    return f"leads-{stamp}.{fmt}"
+    suffix = f"-{owner_id}" if owner_id else ""
+    return f"leads{suffix}-{stamp}.{fmt}"
 
 
 async def export(
     session: AsyncSession,
+    owner_id: int,
     fmt: str,
     export_dir: Path,
     settings: ScanSettings,
@@ -71,8 +75,9 @@ async def export(
     if fmt not in FORMATS:
         raise ValueError(f"Неизвестный формат: {fmt}. Доступны: {', '.join(FORMATS)}")
 
-    leads = await fetch_leads(session, flt)
-    path = export_dir / build_filename(fmt)
+    leads = await fetch_leads(session, owner_id, flt)
+    # Файлы разных пользователей не должны совпадать по имени.
+    path = export_dir / build_filename(fmt, owner_id=owner_id)
 
     if fmt == "csv":
         return to_csv(leads, path, delimiter=settings.csv_delimiter, bom=settings.csv_bom)

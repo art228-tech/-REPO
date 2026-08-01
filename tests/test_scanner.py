@@ -17,9 +17,11 @@ from tgparser.core.scanner import Scanner
 from tgparser.db.models import ChatState, SourceKind
 
 SELF_ID = 777
+OWNER_A = 1001
+OWNER_B = 2002
 
 
-async def run_scanner(client, db, settings, account_id: int = 1):
+async def run_scanner(client, db, settings, account_id: int = 1, owner_id: int = OWNER_A):
     from tgparser.ratelimit.guard import FloodGuard, build_buckets
 
     guard = FloodGuard(
@@ -34,6 +36,7 @@ async def run_scanner(client, db, settings, account_id: int = 1):
         settings=settings,
         db=db,
         account_id=account_id,
+        owner_id=owner_id,
         self_id=SELF_ID,
         archive=Archive(client, guard),
     )

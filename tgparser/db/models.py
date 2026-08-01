@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     String,
@@ -51,12 +52,18 @@ class LeadStatus(enum.StrEnum):
 
 
 class Account(Base):
-    """Подключённый Telegram-аккаунт (userbot)."""
+    """Подключённый Telegram-аккаунт (userbot).
+
+    ``owner_id`` — это id пользователя бота, который аккаунт подключил.
+    Бот многопользовательский: чужие аккаунты, настройки и записи не должны
+    пересекаться, поэтому владелец есть у каждой таблицы с данными.
+    """
 
     __tablename__ = "accounts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    phone: Mapped[str] = mapped_column(String(32), unique=True)
+    owner_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    phone: Mapped[str] = mapped_column(String(32))
     tg_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     session_enc: Mapped[bytes] = mapped_column(LargeBinary)
@@ -75,19 +82,24 @@ class Account(Base):
         back_populates="account", cascade="all, delete-orphan"
     )
 
+    __table_args__ = (
+        UniqueConstraint("owner_id", "phone", name="uq_account_owner_phone"),
+    )
+
 
 class Lead(Base):
     """Собранный пользователь.
 
     Один человек — одна строка, независимо от того, в скольких чатах встретился.
-    Дедуп держится на уникальном ``tg_user_id``; для записей, добавленных вручную,
-    он пустой, и там уникальность обеспечивается по тегу.
+    Дедуп держится на паре (владелец, ``tg_user_id``); для записей, добавленных
+    вручную, id пустой, и там уникальность обеспечивается по тегу.
     """
 
     __tablename__ = "leads"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    tg_user_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, nullable=True)
+    owner_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    tg_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     username: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     first_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -117,6 +129,11 @@ class Lead(Base):
     archive_anonymized: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("owner_id", "tg_user_id", name="uq_lead_owner_user"),
+        Index("ix_leads_owner_username", "owner_id", "username"),
+    )
 
     @property
     def display_name(self) -> str:
@@ -167,9 +184,10 @@ class ChatState(Base):
 
 
 class Setting(Base):
-    """Пользовательские настройки (key-value, значения в JSON)."""
+    """Настройки пользователя бота (key-value, значения в JSON)."""
 
     __tablename__ = "settings"
 
+    owner_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(Text)

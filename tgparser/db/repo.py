@@ -1,4 +1,8 @@
-"""Доступ к данным: дедуп лидов, чекпоинты обхода, аккаунты."""
+"""Доступ к данным.
+
+Бот многопользовательский, поэтому владелец задаётся при создании репозитория,
+а не передаётся в каждый метод: так запрос без скоупа физически негде написать.
+"""
 
 from __future__ import annotations
 
@@ -54,23 +58,24 @@ def as_aware(value: datetime | None) -> datetime | None:
 
 
 class LeadRepo:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, owner_id: int) -> None:
         self.session = session
+        self.owner_id = owner_id
 
     async def exists(self, tg_user_id: int) -> bool:
         found = await self.session.scalar(
-            select(Lead.id).where(Lead.tg_user_id == tg_user_id).limit(1)
+            select(Lead.id)
+            .where(Lead.owner_id == self.owner_id, Lead.tg_user_id == tg_user_id)
+            .limit(1)
         )
         return found is not None
 
     async def add(self, user: CollectedUser) -> Lead | None:
-        """Записать нового пользователя. ``None``, если он уже в базе.
-
-        Дедуп глобальный: повторная встреча в другом чате ничего не создаёт.
-        """
+        """Записать нового пользователя. ``None``, если он уже в базе владельца."""
         if await self.exists(user.tg_user_id):
             return None
         lead = Lead(
+            owner_id=self.owner_id,
             tg_user_id=user.tg_user_id,
             username=user.username,
             first_name=user.first_name,
@@ -96,7 +101,10 @@ class LeadRepo:
         """Ручное добавление тега. Возвращает (лид, создан_ли)."""
         clean = username.strip().lstrip("@")
         existing = await self.session.scalar(
-            select(Lead).where(func.lower(Lead.username) == clean.lower())
+            select(Lead).where(
+                Lead.owner_id == self.owner_id,
+                func.lower(Lead.username) == clean.lower(),
+            )
         )
         if existing is not None:
             if note:
@@ -104,6 +112,7 @@ class LeadRepo:
                 await self.session.flush()
             return existing, False
         lead = Lead(
+            owner_id=self.owner_id,
             tg_user_id=None,
             username=clean,
             source=SourceKind.MANUAL.value,
@@ -115,13 +124,15 @@ class LeadRepo:
         return lead, True
 
     async def all_user_ids(self) -> set[int]:
-        """Все известные tg_user_id — грузится один раз на прогон.
+        """Все известные владельцу tg_user_id — грузится один раз на прогон.
 
         Держать множество в памяти дешевле, чем спрашивать базу на каждое
         сообщение: в активном чате это десятки тысяч проверок.
         """
         rows = await self.session.execute(
-            select(Lead.tg_user_id).where(Lead.tg_user_id.is_not(None))
+            select(Lead.tg_user_id).where(
+                Lead.owner_id == self.owner_id, Lead.tg_user_id.is_not(None)
+            )
         )
         return {row[0] for row in rows}
 
@@ -130,42 +141,29 @@ class LeadRepo:
         lead.archive_anonymized = anonymized
         await self.session.flush()
 
+    def _count(self, *conditions):
+        return (
+            select(func.count()).select_from(Lead).where(Lead.owner_id == self.owner_id, *conditions)
+        )
+
     async def count(self) -> int:
-        return await self.session.scalar(select(func.count()).select_from(Lead)) or 0
+        return await self.session.scalar(self._count()) or 0
 
     async def stats(self) -> dict[str, int]:
         total = await self.count()
-        tagged = (
-            await self.session.scalar(
-                select(func.count()).select_from(Lead).where(Lead.username.is_not(None))
-            )
-            or 0
-        )
-        archived = (
-            await self.session.scalar(
-                select(func.count()).select_from(Lead).where(Lead.archive_link.is_not(None))
-            )
-            or 0
-        )
+        tagged = await self.session.scalar(self._count(Lead.username.is_not(None))) or 0
+        archived = await self.session.scalar(self._count(Lead.archive_link.is_not(None))) or 0
         anonymized = (
-            await self.session.scalar(
-                select(func.count())
-                .select_from(Lead)
-                .where(Lead.archive_anonymized.is_(True))
-            )
-            or 0
+            await self.session.scalar(self._count(Lead.archive_anonymized.is_(True))) or 0
+        )
+        manual = (
+            await self.session.scalar(self._count(Lead.source == SourceKind.MANUAL.value)) or 0
         )
         chats = (
             await self.session.scalar(
-                select(func.count(func.distinct(Lead.chat_id))).where(Lead.chat_id.is_not(None))
-            )
-            or 0
-        )
-        manual = (
-            await self.session.scalar(
-                select(func.count())
-                .select_from(Lead)
-                .where(Lead.source == SourceKind.MANUAL.value)
+                select(func.count(func.distinct(Lead.chat_id))).where(
+                    Lead.owner_id == self.owner_id, Lead.chat_id.is_not(None)
+                )
             )
             or 0
         )
@@ -181,6 +179,8 @@ class LeadRepo:
 
 
 class ChatStateRepo:
+    """Чекпоинты привязаны к аккаунту, а аккаунт — к владельцу."""
+
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
@@ -207,9 +207,7 @@ class ChatStateRepo:
 
     async def for_account(self, account_id: int) -> list[ChatState]:
         rows = await self.session.scalars(
-            select(ChatState)
-            .where(ChatState.account_id == account_id)
-            .order_by(ChatState.id)
+            select(ChatState).where(ChatState.account_id == account_id).order_by(ChatState.id)
         )
         return list(rows)
 
@@ -227,12 +225,15 @@ class ChatStateRepo:
 
 
 class AccountRepo:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, owner_id: int) -> None:
         self.session = session
+        self.owner_id = owner_id
 
     async def get_active(self) -> list[Account]:
         rows = await self.session.scalars(
-            select(Account).where(Account.is_active.is_(True)).order_by(Account.id)
+            select(Account)
+            .where(Account.owner_id == self.owner_id, Account.is_active.is_(True))
+            .order_by(Account.id)
         )
         return list(rows)
 
@@ -241,10 +242,15 @@ class AccountRepo:
         return accounts[0] if accounts else None
 
     async def get_by_phone(self, phone: str) -> Account | None:
-        return await self.session.scalar(select(Account).where(Account.phone == phone))
+        return await self.session.scalar(
+            select(Account).where(Account.owner_id == self.owner_id, Account.phone == phone)
+        )
 
     async def get(self, account_id: int) -> Account | None:
-        return await self.session.get(Account, account_id)
+        """Аккаунт по id, но только свой: чужой не отдаём даже по прямому id."""
+        return await self.session.scalar(
+            select(Account).where(Account.id == account_id, Account.owner_id == self.owner_id)
+        )
 
     async def upsert_session(
         self,
@@ -257,6 +263,7 @@ class AccountRepo:
         account = await self.get_by_phone(phone)
         if account is None:
             account = Account(
+                owner_id=self.owner_id,
                 phone=phone,
                 session_enc=session_enc,
                 tg_user_id=tg_user_id,
@@ -295,3 +302,21 @@ class AccountRepo:
         if blocked_until is None:
             return False
         return blocked_until > (now or utcnow())
+
+
+async def global_stats(session: AsyncSession) -> dict[str, int]:
+    """Сводка по всем пользователям — только для администратора."""
+    users = (
+        await session.scalar(select(func.count(func.distinct(Account.owner_id)))) or 0
+    )
+    accounts = await session.scalar(select(func.count()).select_from(Account)) or 0
+    leads = await session.scalar(select(func.count()).select_from(Lead)) or 0
+    blocked = (
+        await session.scalar(
+            select(func.count())
+            .select_from(Account)
+            .where(Account.blocked_until.is_not(None))
+        )
+        or 0
+    )
+    return {"users": users, "accounts": accounts, "leads": leads, "blocked": blocked}

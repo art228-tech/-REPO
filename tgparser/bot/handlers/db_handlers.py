@@ -29,9 +29,10 @@ async def on_db_menu(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "db:stats")
 async def on_stats(call: CallbackQuery, ctx: BotContext) -> None:
+    owner_id = call.from_user.id
     async with ctx.db.session() as session:
-        stats = await LeadRepo(session).stats()
-        account = await AccountRepo(session).first_active()
+        stats = await LeadRepo(session, owner_id).stats()
+        account = await AccountRepo(session, owner_id).first_active()
         states = await ChatStateRepo(session).for_account(account.id) if account else []
 
     scanned = sum(1 for s in states if s.history_done or s.roster_done)
@@ -83,7 +84,7 @@ async def on_add_tags(message: Message, ctx: BotContext, state: FSMContext) -> N
 
     added, existed = [], []
     async with ctx.db.session() as session:
-        repo = LeadRepo(session)
+        repo = LeadRepo(session, message.from_user.id)
         for tag in candidates:
             _, created = await repo.add_manual(tag)
             (added if created else existed).append(tag)
@@ -115,7 +116,7 @@ async def on_reset_prompt(call: CallbackQuery) -> None:
 @router.callback_query(F.data == "db:reset:yes")
 async def on_reset(call: CallbackQuery, ctx: BotContext) -> None:
     async with ctx.db.session() as session:
-        account = await AccountRepo(session).first_active()
+        account = await AccountRepo(session, call.from_user.id).first_active()
         count = await ChatStateRepo(session).reset(account.id) if account else 0
 
     await call.message.edit_text(
@@ -127,7 +128,7 @@ async def on_reset(call: CallbackQuery, ctx: BotContext) -> None:
 @router.callback_query(F.data == "export:menu")
 async def on_export_menu(call: CallbackQuery, ctx: BotContext) -> None:
     async with ctx.db.session() as session:
-        stats = await LeadRepo(session).stats()
+        stats = await LeadRepo(session, call.from_user.id).stats()
 
     await call.message.edit_text(
         f"<b>Выгрузка</b>\n\nВ базе {stats['leads']} записей "
@@ -157,11 +158,12 @@ async def _send_export(
     await call.answer("Готовлю файл…")
     ctx.app_settings.ensure_dirs()
 
+    owner_id = call.from_user.id
     async with ctx.db.session() as session:
-        scan_settings = await load_settings(session)
+        scan_settings = await load_settings(session, owner_id)
         try:
             result = await export(
-                session, fmt, ctx.app_settings.export_dir, scan_settings, flt
+                session, owner_id, fmt, ctx.app_settings.export_dir, scan_settings, flt
             )
         except ValueError as exc:
             await call.message.answer(str(exc))

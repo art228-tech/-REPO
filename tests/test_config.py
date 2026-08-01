@@ -8,7 +8,9 @@ ENV_VARS = (
     "BOT_TOKEN",
     "API_ID",
     "API_HASH",
-    "OWNER_ID",
+    "ADMIN_ID",
+    "ACCESS_MODE",
+    "ALLOWED_USER_IDS",
     "SESSION_ENCRYPTION_KEY",
     "DB_PATH",
     "EXPORT_DIR",
@@ -28,7 +30,6 @@ def build(**overrides) -> Settings:
         "BOT_TOKEN": "123:token",
         "API_ID": 12345,
         "API_HASH": "hash",
-        "OWNER_ID": 999,
         "SESSION_ENCRYPTION_KEY": "key",
         "_env_file": None,
     }
@@ -44,12 +45,12 @@ class TestBlankNumericFields:
         assert build(API_ID=blank).api_id == 0
 
     @pytest.mark.parametrize("blank", ["", "   "])
-    def test_blank_owner_id_does_not_raise(self, blank):
-        assert build(OWNER_ID=blank).owner_id == 0
+    def test_blank_admin_id_does_not_raise(self, blank):
+        assert build(ADMIN_ID=blank).admin_id == 0
 
     def test_blank_values_are_reported_as_missing(self):
-        settings = build(API_ID="", OWNER_ID="", BOT_TOKEN="")
-        assert set(settings.missing_required()) == {"API_ID", "OWNER_ID", "BOT_TOKEN"}
+        settings = build(API_ID="", BOT_TOKEN="")
+        assert set(settings.missing_required()) == {"API_ID", "BOT_TOKEN"}
 
     def test_real_values_still_parse(self):
         assert build(API_ID="12345").api_id == 12345
@@ -63,15 +64,73 @@ class TestMissingRequired:
     def test_nothing_missing_when_filled(self):
         assert build().missing_required() == []
 
+    def test_admin_is_optional(self):
+        assert "ADMIN_ID" not in build(ADMIN_ID=0).missing_required()
+
     def test_lists_every_empty_field(self):
         settings = Settings(_env_file=None)
         assert set(settings.missing_required()) == {
             "BOT_TOKEN",
             "API_ID",
             "API_HASH",
-            "OWNER_ID",
             "SESSION_ENCRYPTION_KEY",
         }
+
+    def test_allowlist_without_ids_is_incomplete(self):
+        settings = build(ACCESS_MODE="allowlist", ALLOWED_USER_IDS="")
+        assert "ALLOWED_USER_IDS" in settings.missing_required()
+
+
+class TestAccessMode:
+    def test_open_is_the_default(self):
+        assert build().access_mode == "open"
+
+    def test_open_lets_anyone_in(self):
+        settings = build()
+        assert settings.is_allowed(1) is True
+        assert settings.is_allowed(999999) is True
+
+    def test_allowlist_restricts(self):
+        settings = build(ACCESS_MODE="allowlist", ALLOWED_USER_IDS="111,222")
+        assert settings.is_allowed(111) is True
+        assert settings.is_allowed(222) is True
+        assert settings.is_allowed(333) is False
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("111,222", [111, 222]),
+            ("111, 222 , 333", [111, 222, 333]),
+            ("111;222", [111, 222]),
+            ("111", [111]),
+            ("", []),
+        ],
+    )
+    def test_id_list_parsing(self, raw, expected):
+        assert build(ALLOWED_USER_IDS=raw).allowed_user_ids == expected
+
+    def test_mode_is_case_insensitive(self):
+        assert build(ACCESS_MODE="OPEN").access_mode == "open"
+
+    def test_blank_mode_falls_back_to_open(self):
+        assert build(ACCESS_MODE="").access_mode == "open"
+
+    def test_unknown_mode_rejected(self):
+        with pytest.raises(ValueError, match="ACCESS_MODE"):
+            build(ACCESS_MODE="whatever")
+
+
+class TestAdmin:
+    def test_no_admin_by_default(self):
+        assert build().is_admin(1) is False
+
+    def test_admin_recognised(self):
+        settings = build(ADMIN_ID=555)
+        assert settings.is_admin(555) is True
+        assert settings.is_admin(556) is False
+
+    def test_zero_is_not_an_admin(self):
+        assert build(ADMIN_ID=0).is_admin(0) is False
 
 
 class TestPaths:
