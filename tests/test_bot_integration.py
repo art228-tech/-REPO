@@ -1,0 +1,384 @@
+"""Прогон настоящих апдейтов через диспетчер с подменённой сессией Telegram."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
+from typing import Any
+
+import pytest
+from aiogram import Bot
+from aiogram.client.session.base import BaseSession
+from aiogram.methods import (
+    AnswerCallbackQuery,
+    DeleteMessage,
+    EditMessageReplyMarkup,
+    EditMessageText,
+    SendMessage,
+    TelegramMethod,
+)
+from aiogram.types import (
+    Chat,
+    Message,
+    Update,
+)
+
+from tests.test_auth import FakeClient
+from tgparser.bot.app import build_dispatcher
+from tgparser.bot.context import BotContext
+from tgparser.bot.scan_service import ScanService
+from tgparser.config import Settings
+from tgparser.crypto import SessionCipher, generate_key
+from tgparser.userbot import auth as auth_module
+from tgparser.userbot.auth import AuthManager
+
+OWNER = 111
+STRANGER = 222
+CHAT_ID = 111
+
+
+class RecordingSession(BaseSession):
+    """Ничего не отправляет наружу, только записывает вызовы."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls: list[TelegramMethod] = []
+        self._message_id = 1000
+
+    def texts(self) -> list[str]:
+        found = []
+        for call in self.calls:
+            text = getattr(call, "text", None)
+            if text:
+                found.append(text)
+        return found
+
+    def last_of(self, method_type: type) -> Any:
+        for call in reversed(self.calls):
+            if isinstance(call, method_type):
+                return call
+        return None
+
+    def has(self, method_type: type) -> bool:
+        return any(isinstance(call, method_type) for call in self.calls)
+
+    async def close(self) -> None:
+        return None
+
+    async def stream_content(self, *args: Any, **kwargs: Any) -> AsyncGenerator[bytes, None]:
+        yield b""
+
+    async def make_request(self, bot: Bot, method: TelegramMethod, timeout: int | None = None):
+        self.calls.append(method)
+        if isinstance(method, (SendMessage, EditMessageText, EditMessageReplyMarkup)):
+            self._message_id += 1
+            return make_message(
+                self._message_id, getattr(method, "text", "") or "", from_bot=True
+            )
+        if isinstance(method, (AnswerCallbackQuery, DeleteMessage)):
+            return True
+        return True
+
+
+def make_message(message_id: int, text: str, from_bot: bool = False) -> Message:
+    return Message.model_validate(
+        {
+            "message_id": message_id,
+            "date": datetime.now(UTC),
+            "chat": Chat(id=CHAT_ID, type="private"),
+            "from": {
+                "id": 9 if from_bot else OWNER,
+                "is_bot": from_bot,
+                "first_name": "Бот" if from_bot else "Владелец",
+            },
+            "text": text,
+        }
+    )
+
+
+def message_update(text: str, user_id: int = OWNER, update_id: int = 1) -> Update:
+    return Update.model_validate(
+        {
+            "update_id": update_id,
+            "message": {
+                "message_id": update_id,
+                "date": datetime.now(UTC),
+                "chat": {"id": user_id, "type": "private"},
+                "from": {"id": user_id, "is_bot": False, "first_name": "Кто-то"},
+                "text": text,
+            },
+        }
+    )
+
+
+def callback_update(data: str, user_id: int = OWNER, update_id: int = 1) -> Update:
+    return Update.model_validate(
+        {
+            "update_id": update_id,
+            "callback_query": {
+                "id": f"cb-{update_id}",
+                "from": {"id": user_id, "is_bot": False, "first_name": "Кто-то"},
+                "chat_instance": "instance",
+                "data": data,
+                "message": {
+                    "message_id": 500,
+                    "date": datetime.now(UTC),
+                    "chat": {"id": user_id, "type": "private"},
+                    "from": {"id": 9, "is_bot": True, "first_name": "Бот"},
+                    "text": "предыдущее",
+                },
+            },
+        }
+    )
+
+
+@pytest.fixture
+def app_settings(tmp_path) -> Settings:
+    return Settings(
+        BOT_TOKEN="123456:AAFAKEfaketokenfaketokenfaketoken12",
+        API_ID=12345,
+        API_HASH="hash",
+        OWNER_ID=OWNER,
+        SESSION_ENCRYPTION_KEY=generate_key(),
+        DB_PATH=tmp_path / "db.sqlite3",
+        EXPORT_DIR=tmp_path / "exports",
+    )
+
+
+@pytest.fixture
+def session() -> RecordingSession:
+    return RecordingSession()
+
+
+@pytest.fixture
+def bot(app_settings, session) -> Bot:
+    from aiogram.client.default import DefaultBotProperties
+    from aiogram.enums import ParseMode
+
+    return Bot(
+        token=app_settings.bot_token,
+        session=session,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+
+
+@pytest.fixture
+def userbot_client(monkeypatch) -> FakeClient:
+    client = FakeClient()
+    monkeypatch.setattr(auth_module, "new_client", lambda *a, **kw: client)
+    return client
+
+
+@pytest.fixture
+def dispatcher(app_settings, db, userbot_client):
+    cipher = SessionCipher(app_settings.session_encryption_key)
+    ctx = BotContext(
+        app_settings=app_settings,
+        db=db,
+        cipher=cipher,
+        auth=AuthManager(app_settings, cipher, db),
+        scan=ScanService(app_settings, cipher, db),
+    )
+    dispatcher = build_dispatcher(ctx)
+    yield dispatcher
+    # Роутеры объявлены на уровне модуля и в бою подключаются один раз.
+    # Тестам нужен свой диспетчер на каждый случай, поэтому отцепляем.
+    for router in dispatcher.sub_routers:
+        router._parent_router = None
+    dispatcher.sub_routers.clear()
+
+
+class TestOwnerOnly:
+    async def test_owner_gets_menu(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, message_update("/start"))
+        assert session.has(SendMessage)
+        assert "Парсер тематических чатов" in " ".join(session.texts())
+
+    async def test_stranger_is_ignored(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, message_update("/start", user_id=STRANGER))
+        assert session.calls == []
+
+    async def test_stranger_callback_is_ignored(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, callback_update("scan:start", user_id=STRANGER))
+        assert session.calls == []
+
+
+class TestMenu:
+    async def test_offers_connect_when_no_account(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, message_update("/start"))
+        markup = session.last_of(SendMessage).reply_markup
+        labels = [b.text for row in markup.inline_keyboard for b in row]
+        assert labels == ["Подключить аккаунт"]
+
+    async def test_unknown_command_gets_hint(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, message_update("что-то непонятное"))
+        assert "/menu" in " ".join(session.texts())
+
+
+class TestLoginFlow:
+    async def test_full_login_by_keypad(self, dispatcher, bot, session, db):
+        from tgparser.db.repo import AccountRepo
+
+        await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
+        assert "код" in " ".join(session.texts()).lower()
+
+        await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        keypad = session.last_of(SendMessage).reply_markup
+        digits = [
+            b.callback_data
+            for row in keypad.inline_keyboard
+            for b in row
+            if b.callback_data and b.callback_data.startswith("code:digit:")
+        ]
+        assert len(digits) == 10
+
+        for index, digit in enumerate("12345", start=3):
+            await dispatcher.feed_update(
+                bot, callback_update(f"code:digit:{digit}", update_id=index)
+            )
+        await dispatcher.feed_update(bot, callback_update("code:submit", update_id=20))
+
+        async with db.session() as db_session:
+            account = await AccountRepo(db_session).first_active()
+        assert account is not None
+        assert account.phone == "+79991234567"
+
+    async def test_code_never_travels_as_a_message(self, dispatcher, bot, session):
+        """Код набирается кнопками: бот не должен ждать его сообщением."""
+        await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
+        await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        session.calls.clear()
+
+        # Пользователь всё-таки прислал код текстом — он попадает в fallback,
+        # а не в обработчик входа.
+        await dispatcher.feed_update(bot, message_update("12345", update_id=3))
+        assert "/menu" in " ".join(session.texts())
+
+    async def test_bad_phone_is_rejected(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
+        await dispatcher.feed_update(bot, message_update("не номер", update_id=2))
+        assert "формате" in " ".join(session.texts())
+
+    async def test_keypad_updates_on_digit(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
+        await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        await dispatcher.feed_update(bot, callback_update("code:digit:7", update_id=3))
+
+        edit = session.last_of(EditMessageReplyMarkup)
+        assert edit is not None
+        header = edit.reply_markup.inline_keyboard[0][0].text
+        assert "7" in header
+
+    async def test_cancel_clears_session(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
+        await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        await dispatcher.feed_update(bot, callback_update("code:cancel", update_id=3))
+        assert "отменён" in " ".join(session.texts()).lower()
+
+
+class TestSettings:
+    async def test_toggle_persists(self, dispatcher, bot, db):
+        from tgparser.db.settings_store import load_settings
+
+        await dispatcher.feed_update(
+            bot, callback_update("settings:toggle:collect_roster", update_id=1)
+        )
+        async with db.session() as db_session:
+            assert (await load_settings(db_session)).collect_roster is True
+
+    async def test_roster_toggle_shows_warning(self, dispatcher, bot, session):
+        await dispatcher.feed_update(
+            bot, callback_update("settings:toggle:collect_roster", update_id=1)
+        )
+        assert "PeerFlood" in " ".join(session.texts())
+
+    async def test_depth_change(self, dispatcher, bot, db):
+        from tgparser.db.settings_store import load_settings
+
+        await dispatcher.feed_update(bot, callback_update("settings:depth:90", update_id=1))
+        async with db.session() as db_session:
+            assert (await load_settings(db_session)).history_depth_days == 90
+
+    async def test_unknown_toggle_is_rejected(self, dispatcher, bot, session):
+        await dispatcher.feed_update(
+            bot, callback_update("settings:toggle:drop_database", update_id=1)
+        )
+        answer = session.last_of(AnswerCallbackQuery)
+        assert answer.show_alert is True
+
+
+class TestManualEntry:
+    async def test_adds_tags_in_bulk(self, dispatcher, bot, session, db):
+        from tgparser.db.repo import LeadRepo
+
+        await dispatcher.feed_update(bot, callback_update("db:add", update_id=1))
+        await dispatcher.feed_update(
+            bot, message_update("@first_one, second_one\nt.me/third_one", update_id=2)
+        )
+
+        async with db.session() as db_session:
+            assert await LeadRepo(db_session).count() == 3
+        assert "Добавлено" in " ".join(session.texts())
+
+    async def test_rejects_garbage(self, dispatcher, bot, session, db):
+        from tgparser.db.repo import LeadRepo
+
+        await dispatcher.feed_update(bot, callback_update("db:add", update_id=1))
+        await dispatcher.feed_update(bot, message_update("!!! 123 ???", update_id=2))
+
+        async with db.session() as db_session:
+            assert await LeadRepo(db_session).count() == 0
+        assert "корректного тега" in " ".join(session.texts())
+
+
+class TestScanGuards:
+    async def test_refuses_without_account(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, callback_update("scan:start", update_id=1))
+        answer = session.last_of(AnswerCallbackQuery)
+        assert "подключите аккаунт" in answer.text.lower()
+
+    async def test_refuses_when_all_sources_disabled(self, dispatcher, bot, session, db):
+        from tgparser.db.repo import AccountRepo
+        from tgparser.db.settings_store import ScanSettings, save_settings
+
+        async with db.session() as db_session:
+            await AccountRepo(db_session).upsert_session("+79990000000", b"enc", 1, "ivanov")
+            await save_settings(
+                db_session,
+                ScanSettings(
+                    collect_history=False, collect_comments=False, collect_roster=False
+                ),
+            )
+
+        await dispatcher.feed_update(bot, callback_update("scan:start", update_id=1))
+        answer = session.last_of(AnswerCallbackQuery)
+        assert "источники" in answer.text.lower()
+
+    async def test_refuses_while_account_is_blocked(self, dispatcher, bot, session, db):
+        from tgparser.db.repo import AccountRepo
+
+        async with db.session() as db_session:
+            repo = AccountRepo(db_session)
+            account = await repo.upsert_session("+79990000000", b"enc", 1, "ivanov")
+            await repo.block(account, 24, "PeerFlood")
+
+        await dispatcher.feed_update(bot, callback_update("scan:start", update_id=1))
+        answer = session.last_of(AnswerCallbackQuery)
+        assert "PeerFlood" in answer.text
+
+
+class TestExport:
+    async def test_empty_database_reports_nothing_to_export(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, callback_update("export:fmt:csv", update_id=1))
+        assert "пустая" in " ".join(session.texts())
+
+    async def test_sends_document_when_there_is_data(self, dispatcher, bot, session, db):
+        from aiogram.methods import SendDocument
+
+        from tgparser.db.repo import CollectedUser, LeadRepo
+
+        async with db.session() as db_session:
+            await LeadRepo(db_session).add(CollectedUser(tg_user_id=1, username="ivanov"))
+
+        await dispatcher.feed_update(bot, callback_update("export:fmt:xlsx", update_id=1))
+        assert session.has(SendDocument)
