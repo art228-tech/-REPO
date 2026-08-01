@@ -77,13 +77,38 @@ class TestExtractCsrf:
 
 
 class TestLooksLikeError:
-    @pytest.mark.parametrize("body", ["ERROR", "error", '"ERROR"', "false", "  Error: nope"])
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "ERROR",
+            "error",
+            '"ERROR"',
+            "false",
+            "  Error: nope",
+            '{"error":"PHONE_INVALID"}',
+        ],
+    )
     def test_detects(self, body):
         assert looks_like_error(body) is True
 
     @pytest.mark.parametrize("body", ['{"random_hash":"abc"}', "true", ""])
     def test_passes_good_bodies(self, body):
         assert looks_like_error(body) is False
+
+
+class TestAppDefaults:
+    def test_url_is_not_empty(self):
+        """Пустое поле портал может счесть незаполненным и отказать."""
+        from tgparser.userbot.appkeys import APP_DEFAULTS
+
+        assert APP_DEFAULTS["app_url"].startswith("http")
+
+    def test_shortname_fits_portal_rules(self):
+        from tgparser.userbot.appkeys import APP_DEFAULTS
+
+        shortname = APP_DEFAULTS["app_shortname"]
+        assert shortname.isalnum()
+        assert 5 <= len(shortname) <= 32
 
 
 class FakePortalHTTP:

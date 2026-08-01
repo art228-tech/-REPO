@@ -12,7 +12,12 @@ from tgparser.config import Settings
 from tgparser.crypto import SessionCipher, generate_key
 from tgparser.db.repo import AccountRepo
 from tgparser.userbot import auth as auth_module
-from tgparser.userbot.appkeys import AppKeys, PortalError, PortalLogin
+from tgparser.userbot.appkeys import (
+    AppKeys,
+    PortalError,
+    PortalLogin,
+    normalize_portal_code,
+)
 from tgparser.userbot.auth import (
     AuthManager,
     Outcome,
@@ -173,6 +178,29 @@ def portal(monkeypatch) -> FakePortal:
     return instance
 
 
+PORTAL_CODE = "3QvmDbabncs"
+
+
+class TestNormalizePortalCode:
+    """Код портала буквенно-цифровой, а не из цифр."""
+
+    def test_accepts_real_looking_code(self):
+        assert normalize_portal_code(PORTAL_CODE) == PORTAL_CODE
+
+    def test_case_is_preserved(self):
+        assert normalize_portal_code("aBcDeF12") == "aBcDeF12"
+
+    def test_strips_spaces_and_punctuation(self):
+        assert normalize_portal_code("  3Qvm Dbabncs.  ") == PORTAL_CODE
+
+    def test_digits_only_also_valid(self):
+        assert normalize_portal_code("123456") == "123456"
+
+    @pytest.mark.parametrize("raw", ["", "abc", "кириллица", "with space!", "a" * 50])
+    def test_rejects_garbage(self, raw):
+        assert normalize_portal_code(raw) is None
+
+
 class TestPortalFlow:
     async def test_requests_code_and_keeps_portal_open(self, manager, portal):
         result = await manager.start_portal(OWNER, "+79991234567")
@@ -181,6 +209,13 @@ class TestPortalFlow:
         assert pending.stage is Stage.PORTAL_CODE
         assert not portal.closed
 
+    async def test_keypad_is_inert_during_portal_stage(self, manager, portal):
+        """Регресс: пад цифр не может ввести буквенный код портала."""
+        await manager.start_portal(OWNER, "+79991234567")
+        assert manager.push_digit(OWNER, "3") is None
+        assert manager.backspace(OWNER) is None
+        assert manager.get(OWNER).digits == ""
+
     async def test_portal_refusal_is_reported_and_cleaned_up(self, manager, portal):
         portal.request_error = PortalError("Портал отказал. my.telegram.org вручную.")
         result = await manager.start_portal(OWNER, "+79991234567")
@@ -188,14 +223,11 @@ class TestPortalFlow:
         assert portal.closed
         assert manager.get(OWNER) is None
 
-    async def test_code_goes_to_portal_then_telegram(self, manager, portal):
+    async def test_text_code_goes_to_portal_then_telegram(self, manager, portal):
         await manager.start_portal(OWNER, "+79991234567")
-        for digit in "54321":
-            manager.push_digit(OWNER, digit)
+        result = await manager.submit_portal_code(OWNER, PORTAL_CODE)
 
-        result = await manager.submit(OWNER)
-
-        assert portal.submitted_code == "54321"
+        assert portal.submitted_code == PORTAL_CODE
         assert result.outcome is Outcome.CODE_SENT
         assert "27482913" in result.message
         pending = manager.get(OWNER)
@@ -204,15 +236,32 @@ class TestPortalFlow:
         # Портал больше не нужен и закрыт, дальше работает Telethon.
         assert portal.closed
 
-    async def test_second_submit_signs_into_telegram(self, manager, portal, db):
+    async def test_code_with_stray_spaces_still_works(self, manager, portal):
         await manager.start_portal(OWNER, "+79991234567")
-        for digit in "54321":
-            manager.push_digit(OWNER, digit)
-        await manager.submit(OWNER)
+        await manager.submit_portal_code(OWNER, " 3Qvm Dbabncs ")
+        assert portal.submitted_code == PORTAL_CODE
+
+    async def test_malformed_code_is_not_sent_to_portal(self, manager, portal):
+        await manager.start_portal(OWNER, "+79991234567")
+        result = await manager.submit_portal_code(OWNER, "нет")
+        assert result.outcome is Outcome.INVALID_CODE
+        assert portal.submitted_code is None
+        # Сессия жива, можно прислать заново.
+        assert manager.get(OWNER) is not None
+
+    async def test_keypad_works_after_switching_to_telegram_stage(self, manager, portal):
+        await manager.start_portal(OWNER, "+79991234567")
+        await manager.submit_portal_code(OWNER, PORTAL_CODE)
+        assert manager.push_digit(OWNER, "7") is not None
+        assert manager.get(OWNER).digits == "7"
+
+    async def test_second_code_signs_into_telegram(self, manager, portal, db):
+        await manager.start_portal(OWNER, "+79991234567")
+        await manager.submit_portal_code(OWNER, PORTAL_CODE)
 
         for digit in "12345":
             manager.push_digit(OWNER, digit)
-        result = await manager.submit(OWNER)
+        result = await manager.submit_code(OWNER)
 
         assert result.outcome is Outcome.SIGNED_IN
         async with db.session() as session:
@@ -222,12 +271,10 @@ class TestPortalFlow:
 
     async def test_keys_are_stored_encrypted(self, manager, portal, db, app_settings):
         await manager.start_portal(OWNER, "+79991234567")
-        for digit in "54321":
-            manager.push_digit(OWNER, digit)
-        await manager.submit(OWNER)
+        await manager.submit_portal_code(OWNER, PORTAL_CODE)
         for digit in "12345":
             manager.push_digit(OWNER, digit)
-        await manager.submit(OWNER)
+        await manager.submit_code(OWNER)
 
         async with db.session() as session:
             account = await AccountRepo(session, OWNER).first_active()
@@ -235,31 +282,22 @@ class TestPortalFlow:
         cipher = SessionCipher(app_settings.session_encryption_key)
         assert cipher.decrypt(account.api_hash_enc) == FakePortal.keys.api_hash
 
-    async def test_bad_portal_code_keeps_session(self, manager, portal):
+    async def test_rejected_code_keeps_session(self, manager, portal):
         portal.login_error = PortalError("Портал не принял код.")
         await manager.start_portal(OWNER, "+79991234567")
-        for digit in "00000":
-            manager.push_digit(OWNER, digit)
-
-        result = await manager.submit(OWNER)
+        result = await manager.submit_portal_code(OWNER, PORTAL_CODE)
         assert result.outcome is Outcome.PORTAL_FAILED
         assert manager.get(OWNER) is not None
 
     async def test_app_creation_failure_is_reported(self, manager, portal):
         portal.keys_error = PortalError("Портал отклонил создание приложения.")
         await manager.start_portal(OWNER, "+79991234567")
-        for digit in "54321":
-            manager.push_digit(OWNER, digit)
-
-        result = await manager.submit(OWNER)
+        result = await manager.submit_portal_code(OWNER, PORTAL_CODE)
         assert result.outcome is Outcome.PORTAL_FAILED
 
-    async def test_short_portal_code_rejected(self, manager, portal):
-        await manager.start_portal(OWNER, "+79991234567")
-        manager.push_digit(OWNER, "1")
-        result = await manager.submit(OWNER)
-        assert result.outcome is Outcome.INVALID_CODE
-        assert portal.submitted_code is None
+    async def test_submit_without_session(self, manager):
+        result = await manager.submit_portal_code(OWNER, PORTAL_CODE)
+        assert result.outcome is Outcome.ERROR
 
 
 class TestOwnKeys:
@@ -268,7 +306,7 @@ class TestOwnKeys:
         await manager.start_telegram(OWNER, "+79991234567", keys)
         for digit in "12345":
             manager.push_digit(OWNER, digit)
-        result = await manager.submit(OWNER)
+        result = await manager.submit_code(OWNER)
 
         assert result.outcome is Outcome.SIGNED_IN
         async with db.session() as session:
@@ -279,7 +317,7 @@ class TestOwnKeys:
         await manager.start_telegram(OWNER, "+79991234567", None)
         for digit in "12345":
             manager.push_digit(OWNER, digit)
-        await manager.submit(OWNER)
+        await manager.submit_code(OWNER)
 
         async with db.session() as session:
             account = await AccountRepo(session, OWNER).first_active()

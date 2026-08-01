@@ -72,9 +72,11 @@ class RecordingSession(BaseSession):
         self.calls.append(method)
         if isinstance(method, (SendMessage, EditMessageText, EditMessageReplyMarkup)):
             self._message_id += 1
+            # Настоящий Bot.answer() отдаёт объект, привязанный к боту:
+            # без привязки обработчик не сможет вызвать edit_text у ответа.
             return make_message(
                 self._message_id, getattr(method, "text", "") or "", from_bot=True
-            )
+            ).as_(bot)
         if isinstance(method, (AnswerCallbackQuery, DeleteMessage)):
             return True
         return True
@@ -422,6 +424,109 @@ class TestScanGuards:
         await dispatcher.feed_update(bot, callback_update("scan:start", update_id=1))
         answer = session.last_of(AnswerCallbackQuery)
         assert "PeerFlood" in answer.text
+
+
+class TestAutoKeysFlow:
+    """Путь «получить ключи автоматически» целиком, как его видит человек."""
+
+    @pytest.fixture
+    def portal(self, monkeypatch):
+        from tests.test_auth import FakePortal
+
+        instance = FakePortal()
+        monkeypatch.setattr(auth_module, "PortalClient", lambda *a, **kw: instance)
+        return instance
+
+    async def _reach_portal_stage(self, dispatcher, bot):
+        await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
+        await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        await dispatcher.feed_update(bot, callback_update("keys:auto", update_id=3))
+
+    async def test_portal_stage_asks_for_text_not_keypad(
+        self, dispatcher, bot, session, portal
+    ):
+        """Код портала буквенно-цифровой — цифровой пад тут показывать нельзя."""
+        await self._reach_portal_stage(dispatcher, bot)
+
+        last = session.last_of(EditMessageText)
+        buttons = [
+            b.callback_data
+            for row in (last.reply_markup.inline_keyboard if last.reply_markup else [])
+            for b in row
+            if b.callback_data
+        ]
+        assert not any(b.startswith("code:digit:") for b in buttons)
+        assert "обычным сообщением" in last.text
+
+    async def test_alphanumeric_code_is_accepted_as_a_message(
+        self, dispatcher, bot, portal
+    ):
+        await self._reach_portal_stage(dispatcher, bot)
+        await dispatcher.feed_update(
+            bot, message_update("3QvmDbabncs", update_id=4)
+        )
+        assert portal.submitted_code == "3QvmDbabncs"
+
+    async def test_keypad_appears_only_for_the_telegram_code(
+        self, dispatcher, bot, session, portal
+    ):
+        await self._reach_portal_stage(dispatcher, bot)
+        await dispatcher.feed_update(bot, message_update("3QvmDbabncs", update_id=4))
+
+        last = session.last_of(EditMessageText)
+        digits = [
+            b.callback_data
+            for row in last.reply_markup.inline_keyboard
+            for b in row
+            if b.callback_data and b.callback_data.startswith("code:digit:")
+        ]
+        assert len(digits) == 10
+        assert "кнопками" in last.text
+
+    async def test_full_auto_flow_saves_own_keys(self, dispatcher, bot, db, portal):
+        from tgparser.db.repo import AccountRepo
+
+        await self._reach_portal_stage(dispatcher, bot)
+        await dispatcher.feed_update(bot, message_update("3QvmDbabncs", update_id=4))
+        for index, digit in enumerate("12345", start=5):
+            await dispatcher.feed_update(
+                bot, callback_update(f"code:digit:{digit}", update_id=index)
+            )
+        await dispatcher.feed_update(bot, callback_update("code:submit", update_id=20))
+
+        async with db.session() as db_session:
+            account = await AccountRepo(db_session, OWNER).first_active()
+        assert account is not None
+        assert account.api_id == 27482913
+
+    async def test_bad_code_is_reported_and_retryable(
+        self, dispatcher, bot, session, portal
+    ):
+        await self._reach_portal_stage(dispatcher, bot)
+        await dispatcher.feed_update(bot, message_update("не код", update_id=4))
+        assert "Не похоже на код" in " ".join(session.texts())
+        assert portal.submitted_code is None
+
+        # Состояние сохранилось: правильный код принимается следующим сообщением.
+        await dispatcher.feed_update(bot, message_update("3QvmDbabncs", update_id=5))
+        assert portal.submitted_code == "3QvmDbabncs"
+
+    async def test_portal_refusal_offers_manual_entry(
+        self, dispatcher, bot, session, portal
+    ):
+        from tgparser.userbot.appkeys import PortalError
+
+        portal.request_error = PortalError("Портал отказал, вводите руками.")
+        await self._reach_portal_stage(dispatcher, bot)
+
+        last = session.last_of(EditMessageText)
+        options = [
+            b.callback_data
+            for row in last.reply_markup.inline_keyboard
+            for b in row
+            if b.callback_data
+        ]
+        assert "keys:manual" in options
 
 
 class TestOpenAccess:

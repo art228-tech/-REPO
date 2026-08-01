@@ -9,6 +9,9 @@ class AuthFlow(StatesGroup):
     phone = State()
     keys = State()
     manual_keys = State()
+    # Код с my.telegram.org приходит буквенно-цифровым, поэтому его ждём
+    # сообщением, а не набором на паде.
+    portal_code = State()
     password = State()
 
 

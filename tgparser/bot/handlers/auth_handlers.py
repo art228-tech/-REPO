@@ -54,10 +54,20 @@ MANUAL_KEYS_PROMPT = (
     "заполнить любые поля → Create application."
 )
 
+PORTAL_CODE_PROMPT = (
+    "Придёт сообщение от служебного аккаунта Telegram с кодом для "
+    "my.telegram.org — он выглядит как <code>3QvmDbabncs</code>.\n\n"
+    "<b>Пришлите его сюда обычным сообщением.</b> Регистр букв важен.\n\n"
+    "Этот код можно отправлять текстом: Telegram гасит только коды входа, а "
+    "они состоят из цифр. Следующий код — как раз такой, и его нужно будет "
+    "набрать кнопками."
+)
+
 CODE_PROMPT = (
     "Наберите код кнопками ниже и нажмите «Готово».\n\n"
-    "<b>Не пересылайте и не отправляйте код сообщением</b> — Telegram гасит "
-    "коды, отправленные внутри мессенджера, и он сразу станет недействительным."
+    "<b>Не пересылайте и не отправляйте этот код сообщением</b> — Telegram "
+    "гасит цифровые коды входа, отправленные внутри мессенджера, и он сразу "
+    "станет недействительным."
 )
 
 
@@ -102,16 +112,43 @@ async def on_keys_auto(call: CallbackQuery, ctx: BotContext, state: FSMContext) 
     result = await ctx.auth.start_portal(call.from_user.id, phone)
 
     if result.outcome is Outcome.PORTAL_CODE_SENT:
-        await state.clear()
-        pending = ctx.auth.get(call.from_user.id)
+        # Пад тут не нужен: код портала буквенно-цифровой, ждём сообщение.
+        await state.set_state(AuthFlow.portal_code)
         await call.message.edit_text(
-            f"{result.message}\n\n{CODE_PROMPT}",
-            reply_markup=code_keypad(pending.masked if pending else ""),
+            PORTAL_CODE_PROMPT, reply_markup=back_to("menu:main")
         )
     else:
         await state.set_state(AuthFlow.keys)
         await call.message.edit_text(result.message, reply_markup=keys_retry())
     await call.answer()
+
+
+@router.message(AuthFlow.portal_code)
+async def on_portal_code(message: Message, ctx: BotContext, state: FSMContext) -> None:
+    owner_id = message.from_user.id
+    notice = await message.answer("Проверяю код и получаю ключи…")
+    result = await ctx.auth.submit_portal_code(owner_id, message.text or "")
+
+    if result.outcome is Outcome.CODE_SENT:
+        await state.clear()
+        pending = ctx.auth.get(owner_id)
+        await notice.edit_text(
+            f"{result.message}\n\n{CODE_PROMPT}",
+            reply_markup=code_keypad(pending.masked if pending else ""),
+        )
+        return
+
+    if result.outcome is Outcome.INVALID_CODE:
+        await notice.edit_text(result.message)
+        return
+
+    if result.outcome is Outcome.PORTAL_FAILED:
+        await state.set_state(AuthFlow.keys)
+        await notice.edit_text(result.message, reply_markup=keys_retry())
+        return
+
+    await state.clear()
+    await notice.edit_text(result.message, reply_markup=back_to("menu:main"))
 
 
 @router.callback_query(F.data == "keys:manual")
@@ -215,7 +252,7 @@ async def on_cancel_code(call: CallbackQuery, ctx: BotContext) -> None:
 async def on_submit(call: CallbackQuery, ctx: BotContext, state: FSMContext) -> None:
     await call.answer("Проверяю…")
     owner_id = call.from_user.id
-    result = await ctx.auth.submit(owner_id)
+    result = await ctx.auth.submit_code(owner_id)
 
     if result.outcome is Outcome.SIGNED_IN:
         note = ""

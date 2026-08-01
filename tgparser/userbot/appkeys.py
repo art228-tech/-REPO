@@ -42,6 +42,9 @@ HEADERS = {
 }
 
 API_ID_RE = re.compile(r"^\d{4,12}$")
+# Код портала — не цифровой: приходит строка вида 3QvmDbabncs. Поле в форме
+# называется password, а не code, и это именно пароль сеанса на сайте.
+PORTAL_CODE_RE = re.compile(r"^[A-Za-z0-9_-]{5,40}$")
 API_HASH_RE = re.compile(r"^[0-9a-f]{32}$")
 SPAN_RE = re.compile(
     r"<span[^>]*class=\"[^\"]*uneditable-input[^\"]*\"[^>]*>(.*?)</span>",
@@ -54,7 +57,9 @@ CSRF_RE = re.compile(
 APP_DEFAULTS = {
     "app_title": "Chat Parser",
     "app_shortname": "chatparser",
-    "app_url": "",
+    # Пустой URL портал может счесть незаполненным полем и отказать безликой
+    # ошибкой, поэтому подставляем валидный адрес.
+    "app_url": "https://telegram.org",
     "app_platform": "other",
     "app_desc": "Personal tool for collecting chat participants",
 }
@@ -85,6 +90,18 @@ class PortalLogin:
     random_hash: str
 
 
+def normalize_portal_code(raw: str) -> str | None:
+    """Код с my.telegram.org, как его прислал пользователь.
+
+    Регистр значащий, поэтому только убираем пробелы и оформление.
+    """
+    if not raw:
+        return None
+    cleaned = raw.strip().strip(".,;:")
+    cleaned = "".join(cleaned.split())
+    return cleaned if PORTAL_CODE_RE.match(cleaned) else None
+
+
 def extract_keys(html: str) -> AppKeys | None:
     """Вытащить ключи со страницы приложений.
 
@@ -105,8 +122,12 @@ def extract_csrf(html: str) -> str | None:
 
 
 def looks_like_error(body: str) -> bool:
+    """Портал отвечает то текстом, то JSON, поэтому проверяем оба вида."""
     stripped = body.strip().strip('"').lower()
-    return stripped in {"error", "false"} or stripped.startswith("error")
+    if stripped in {"error", "false"} or stripped.startswith("error"):
+        return True
+    # Ответы вида {"error": "..."} по первому символу за ошибку не сойдут.
+    return stripped.startswith("{") and '"error"' in stripped
 
 
 class PortalClient:

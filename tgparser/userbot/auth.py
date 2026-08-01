@@ -35,7 +35,13 @@ from telethon.errors import (
 
 from tgparser.config import Settings
 from tgparser.crypto import SessionCipher
-from tgparser.userbot.appkeys import AppKeys, PortalClient, PortalError, PortalLogin
+from tgparser.userbot.appkeys import (
+    AppKeys,
+    PortalClient,
+    PortalError,
+    PortalLogin,
+    normalize_portal_code,
+)
 from tgparser.userbot.client import MissingAppKeysError, new_client
 from tgparser.userbot.proxy import ProxyError, parse_proxy
 
@@ -177,20 +183,29 @@ class AuthManager:
         return AuthResult(
             Outcome.PORTAL_CODE_SENT,
             "my.telegram.org отправил код в Telegram — придёт сообщением "
-            "от служебного аккаунта. Наберите его кнопками.",
+            "от служебного аккаунта.",
         )
 
-    async def submit_portal_code(self, owner_id: int) -> AuthResult:
+    async def submit_portal_code(self, owner_id: int, code: str) -> AuthResult:
+        """Код портала принимается текстом: он буквенно-цифровой.
+
+        Отправить его сообщением безопасно — Telegram гасит только коды входа,
+        а те определяются как последовательность из 5-7 цифр.
+        """
         pending = self.get(owner_id)
         if pending is None or pending.portal is None or pending.portal_login is None:
             return AuthResult(Outcome.ERROR, "Сессия входа истекла, начните заново.")
-        if len(pending.digits) < 5:
-            return AuthResult(Outcome.INVALID_CODE, "Код короче пяти цифр.")
 
-        code = pending.digits
-        pending.digits = ""
+        normalized = normalize_portal_code(code)
+        if normalized is None:
+            return AuthResult(
+                Outcome.INVALID_CODE,
+                "Не похоже на код с my.telegram.org. Он выглядит как "
+                "<code>3QvmDbabncs</code> — буквы и цифры, регистр важен.",
+            )
+
         try:
-            await pending.portal.login(pending.portal_login, code)
+            await pending.portal.login(pending.portal_login, normalized)
             keys = await pending.portal.obtain_keys()
         except PortalError as exc:
             return AuthResult(Outcome.PORTAL_FAILED, str(exc))
@@ -276,8 +291,12 @@ class AuthManager:
     # --- клавиатура ---
 
     def push_digit(self, owner_id: int, digit: str) -> PendingAuth | None:
+        """Пад работает только на коде входа в Telegram.
+
+        Код портала буквенно-цифровой, цифровым падом его не набрать.
+        """
         pending = self.get(owner_id)
-        if pending is None or pending.stage not in (Stage.PORTAL_CODE, Stage.CODE):
+        if pending is None or pending.stage is not Stage.CODE:
             return None
         if len(pending.digits) < CODE_LENGTH_MAX:
             pending.digits += digit
@@ -285,19 +304,10 @@ class AuthManager:
 
     def backspace(self, owner_id: int) -> PendingAuth | None:
         pending = self.get(owner_id)
-        if pending is None or pending.stage not in (Stage.PORTAL_CODE, Stage.CODE):
+        if pending is None or pending.stage is not Stage.CODE:
             return None
         pending.digits = pending.digits[:-1]
         return pending
-
-    async def submit(self, owner_id: int) -> AuthResult:
-        """Отправить набранный код — портала или Telegram, смотря по стадии."""
-        pending = self.get(owner_id)
-        if pending is None:
-            return AuthResult(Outcome.ERROR, "Сессия входа истекла, начните заново.")
-        if pending.stage is Stage.PORTAL_CODE:
-            return await self.submit_portal_code(owner_id)
-        return await self.submit_code(owner_id)
 
     # --- вход в Telegram ---
 
