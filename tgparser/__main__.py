@@ -43,7 +43,16 @@ def cmd_check() -> int:
     print("Конфигурация заполнена.")
     print(f"База: {settings.db_path}")
     print(f"Выгрузки: {settings.export_dir}")
-    print(f"Владелец: {settings.owner_id}")
+    if settings.access_mode == "allowlist":
+        print(f"Доступ: по списку ({len(settings.allowed_user_ids)} id)")
+    else:
+        print("Доступ: открытый")
+    print(
+        "Ключи приложения: "
+        + ("общие из окружения" if settings.has_shared_keys else "у каждого свои")
+    )
+    if settings.admin_id:
+        print(f"Администратор: {settings.admin_id}")
     return 0
 
 

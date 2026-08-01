@@ -114,10 +114,23 @@ class TestAccessMode:
             ("111;222", [111, 222]),
             ("111", [111]),
             ("", []),
+            ("[111, 222]", [111, 222]),
+            ('"111","222"', [111, 222]),
         ],
     )
     def test_id_list_parsing(self, raw, expected):
         assert build(ALLOWED_USER_IDS=raw).allowed_user_ids == expected
+
+    def test_id_list_from_environment(self, monkeypatch):
+        """Из окружения список приходит строкой, а не JSON — это должно работать."""
+        monkeypatch.setenv("BOT_TOKEN", "1:x")
+        monkeypatch.setenv("SESSION_ENCRYPTION_KEY", "k")
+        monkeypatch.setenv("ACCESS_MODE", "allowlist")
+        monkeypatch.setenv("ALLOWED_USER_IDS", "111,222")
+        settings = Settings(_env_file=None)
+        assert settings.allowed_user_ids == [111, 222]
+        assert settings.is_allowed(111) is True
+        assert settings.is_allowed(333) is False
 
     def test_mode_is_case_insensitive(self):
         assert build(ACCESS_MODE="OPEN").access_mode == "open"

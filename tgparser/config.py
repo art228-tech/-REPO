@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -31,7 +31,12 @@ class Settings(BaseSettings):
 
     # open — бот доступен любому, allowlist — только id из allowed_user_ids.
     access_mode: Literal["open", "allowlist"] = Field(default="open", alias="ACCESS_MODE")
-    allowed_user_ids: list[int] = Field(default_factory=list, alias="ALLOWED_USER_IDS")
+
+    # NoDecode обязателен: без него pydantic-settings разбирает значение
+    # списка из окружения как JSON и падает на привычной записи `1,2,3`.
+    allowed_user_ids: Annotated[list[int], NoDecode] = Field(
+        default_factory=list, alias="ALLOWED_USER_IDS"
+    )
 
     # Необязательный администратор: видит сводку по всем пользователям.
     admin_id: int = Field(default=0, alias="ADMIN_ID")
@@ -62,9 +67,14 @@ class Settings(BaseSettings):
     @field_validator("allowed_user_ids", mode="before")
     @classmethod
     def _parse_id_list(cls, value: object) -> object:
-        """Список id приходит строкой вида `1,2,3`."""
+        """Список id приходит строкой вида `1,2,3`.
+
+        Заодно терпим запись в скобках и кавычках: её пишут по привычке из JSON.
+        """
         if isinstance(value, str):
-            return [int(part) for part in value.replace(";", ",").split(",") if part.strip()]
+            cleaned = value.strip().strip("[]")
+            parts = cleaned.replace(";", ",").split(",")
+            return [int(part.strip().strip("\"'")) for part in parts if part.strip()]
         return value
 
     @field_validator("access_mode", mode="before")
