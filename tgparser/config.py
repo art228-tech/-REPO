@@ -37,6 +37,19 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
+    @field_validator("api_id", "owner_id", mode="before")
+    @classmethod
+    def _blank_is_zero(cls, value: object) -> object:
+        """Пустое значение в .env — это «не заполнено», а не ошибка типа.
+
+        Иначе шаблон с `API_ID=` роняет конструктор раньше, чем отработает
+        проверка обязательных полей, и вместо понятного списка недостающих
+        переменных пользователь видит трейсбек pydantic.
+        """
+        if isinstance(value, str) and not value.strip():
+            return 0
+        return value
+
     @field_validator("db_path", "export_dir", mode="after")
     @classmethod
     def _expand(cls, value: Path) -> Path:
