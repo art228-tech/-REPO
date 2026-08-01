@@ -7,8 +7,15 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from tgparser.bot.context import BotContext
-from tgparser.bot.keyboards import back_to, depth_menu, pace_menu, settings_menu
+from tgparser.bot.keyboards import (
+    back_to,
+    chats_menu,
+    depth_menu,
+    pace_menu,
+    settings_menu,
+)
 from tgparser.bot.states import SettingsFlow
+from tgparser.core.util import parse_chat_list
 from tgparser.db.settings_store import load_settings, save_settings
 
 router = Router(name="settings")
@@ -93,6 +100,150 @@ async def on_depth_set(call: CallbackQuery, ctx: BotContext) -> None:
 
     await _render(call, ctx)
     await call.answer("Сохранил.")
+
+
+CHATS_HEADER = (
+    "<b>Отбор чатов</b>\n\n"
+    "«Только эти» — обходим лишь перечисленные, всё остальное пропускаем. "
+    "Полезно, когда включаете перебор участников: держите список коротким.\n"
+    "«Исключить» — наоборот, пропускаем перечисленные.\n"
+    "«Минимум участников» — пропускать чаты меньше указанного размера."
+)
+
+CHAT_LIST_PROMPT = (
+    "Пришлите чаты одним сообщением — через пробел, запятую или с новой "
+    "строки. Понимаю <code>@тег</code>, ссылку <code>t.me/name</code> и "
+    "числовой id вида <code>-1001234567890</code>."
+)
+
+
+async def _render_chats(call: CallbackQuery, ctx: BotContext) -> None:
+    async with ctx.db.session() as session:
+        scan_settings = await load_settings(session, call.from_user.id)
+
+    lines = [CHATS_HEADER]
+    if scan_settings.included_chats:
+        lines.append("")
+        lines.append("Только эти: " + ", ".join(scan_settings.included_chats[:20]))
+    if scan_settings.excluded_chats:
+        lines.append("")
+        lines.append("Исключены: " + ", ".join(scan_settings.excluded_chats[:20]))
+
+    await call.message.edit_text(
+        "\n".join(lines), reply_markup=chats_menu(scan_settings)
+    )
+
+
+@router.callback_query(F.data == "settings:chats")
+async def on_chats_menu(call: CallbackQuery, ctx: BotContext, state: FSMContext) -> None:
+    await state.clear()
+    await _render_chats(call, ctx)
+    await call.answer()
+
+
+@router.callback_query(F.data == "settings:chats:only")
+async def on_only_prompt(call: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(SettingsFlow.included_chats)
+    await call.message.edit_text(
+        f"<b>Только эти чаты</b>\n\n{CHAT_LIST_PROMPT}",
+        reply_markup=back_to("settings:chats"),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == "settings:chats:skip")
+async def on_skip_prompt(call: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(SettingsFlow.excluded_chats)
+    await call.message.edit_text(
+        f"<b>Исключить чаты</b>\n\n{CHAT_LIST_PROMPT}",
+        reply_markup=back_to("settings:chats"),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == "settings:chats:min")
+async def on_min_prompt(call: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(SettingsFlow.min_participants)
+    await call.message.edit_text(
+        "Пришлите число: чаты меньше этого размера будут пропускаться. "
+        "0 — без ограничения.",
+        reply_markup=back_to("settings:chats"),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("settings:chats:clear:"))
+async def on_clear_list(call: CallbackQuery, ctx: BotContext) -> None:
+    which = call.data.rsplit(":", 1)[-1]
+    owner_id = call.from_user.id
+    async with ctx.db.session() as session:
+        scan_settings = await load_settings(session, owner_id)
+        if which == "only":
+            scan_settings.included_chats = []
+        else:
+            scan_settings.excluded_chats = []
+        await save_settings(session, owner_id, scan_settings)
+
+    await _render_chats(call, ctx)
+    await call.answer("Сбросил.")
+
+
+@router.message(SettingsFlow.included_chats)
+async def on_included_chats(message: Message, ctx: BotContext, state: FSMContext) -> None:
+    await _save_chat_list(message, ctx, state, "included_chats")
+
+
+@router.message(SettingsFlow.excluded_chats)
+async def on_excluded_chats(message: Message, ctx: BotContext, state: FSMContext) -> None:
+    await _save_chat_list(message, ctx, state, "excluded_chats")
+
+
+async def _save_chat_list(
+    message: Message, ctx: BotContext, state: FSMContext, field: str
+) -> None:
+    chats = parse_chat_list(message.text or "")
+    if not chats:
+        await message.answer(
+            "Ни одного чата не распознал. Нужны @теги, ссылки t.me или числовые id."
+        )
+        return
+
+    owner_id = message.from_user.id
+    async with ctx.db.session() as session:
+        scan_settings = await load_settings(session, owner_id)
+        setattr(scan_settings, field, chats)
+        await save_settings(session, owner_id, scan_settings)
+
+    await state.clear()
+    await message.answer(
+        f"Сохранил {len(chats)}: " + ", ".join(chats[:20]),
+        reply_markup=back_to("settings:chats"),
+    )
+
+
+@router.message(SettingsFlow.min_participants)
+async def on_min_participants(message: Message, ctx: BotContext, state: FSMContext) -> None:
+    try:
+        value = int((message.text or "").strip())
+    except ValueError:
+        await message.answer("Нужно целое число, 0 — без ограничения.")
+        return
+    if value < 0:
+        await message.answer("Отрицательное не подходит.")
+        return
+
+    owner_id = message.from_user.id
+    async with ctx.db.session() as session:
+        scan_settings = await load_settings(session, owner_id)
+        scan_settings.min_participants = value
+        await save_settings(session, owner_id, scan_settings)
+
+    await state.clear()
+    await message.answer(
+        "Сохранил: "
+        + ("без ограничения" if value == 0 else f"пропускать чаты меньше {value}"),
+        reply_markup=back_to("settings:chats"),
+    )
 
 
 @router.callback_query(F.data == "settings:pace")

@@ -355,6 +355,61 @@ class TestSettings:
         async with db.session() as db_session:
             assert (await load_settings(db_session, OWNER)).history_depth_days == 90
 
+    async def test_chat_whitelist_is_saved(self, dispatcher, bot, db):
+        from tgparser.db.settings_store import load_settings
+
+        await dispatcher.feed_update(bot, callback_update("settings:chats:only", update_id=1))
+        await dispatcher.feed_update(
+            bot, message_update("@first_chat, t.me/second_chat", update_id=2)
+        )
+
+        async with db.session() as db_session:
+            settings = await load_settings(db_session, OWNER)
+        assert settings.included_chats == ["@first_chat", "@second_chat"]
+
+    async def test_chat_blacklist_is_saved(self, dispatcher, bot, db):
+        from tgparser.db.settings_store import load_settings
+
+        await dispatcher.feed_update(bot, callback_update("settings:chats:skip", update_id=1))
+        await dispatcher.feed_update(bot, message_update("-1001234567890", update_id=2))
+
+        async with db.session() as db_session:
+            settings = await load_settings(db_session, OWNER)
+        assert settings.excluded_chats == ["-1001234567890"]
+
+    async def test_chat_list_can_be_cleared(self, dispatcher, bot, db):
+        from tgparser.db.settings_store import load_settings
+
+        await dispatcher.feed_update(bot, callback_update("settings:chats:only", update_id=1))
+        await dispatcher.feed_update(bot, message_update("@only_this", update_id=2))
+        await dispatcher.feed_update(
+            bot, callback_update("settings:chats:clear:only", update_id=3)
+        )
+
+        async with db.session() as db_session:
+            settings = await load_settings(db_session, OWNER)
+        assert settings.included_chats == []
+
+    async def test_min_participants_is_saved(self, dispatcher, bot, db):
+        from tgparser.db.settings_store import load_settings
+
+        await dispatcher.feed_update(bot, callback_update("settings:chats:min", update_id=1))
+        await dispatcher.feed_update(bot, message_update("500", update_id=2))
+
+        async with db.session() as db_session:
+            settings = await load_settings(db_session, OWNER)
+        assert settings.min_participants == 500
+
+    async def test_bad_chat_list_is_rejected(self, dispatcher, bot, session, db):
+        from tgparser.db.settings_store import load_settings
+
+        await dispatcher.feed_update(bot, callback_update("settings:chats:only", update_id=1))
+        await dispatcher.feed_update(bot, message_update("!!! ???", update_id=2))
+
+        assert "не распознал" in " ".join(session.texts())
+        async with db.session() as db_session:
+            assert (await load_settings(db_session, OWNER)).included_chats == []
+
     async def test_unknown_toggle_is_rejected(self, dispatcher, bot, session):
         await dispatcher.feed_update(
             bot, callback_update("settings:toggle:drop_database", update_id=1)

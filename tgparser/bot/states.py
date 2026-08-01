@@ -22,3 +22,6 @@ class DatabaseFlow(StatesGroup):
 class SettingsFlow(StatesGroup):
     roster_budget = State()
     history_budget = State()
+    included_chats = State()
+    excluded_chats = State()
+    min_participants = State()

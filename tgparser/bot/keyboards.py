@@ -103,8 +103,32 @@ def settings_menu(s: ScanSettings) -> InlineKeyboardMarkup:
         text=f"Только активный топик: {_flag(s.forum_busiest_topic_only)}",
         callback_data="settings:toggle:forum_busiest_topic_only",
     )
+    builder.button(text="Отбор чатов", callback_data="settings:chats")
     builder.button(text="Темп и лимиты", callback_data="settings:pace")
     builder.button(text="Назад", callback_data="menu:main")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def chats_menu(s: ScanSettings) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    only = len(s.included_chats)
+    skip = len(s.excluded_chats)
+    builder.button(
+        text=f"Только эти чаты: {only or 'все'}", callback_data="settings:chats:only"
+    )
+    builder.button(
+        text=f"Исключить чаты: {skip or 'нет'}", callback_data="settings:chats:skip"
+    )
+    builder.button(
+        text=f"Минимум участников: {s.min_participants or 'без ограничения'}",
+        callback_data="settings:chats:min",
+    )
+    if only:
+        builder.button(text="Сбросить «только эти»", callback_data="settings:chats:clear:only")
+    if skip:
+        builder.button(text="Сбросить исключения", callback_data="settings:chats:clear:skip")
+    builder.button(text="Назад", callback_data="settings:menu")
     builder.adjust(1)
     return builder.as_markup()
 

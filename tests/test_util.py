@@ -12,6 +12,7 @@ from tgparser.core.util import (
     is_topic_excluded,
     message_link,
     normalize_username,
+    parse_chat_list,
     snippet,
     strip_channel_prefix,
 )
@@ -144,6 +145,37 @@ class TestExtractUsernames:
 
     def test_empty(self):
         assert extract_usernames("") == []
+
+
+class TestParseChatList:
+    def test_mixed_forms(self):
+        text = "@first_chat, t.me/second_chat\n-1001234567890"
+        assert parse_chat_list(text) == [
+            "@first_chat",
+            "@second_chat",
+            "-1001234567890",
+        ]
+
+    def test_normalizes_tags_with_at(self):
+        assert parse_chat_list("first_chat") == ["@first_chat"]
+
+    def test_dedupes_case_insensitively(self):
+        assert parse_chat_list("@Chat_One @chat_one") == ["@Chat_One"]
+
+    def test_keeps_numeric_ids_as_is(self):
+        assert parse_chat_list("-1001234567890 555") == ["-1001234567890", "555"]
+
+    def test_drops_garbage(self):
+        assert parse_chat_list("!!! ??? abc") == []
+
+    def test_empty(self):
+        assert parse_chat_list("") == []
+
+    def test_result_works_with_chat_matches(self):
+        """Разобранный список должен подходить для сравнения при обходе."""
+        entries = parse_chat_list("@target_chat")
+        assert chat_matches(-1001, "target_chat", entries)
+        assert not chat_matches(-1002, "other_chat", entries)
 
 
 class TestSnippet:

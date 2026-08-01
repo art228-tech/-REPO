@@ -122,6 +122,28 @@ def extract_usernames(text: str) -> list[str]:
     return found
 
 
+def parse_chat_list(text: str) -> list[str]:
+    """Разобрать список чатов: @теги, ссылки и числовые id в одном сообщении."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for token in re.split(r"[\s,;]+", text or ""):
+        item = token.strip()
+        if not item:
+            continue
+        if _looks_numeric(item):
+            normalized = item
+        else:
+            username = normalize_username(item)
+            if username is None:
+                continue
+            normalized = f"@{username}"
+        key = normalized.casefold()
+        if key not in seen:
+            seen.add(key)
+            found.append(normalized)
+    return found
+
+
 def snippet(text: str | None, limit: int = 300) -> str | None:
     """Укороченный текст сообщения для карточки лида."""
     if not text:
