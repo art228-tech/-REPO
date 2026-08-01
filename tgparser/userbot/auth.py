@@ -12,7 +12,7 @@ from __future__ import annotations
 import enum
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from telethon.errors import (
@@ -39,13 +39,13 @@ CODE_LENGTH_MAX = 7
 PENDING_TTL = timedelta(minutes=10)
 
 
-class Stage(str, enum.Enum):
+class Stage(enum.StrEnum):
     CODE = "code"
     PASSWORD = "password"
     DONE = "done"
 
 
-class Outcome(str, enum.Enum):
+class Outcome(enum.StrEnum):
     CODE_SENT = "code_sent"
     SIGNED_IN = "signed_in"
     NEEDS_PASSWORD = "needs_password"
@@ -71,11 +71,11 @@ class PendingAuth:
     proxy: str | None = None
     digits: str = ""
     stage: Stage = Stage.CODE
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def expired(self) -> bool:
-        return datetime.now(timezone.utc) - self.created_at > PENDING_TTL
+        return datetime.now(UTC) - self.created_at > PENDING_TTL
 
     @property
     def masked(self) -> str:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import enum
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     BigInteger,
@@ -20,14 +20,14 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):
     pass
 
 
-class SourceKind(str, enum.Enum):
+class SourceKind(enum.StrEnum):
     """Откуда получена запись."""
 
     ROSTER = "roster"  # из списка участников
@@ -36,14 +36,14 @@ class SourceKind(str, enum.Enum):
     MANUAL = "manual"  # добавлено вручную через бота
 
 
-class ChatKind(str, enum.Enum):
+class ChatKind(enum.StrEnum):
     GROUP = "group"
     SUPERGROUP = "supergroup"
     FORUM = "forum"
     CHANNEL = "channel"
 
 
-class LeadStatus(str, enum.Enum):
+class LeadStatus(enum.StrEnum):
     NEW = "new"
     CONTACTED = "contacted"
     REPLIED = "replied"

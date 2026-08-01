@@ -50,7 +50,8 @@ class ScanService:
             return False
         self._cancel.set()
         task = self._task
-        assert task is not None
+        if task is None:
+            return False
         task.cancel()
         try:
             await task

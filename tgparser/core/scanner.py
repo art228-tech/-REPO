@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from telethon.errors import ChannelPrivateError, RPCError
@@ -58,7 +58,7 @@ class ChatReport:
 
 @dataclass(slots=True)
 class ScanReport:
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     finished_at: datetime | None = None
     dialogs_total: int = 0
     chats: list[ChatReport] = field(default_factory=list)
@@ -114,6 +114,7 @@ class Scanner:
         self._seen: set[int] = set()
         self._pending: list[tuple[CollectedUser, Any]] = []
         self._report = ScanReport()
+        self._current: ChatReport | None = None
 
     async def _progress(self, text: str) -> None:
         if self._on_progress is not None:
@@ -145,7 +146,7 @@ class Scanner:
             self._report.abort_reason = str(exc)
         finally:
             await self._flush()
-            self._report.finished_at = datetime.now(timezone.utc)
+            self._report.finished_at = datetime.now(UTC)
 
         return self._report
 
@@ -195,6 +196,7 @@ class Scanner:
             participants_count=target.participants_count,
             participants_visible=target.participants_visible,
         )
+        self._current = report
 
         if (
             self._settings.min_participants
@@ -239,6 +241,8 @@ class Scanner:
             logger.warning("Ошибка на чате %s: %s", target.title, exc)
             report.error = str(exc)
 
+        # Дописываем остаток буфера, пока отчёт этого чата ещё актуален.
+        await self._flush()
         await self._save_state(state_id, collected=report.collected)
         return report
 
@@ -496,13 +500,14 @@ class Scanner:
         self._pending.append((collected, (message, peer) if needs_forward else None))
 
         if len(self._pending) >= FLUSH_EVERY:
-            await self._flush(report)
+            await self._flush()
 
-    async def _flush(self, report: ChatReport | None = None) -> None:
+    async def _flush(self) -> None:
         if not self._pending:
             return
         batch = self._pending
         self._pending = []
+        report = self._current
 
         async with self._db.session() as session:
             repo = LeadRepo(session)

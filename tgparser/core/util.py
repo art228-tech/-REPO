@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 CHANNEL_ID_PREFIX = -1_000_000_000_000
 
@@ -52,7 +52,7 @@ def cutoff_datetime(depth_days: int, now: datetime | None = None) -> datetime | 
     """Граница обхода по времени. 0 или меньше — без ограничения."""
     if depth_days <= 0:
         return None
-    return (now or datetime.now(timezone.utc)) - timedelta(days=depth_days)
+    return (now or datetime.now(UTC)) - timedelta(days=depth_days)
 
 
 def is_topic_excluded(title: str | None, patterns: list[str]) -> bool:
@@ -89,6 +89,9 @@ def _looks_numeric(value: str) -> bool:
     return bool(re.fullmatch(r"-?\d+", value.strip()))
 
 
+# 4-32 символа: самостоятельно регистрируются теги от пяти, но короткие
+# коллекционные с Fragment встречаются, и при ручном вводе ложный отказ
+# дороже лишней записи.
 USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{3,31}$")
 
 

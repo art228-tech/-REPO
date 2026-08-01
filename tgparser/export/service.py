@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import select
@@ -57,7 +57,7 @@ async def fetch_leads(session: AsyncSession, flt: ExportFilter | None = None) ->
 
 
 def build_filename(fmt: str, now: datetime | None = None) -> str:
-    stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%d-%H%M%S")
+    stamp = (now or datetime.now(UTC)).strftime("%Y%m%d-%H%M%S")
     return f"leads-{stamp}.{fmt}"
 
 
