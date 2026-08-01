@@ -94,6 +94,9 @@ async def run(app_settings: Settings) -> None:
     app_settings.ensure_dirs()
     database = Database(app_settings.db_url)
     await database.create_all()
+    added = await database.migrate()
+    if added:
+        logger.info("Схема обновлена: %s", ", ".join(added))
 
     cipher = SessionCipher(app_settings.session_encryption_key)
     ctx = BotContext(
