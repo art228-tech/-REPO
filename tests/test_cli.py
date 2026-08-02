@@ -109,6 +109,56 @@ class TestCheck:
         assert "Администратор" not in capsys.readouterr().out
 
 
+class TestLogFile:
+    """Логи должны переживать пересборку контейнера.
+
+    `docker compose logs` показывает только текущий контейнер, а разбираться
+    с прошлыми прогонами приходится именно по истории.
+    """
+
+    def test_log_file_sits_next_to_the_database(self, monkeypatch, tmp_path):
+        from tgparser.config import get_settings
+
+        fill(monkeypatch, tmp_path)
+        settings = get_settings()
+        assert settings.log_file.parent == settings.db_path.parent
+        assert settings.log_file.name.endswith(".log")
+
+    def test_configure_logging_writes_to_the_file(self, tmp_path):
+        import logging
+
+        target = tmp_path / "logs" / "tgparser.log"
+        root = logging.getLogger()
+        saved = root.handlers[:]
+        try:
+            cli._configure_logging("INFO", target)
+            logging.getLogger("tgparser.test").info("проверочная запись")
+            for handler in logging.getLogger().handlers:
+                handler.flush()
+            assert target.exists()
+            assert "проверочная запись" in target.read_text(encoding="utf-8")
+        finally:
+            for handler in logging.getLogger().handlers[:]:
+                handler.close()
+                logging.getLogger().removeHandler(handler)
+            for handler in saved:
+                root.addHandler(handler)
+
+    def test_logging_works_without_a_file(self):
+        import logging
+
+        root = logging.getLogger()
+        saved = root.handlers[:]
+        try:
+            cli._configure_logging("INFO", None)
+            assert logging.getLogger().handlers
+        finally:
+            for handler in logging.getLogger().handlers[:]:
+                logging.getLogger().removeHandler(handler)
+            for handler in saved:
+                root.addHandler(handler)
+
+
 class TestArgs:
     def test_unknown_command_exits(self):
         with pytest.raises(SystemExit):

@@ -51,6 +51,11 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
+    @property
+    def log_file(self) -> Path:
+        """Лог рядом с базой: он переживает пересборку контейнера."""
+        return self.db_path.parent / "tgparser.log"
+
     @field_validator("api_id", "admin_id", mode="before")
     @classmethod
     def _blank_is_zero(cls, value: object) -> object:

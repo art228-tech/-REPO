@@ -201,7 +201,7 @@ Create application.
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m pytest        # 458 тестов, сеть не нужна
+.venv/bin/python -m pytest        # 461 тест, сеть не нужна
 .venv/bin/ruff check .
 ```
 
