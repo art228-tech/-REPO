@@ -35,6 +35,7 @@ class ChatFixture:
     topics: list[tuple[int, str, int]] = field(default_factory=list)
     forward_error: Exception | None = None
     forward_anonymized: bool = False
+    archived: bool = False
 
     @property
     def peer_id(self) -> int:
@@ -42,9 +43,10 @@ class ChatFixture:
 
 
 class _Dialog:
-    def __init__(self, entity: Any) -> None:
+    def __init__(self, entity: Any, archived: bool = False) -> None:
         self.entity = entity
         self.is_user = False
+        self.archived = archived
 
 
 class _FullChat:
@@ -82,10 +84,13 @@ class FakeTelegramClient:
 
     # --- поверхность Telethon ---
 
-    async def iter_dialogs(self):
-        self.calls.append("iter_dialogs")
+    async def iter_dialogs(self, archived: bool | None = None):
+        """archived=False — только основная папка, как у настоящего клиента."""
+        self.calls.append(f"iter_dialogs(archived={archived})")
         for fixture in self._fixtures.values():
-            yield _Dialog(fixture.entity)
+            if archived is not None and fixture.archived != archived:
+                continue
+            yield _Dialog(fixture.entity, archived=fixture.archived)
 
     async def get_entity(self, ident: Any):
         self.calls.append("get_entity")

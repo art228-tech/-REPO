@@ -342,6 +342,21 @@ class TestSettings:
         async with db.session() as db_session:
             assert (await load_settings(db_session, OWNER)).collect_roster is True
 
+    async def test_archive_skipping_is_on_by_default(self, dispatcher, bot, db):
+        from tgparser.db.settings_store import load_settings
+
+        async with db.session() as db_session:
+            assert (await load_settings(db_session, OWNER)).skip_archived is True
+
+    async def test_archive_toggle_persists(self, dispatcher, bot, db):
+        from tgparser.db.settings_store import load_settings
+
+        await dispatcher.feed_update(
+            bot, callback_update("settings:toggle:skip_archived", update_id=1)
+        )
+        async with db.session() as db_session:
+            assert (await load_settings(db_session, OWNER)).skip_archived is False
+
     async def test_roster_toggle_shows_warning(self, dispatcher, bot, session):
         await dispatcher.feed_update(
             bot, callback_update("settings:toggle:collect_roster", update_id=1)

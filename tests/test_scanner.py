@@ -239,6 +239,47 @@ class TestSkipping:
 
         assert {lead.username for lead in await leads_in(db)} == {"alpha_tag"}
 
+    async def test_archived_chats_are_not_visited(self, db, scan_settings):
+        """Архив — это то, что человек убрал с глаз; туда не ходим."""
+        users = {1: make_user(1, "active_tag"), 2: make_user(2, "archived_tag")}
+        live = ChatFixture(
+            entity=make_channel(1001, "Живой"), messages=[make_message(9, 1)]
+        )
+        archived = ChatFixture(
+            entity=make_channel(1002, "Архивный"),
+            messages=[make_message(9, 2)],
+            archived=True,
+        )
+        client = FakeTelegramClient([live, archived], users)
+
+        report = await run_scanner(client, db, scan_settings)
+
+        assert {lead.username for lead in await leads_in(db)} == {"active_tag"}
+        assert report.dialogs_total == 1
+
+    async def test_archive_is_filtered_by_telegram_not_by_us(self, db, scan_settings):
+        """Запрашиваем только основную папку: архив не должен даже приезжать."""
+        client = FakeTelegramClient([], {})
+        await run_scanner(client, db, scan_settings)
+        assert "iter_dialogs(archived=False)" in client.calls
+
+    async def test_archived_chats_included_when_allowed(self, db, scan_settings):
+        scan_settings.skip_archived = False
+        users = {1: make_user(1, "active_tag"), 2: make_user(2, "archived_tag")}
+        live = ChatFixture(entity=make_channel(1001), messages=[make_message(9, 1)])
+        archived = ChatFixture(
+            entity=make_channel(1002), messages=[make_message(9, 2)], archived=True
+        )
+        client = FakeTelegramClient([live, archived], users)
+
+        await run_scanner(client, db, scan_settings)
+
+        assert {lead.username for lead in await leads_in(db)} == {
+            "active_tag",
+            "archived_tag",
+        }
+        assert "iter_dialogs(archived=None)" in client.calls
+
     async def test_small_chats_can_be_skipped(self, db, scan_settings):
         scan_settings.min_participants = 50
         users = {1: make_user(1, "alpha_tag")}

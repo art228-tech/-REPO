@@ -28,6 +28,7 @@ TOGGLES = {
     "forward_untagged",
     "skip_bots",
     "forum_busiest_topic_only",
+    "skip_archived",
 }
 
 ROSTER_WARNING = (

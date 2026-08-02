@@ -103,6 +103,10 @@ def settings_menu(s: ScanSettings) -> InlineKeyboardMarkup:
         text=f"Только активный топик: {_flag(s.forum_busiest_topic_only)}",
         callback_data="settings:toggle:forum_busiest_topic_only",
     )
+    builder.button(
+        text=f"Пропускать архив: {_flag(s.skip_archived)}",
+        callback_data="settings:toggle:skip_archived",
+    )
     builder.button(text="Отбор чатов", callback_data="settings:chats")
     builder.button(text="Темп и лимиты", callback_data="settings:pace")
     builder.button(text="Назад", callback_data="menu:main")

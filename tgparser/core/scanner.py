@@ -186,9 +186,14 @@ class Scanner:
     # --- перебор диалогов ---
 
     async def _collect_dialogs(self) -> list[tuple[Any, int]]:
-        """Группы, супергруппы, форумы и каналы из списка диалогов аккаунта."""
+        """Группы, супергруппы, форумы и каналы из списка диалогов аккаунта.
+
+        Архив исключается на стороне Telegram: ``archived=False`` означает
+        запрос только основной папки, поэтому архивные чаты даже не приедут.
+        """
         found: list[tuple[Any, int]] = []
-        async for dialog in self._client.iter_dialogs():
+        kwargs = {"archived": False} if self._settings.skip_archived else {}
+        async for dialog in self._client.iter_dialogs(**kwargs):
             entity = dialog.entity
             if dialog.is_user:
                 continue
