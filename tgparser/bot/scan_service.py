@@ -133,11 +133,19 @@ class ScanService:
                 client = await client_for_account(self._app_settings, account, self._cipher)
 
             if not await client.is_user_authorized():
+                # Убираем из работы, иначе каждый запуск будет упираться в ту
+                # же мёртвую сессию и подключить новый аккаунт не выйдет.
+                async with self._db.session() as session:
+                    repo = AccountRepo(session, owner_id)
+                    account = await repo.get(account_id)
+                    if account is not None:
+                        await repo.deactivate(account, "сессия отозвана")
                 await self._fail(
                     owner_id,
                     on_progress,
-                    "Сессия недействительна — аккаунт вышел или сессия отозвана. "
-                    "Подключите аккаунт заново.",
+                    "Сессия недействительна: аккаунт вышел или сессию завершили "
+                    "в «Устройствах». Аккаунт отключён — подключите заново, "
+                    "можно другой номер.",
                 )
                 return
 

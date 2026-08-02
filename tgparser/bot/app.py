@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 from aiogram import BaseMiddleware, Bot, Dispatcher, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramUnauthorizedError
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, CallbackQuery, Message, TelegramObject
 
@@ -82,6 +84,30 @@ def build_dispatcher(ctx: BotContext) -> Dispatcher:
     return dispatcher
 
 
+TOKEN_CHECK_INTERVAL = 300
+
+
+async def _watch_token(bot: Bot, dispatcher: Dispatcher) -> None:
+    """Остановить бота, если токен отозвали на ходу.
+
+    Иначе aiogram бесконечно повторяет запрос обновлений и пишет ошибку каждые
+    несколько секунд: логи забиваются, а причина остаётся неочевидной.
+    """
+    while True:
+        await asyncio.sleep(TOKEN_CHECK_INTERVAL)
+        try:
+            await bot.get_me()
+        except TelegramUnauthorizedError:
+            logger.error(
+                "Токен бота отозван — Telegram отвечает Unauthorized. "
+                "Впишите новый BOT_TOKEN в .env и перезапустите."
+            )
+            await dispatcher.stop_polling()
+            return
+        except Exception:
+            logger.debug("Проверка токена не удалась", exc_info=True)
+
+
 async def run(app_settings: Settings) -> None:
     missing = app_settings.missing_required()
     if missing:
@@ -130,11 +156,13 @@ async def run(app_settings: Settings) -> None:
     )
     logger.info("Бот @%s запущен, доступ %s", me.username, access)
 
+    watchdog = asyncio.create_task(_watch_token(bot, dispatcher))
     try:
         await dispatcher.start_polling(
             bot, allowed_updates=["message", "callback_query"]
         )
     finally:
+        watchdog.cancel()
         await ctx.scan.stop_all()
         await ctx.auth.close_all()
         await database.dispose()

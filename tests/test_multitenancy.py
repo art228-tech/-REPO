@@ -117,6 +117,58 @@ class TestAccountIsolation:
         assert alice.session_enc == b"a"
         assert bob.session_enc == b"b"
 
+    async def test_new_account_replaces_the_previous_one(self, db):
+        """Регресс: бот продолжал ходить старой сессией.
+
+        Активным считался самый первый аккаунт по id, поэтому после смены
+        номера подключался новый, а работал по-прежнему старый.
+        """
+        async with db.session() as session:
+            repo = AccountRepo(session, ALICE)
+            await repo.upsert_session("+79990000001", b"old", 1, "old_one")
+            await repo.upsert_session("+79990000002", b"new", 2, "new_one")
+
+        async with db.session() as session:
+            active = await AccountRepo(session, ALICE).get_active()
+        assert [a.phone for a in active] == ["+79990000002"]
+
+    async def test_reconnecting_the_same_number_keeps_it_active(self, db):
+        async with db.session() as session:
+            repo = AccountRepo(session, ALICE)
+            await repo.upsert_session("+79990000001", b"old", 1, "one")
+            await repo.upsert_session("+79990000001", b"fresh", 1, "one")
+
+        async with db.session() as session:
+            active = await AccountRepo(session, ALICE).get_active()
+        assert len(active) == 1
+        assert active[0].session_enc == b"fresh"
+
+    async def test_deactivate_hides_account_but_keeps_data(self, db):
+        async with db.session() as session:
+            repo = AccountRepo(session, ALICE)
+            account = await repo.upsert_session("+79990000001", b"enc", 1, "one")
+            await repo.deactivate(account, "сессия отозвана")
+
+        async with db.session() as session:
+            repo = AccountRepo(session, ALICE)
+            assert await repo.first_active() is None
+            assert await repo.get_by_phone("+79990000001") is not None
+
+    async def test_switching_accounts_does_not_touch_another_owner(self, db):
+        async with db.session() as session:
+            await AccountRepo(session, ALICE).upsert_session(
+                "+79990000001", b"a", 1, None
+            )
+            await AccountRepo(session, BOB).upsert_session("+79990000002", b"b", 2, None)
+            await AccountRepo(session, ALICE).upsert_session(
+                "+79990000003", b"a2", 3, None
+            )
+
+        async with db.session() as session:
+            assert (
+                await AccountRepo(session, BOB).first_active()
+            ).phone == "+79990000002"
+
     async def test_block_affects_only_one_owner(self, db):
         async with db.session() as session:
             alice_repo = AccountRepo(session, ALICE)

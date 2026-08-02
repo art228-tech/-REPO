@@ -234,16 +234,28 @@ class AccountRepo:
         self.owner_id = owner_id
 
     async def get_active(self) -> list[Account]:
+        """Активные аккаунты, самый свежий первым.
+
+        Интерфейс работает с одним аккаунтом, поэтому при подключении нового
+        предыдущие деактивируются. Порядок по убыванию — страховка на случай,
+        если по какой-то причине активными остались несколько.
+        """
         rows = await self.session.scalars(
             select(Account)
             .where(Account.owner_id == self.owner_id, Account.is_active.is_(True))
-            .order_by(Account.id)
+            .order_by(Account.id.desc())
         )
         return list(rows)
 
     async def first_active(self) -> Account | None:
         accounts = await self.get_active()
         return accounts[0] if accounts else None
+
+    async def deactivate(self, account: Account, reason: str) -> None:
+        """Убрать аккаунт из работы, не удаляя собранное."""
+        account.is_active = False
+        account.block_reason = reason
+        await self.session.flush()
 
     async def get_by_phone(self, phone: str) -> Account | None:
         return await self.session.scalar(
@@ -266,6 +278,12 @@ class AccountRepo:
         api_id: int | None = None,
         api_hash_enc: bytes | None = None,
     ) -> Account:
+        # Интерфейс однопользовательский: подключение нового аккаунта убирает
+        # предыдущий из работы, иначе бот продолжил бы ходить старой сессией.
+        for other in await self.get_active():
+            if other.phone != phone:
+                other.is_active = False
+
         account = await self.get_by_phone(phone)
         if account is None:
             account = Account(
