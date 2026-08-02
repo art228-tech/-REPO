@@ -1,0 +1,23 @@
+[Unit]
+Description=Telegram chat parser bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tgparser
+WorkingDirectory=/opt/tgparser
+EnvironmentFile=/opt/tgparser/.env
+ExecStart=/opt/tgparser/.venv/bin/python -m tgparser run
+Restart=always
+RestartSec=10
+
+# Сессия аккаунта лежит в БД: ограничиваем, к чему процесс вообще имеет доступ.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/tgparser/data
+
+[Install]
+WantedBy=multi-user.target

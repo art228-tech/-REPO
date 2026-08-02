@@ -1,0 +1,109 @@
+"""Точка входа: `python -m tgparser [run|genkey|check]`."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+import sys
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
+from tgparser.config import get_settings
+
+
+def _configure_logging(level: str, log_file: Path | None = None) -> None:
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+
+    if log_file is not None:
+        # docker compose logs показывает только текущий контейнер: после
+        # пересборки история пропадает, а разбираться приходится именно по ней.
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(
+            RotatingFileHandler(
+                log_file, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+            )
+        )
+
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)-7s %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=handlers,
+        # Без force настройка молча игнорируется, если обработчики уже есть.
+        force=True,
+    )
+    # Telethon на INFO очень болтлив.
+    logging.getLogger("telethon").setLevel(logging.WARNING)
+    logging.getLogger("aiogram.event").setLevel(logging.WARNING)
+
+
+def cmd_genkey() -> int:
+    from tgparser.crypto import generate_key
+
+    print(generate_key())
+    print(
+        "\nПоложите значение в SESSION_ENCRYPTION_KEY в .env.\n"
+        "Потеряете ключ — сохранённая сессия аккаунта станет нечитаемой "
+        "и аккаунт придётся подключать заново.",
+        file=sys.stderr,
+    )
+    return 0
+
+
+def cmd_check() -> int:
+    settings = get_settings()
+    missing = settings.missing_required()
+    if missing:
+        print("Не заданы: " + ", ".join(missing))
+        return 1
+    print("Конфигурация заполнена.")
+    print(f"База: {settings.db_path}")
+    print(f"Выгрузки: {settings.export_dir}")
+    if settings.access_mode == "allowlist":
+        print(f"Доступ: по списку ({len(settings.allowed_user_ids)} id)")
+    else:
+        print("Доступ: открытый")
+    print(
+        "Ключи приложения: "
+        + ("общие из окружения" if settings.has_shared_keys else "у каждого свои")
+    )
+    if settings.admin_id:
+        print(f"Администратор: {settings.admin_id}")
+    return 0
+
+
+def cmd_run() -> int:
+    from tgparser.bot.app import run
+
+    settings = get_settings()
+    settings.ensure_dirs()
+    _configure_logging(settings.log_level, settings.log_file)
+    try:
+        asyncio.run(run(settings))
+    except KeyboardInterrupt:
+        print("Остановлено.")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="tgparser", description="Парсер чатов Telegram")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        default="run",
+        choices=("run", "genkey", "check"),
+        help="run — запустить бота, genkey — сгенерировать ключ шифрования, "
+        "check — проверить конфигурацию",
+    )
+    args = parser.parse_args(argv)
+
+    if args.command == "genkey":
+        return cmd_genkey()
+    if args.command == "check":
+        return cmd_check()
+    return cmd_run()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
