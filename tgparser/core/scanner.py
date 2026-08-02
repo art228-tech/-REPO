@@ -26,8 +26,13 @@ from tgparser.core.util import (
 )
 from tgparser.db.models import ChatKind, ChatState, Lead, SourceKind
 from tgparser.db.repo import ChatStateRepo, CollectedUser, LeadRepo, as_aware
-from tgparser.db.settings_store import ScanSettings
-from tgparser.ratelimit.guard import AccountFlagged, FloodGuard, ScanAborted
+from tgparser.db.settings_store import Pace, ScanSettings
+from tgparser.ratelimit.guard import (
+    AccountFlagged,
+    FloodGuard,
+    ScanAborted,
+    build_buckets,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +121,7 @@ class Scanner:
         archive: Archive,
         on_progress: ProgressCallback | None = None,
         on_status: ProgressCallback | None = None,
+        pace: Pace | None = None,
     ) -> None:
         self._client = client
         self._guard = guard
@@ -127,6 +133,7 @@ class Scanner:
         self._archive = archive
         self._on_progress = on_progress
         self._on_status = on_status
+        self._pace = pace
         self._position = ""
         self._seen: set[int] = set()
         self._pending: list[CollectedUser] = []
@@ -164,6 +171,11 @@ class Scanner:
         try:
             dialogs = await self._collect_dialogs()
             self._report.dialogs_total = len(dialogs)
+            logger.info(
+                "Чатов для обхода: %s (архив %s)",
+                len(dialogs),
+                "пропускаем" if self._settings.skip_archived else "включён",
+            )
             await self._progress(f"Найдено чатов для обхода: {len(dialogs)}")
 
             for index, (entity, marked_id) in enumerate(dialogs, start=1):
@@ -198,6 +210,9 @@ class Scanner:
             if dialog.is_user:
                 continue
             marked_id = get_peer_id(entity)
+            # Свой же архивный канал обходить незачем.
+            if marked_id == self._archive.channel_id:
+                continue
             if self._is_excluded(marked_id, getattr(entity, "username", None)):
                 continue
             found.append((entity, marked_id))
@@ -285,6 +300,7 @@ class Scanner:
         # чата ещё актуален.
         await self._finish_writes()
         await self._save_state(state_id, collected=report.collected)
+        self._retune_pace()
         logger.info(
             "Чат %r: собрано %s, просмотрено сообщений %s%s",
             target.title, report.collected, report.scanned_messages,
@@ -632,6 +648,35 @@ class Scanner:
                             report.forwarded += 1
                             if result.anonymized:
                                 report.anonymized += 1
+
+    def _retune_pace(self) -> None:
+        """Поднять бюджеты, если разгон уже закончился по ходу прогона.
+
+        Счётчик запросов сохраняется в базу по завершении прогона, а прогон
+        идёт часами. Без пересчёта на границе чатов весь он шёл бы на
+        сниженном темпе, хотя условие снятия выполнилось в первые минуты.
+        """
+        if self._pace is None:
+            return
+        stats = self._guard.stats
+        updated = Pace(
+            self._pace.settings,
+            self._pace.calls_done + stats.total_calls,
+            self._pace.flood_events + stats.flood_events,
+        )
+        if updated.throttled == self._pace.throttled:
+            return
+
+        self._pace = updated
+        self._guard.retune(
+            build_buckets(updated.roster, updated.history, updated.write)
+        )
+        logger.info(
+            "Темп пересчитан: история %s/час, ростер %s/час (%s)",
+            updated.history,
+            updated.roster,
+            updated.reason or "полный темп",
+        )
 
     async def _finish_writes(self) -> None:
         """Дописать буфер и разгрести очередь пересылок.

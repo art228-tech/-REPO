@@ -178,6 +178,7 @@ class ScanService:
                 archive=archive,
                 on_progress=on_progress,
                 on_status=on_status,
+                pace=pace,
             )
             report = await scanner.run()
             self._note(owner_id, report=report)

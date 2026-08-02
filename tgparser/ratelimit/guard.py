@@ -76,6 +76,15 @@ class FloodGuard:
     def flagged(self) -> bool:
         return self._flagged
 
+    def retune(self, buckets: dict[str, Any]) -> None:
+        """Заменить бюджеты на ходу.
+
+        Разгон снимается по числу успешных запросов, а один прогон идёт
+        часами: без пересчёта посреди работы он весь шёл бы на сниженном
+        темпе, даже когда условие снятия давно выполнено.
+        """
+        self._buckets = buckets
+
     async def _pace(self, bucket: str) -> None:
         limiter = self._buckets.get(bucket)
         if limiter is not None:

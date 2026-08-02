@@ -867,6 +867,113 @@ class TestLiveStatus:
         assert len(await leads_in(db)) == 1
 
 
+class TestPaceRetuning:
+    """Разгон должен сниматься по ходу прогона, а не только к следующему.
+
+    Регресс: счётчик запросов пишется в базу по завершении прогона, а прогон
+    идёт часами — весь трёхчасовой тест прошёл на четверти бюджета.
+    """
+
+    async def _run(self, db, settings, pace):
+        from tgparser.ratelimit.guard import FloodGuard, build_buckets
+
+        users = {i: make_user(i, f"user_{i:04d}") for i in range(1, 41)}
+        chats = [
+            ChatFixture(
+                entity=make_channel(1000 + n, f"Чат {n}"),
+                messages=[make_message(100 - i, i) for i in range(1 + n * 10, 11 + n * 10)],
+            )
+            for n in range(3)
+        ]
+        client = FakeTelegramClient(chats, users)
+        guard = FloodGuard(
+            buckets=build_buckets(pace.roster, pace.history, pace.write),
+            min_delay=0.0,
+            max_delay=0.0,
+            sleeper=_noop_sleep,
+        )
+        scanner = Scanner(
+            client=client,
+            guard=guard,
+            settings=settings,
+            db=db,
+            account_id=1,
+            owner_id=OWNER_A,
+            self_id=SELF_ID,
+            archive=Archive(client, guard),
+            pace=pace,
+        )
+        await scanner.run()
+        return guard
+
+    async def test_budget_rises_once_warmup_is_met(self, db, scan_settings):
+        from tgparser.db.settings_store import Pace
+
+        # Не хватает всего пары запросов: разгон закончится на первом же чате.
+        pace = Pace(scan_settings, calls_done=scan_settings.warmup_calls_required - 2)
+        started = pace.history
+        guard = await self._run(db, scan_settings, pace)
+
+        assert started < scan_settings.history_calls_per_hour
+        assert guard._buckets["history"].rate_per_hour == (
+            scan_settings.history_calls_per_hour
+        )
+
+    async def test_budget_stays_low_while_warmup_continues(self, db, scan_settings):
+        from tgparser.db.settings_store import Pace
+
+        pace = Pace(scan_settings, calls_done=0)
+        scan_settings.warmup_calls_required = 100_000
+        guard = await self._run(db, scan_settings, pace)
+
+        assert guard._buckets["history"].rate_per_hour < (
+            scan_settings.history_calls_per_hour
+        )
+
+    async def test_without_pace_nothing_changes(self, db, scan_settings):
+        """Сканер без переданного темпа работает как раньше."""
+        users = {1: make_user(1, "alpha_tag")}
+        chat = ChatFixture(entity=make_channel(1001), messages=[make_message(9, 1)])
+        report = await run_scanner(FakeTelegramClient([chat], users), db, scan_settings)
+        assert report.new_leads == 1
+
+
+class TestOwnArchiveChannel:
+    async def test_archive_channel_is_not_scanned(self, db, scan_settings):
+        """Свой же архивный канал в списке диалогов обходить незачем."""
+        from telethon.utils import get_peer_id as peer_id
+
+        from tgparser.ratelimit.guard import FloodGuard, build_buckets
+
+        users = {1: make_user(1, "alpha_tag")}
+        normal = ChatFixture(entity=make_channel(1001), messages=[make_message(9, 1)])
+        client = FakeTelegramClient([normal], users)
+
+        archive_entity = client._archive
+        client._fixtures[peer_id(archive_entity)] = ChatFixture(entity=archive_entity)
+
+        guard = FloodGuard(
+            buckets=build_buckets(10_000, 10_000),
+            min_delay=0.0,
+            max_delay=0.0,
+            sleeper=_noop_sleep,
+        )
+        scanner = Scanner(
+            client=client,
+            guard=guard,
+            settings=scan_settings,
+            db=db,
+            account_id=1,
+            owner_id=OWNER_A,
+            self_id=SELF_ID,
+            archive=Archive(client, guard, peer_id(archive_entity)),
+        )
+        report = await scanner.run()
+
+        assert report.dialogs_total == 1
+        assert all("Архив" not in c.title for c in report.chats)
+
+
 class TestPagination:
     @pytest.mark.parametrize("total", [1, 99, 100, 101, 250])
     async def test_all_messages_are_walked(self, db, scan_settings, total):
