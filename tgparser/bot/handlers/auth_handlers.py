@@ -18,11 +18,12 @@ from tgparser.bot.keyboards import (
     keys_choice,
     keys_retry,
     main_menu,
+    proxy_choice,
 )
 from tgparser.bot.states import AuthFlow
 from tgparser.db.repo import AccountRepo
 from tgparser.userbot.auth import Outcome, parse_keys
-from tgparser.userbot.proxy import redact_proxy
+from tgparser.userbot.proxy import ProxyError, parse_proxy, redact_proxy
 
 router = Router(name="auth")
 
@@ -33,6 +34,21 @@ PHONE_PROMPT = (
     "аккаунт, только если доверяете владельцу этого сервера. Отключить можно "
     "кнопкой «Аккаунт», а завершить сессию принудительно — в настройках "
     "Telegram, раздел «Устройства»."
+)
+
+PROXY_PROMPT = (
+    "Работать через прокси?\n\n"
+    "Нужен, если аккаунт обычно заходит из другой страны: резкая смена "
+    "географии входа сама по себе выглядит подозрительно. Если аккаунт и "
+    "сервер и так в одной стране, можно без него."
+)
+
+PROXY_INPUT = (
+    "Пришлите строку прокси:\n\n"
+    "<code>socks5://user:pass@1.2.3.4:1080</code>\n"
+    "<code>http://1.2.3.4:8080</code>\n"
+    "<code>1.2.3.4:1080</code> — без схемы считаю socks5\n\n"
+    "Пароль в переписке не останется: показывать буду скрытым."
 )
 
 KEYS_PROMPT = (
@@ -94,11 +110,57 @@ async def on_phone(message: Message, ctx: BotContext, state: FSMContext) -> None
         return
 
     await state.update_data(phone=phone)
+    await state.set_state(AuthFlow.proxy)
+    await message.answer(PROXY_PROMPT, reply_markup=proxy_choice(None))
+
+
+@router.callback_query(F.data == "proxy:set", AuthFlow.proxy)
+async def on_proxy_set(call: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(AuthFlow.proxy_value)
+    await call.message.edit_text(PROXY_INPUT, reply_markup=back_to("menu:main"))
+    await call.answer()
+
+
+@router.message(AuthFlow.proxy_value)
+async def on_proxy_value(message: Message, ctx: BotContext, state: FSMContext) -> None:
+    raw = (message.text or "").strip()
+    try:
+        parse_proxy(raw)
+    except ProxyError as exc:
+        await message.answer(f"Прокси не годится: {exc}")
+        return
+
+    data = await state.get_data()
+    if data.get("editing_account"):
+        # Смена прокси у подключённого аккаунта: сессия от транспорта не
+        # зависит, переподключать её не нужно.
+        async with ctx.db.session() as session:
+            account = await AccountRepo(session, message.from_user.id).first_active()
+            if account is not None:
+                account.proxy = raw
+        await state.clear()
+        await message.answer(
+            f"Прокси сохранён: <code>{redact_proxy(raw)}</code>\n\n"
+            "Применится со следующего обхода.",
+            reply_markup=account_menu(),
+        )
+        return
+
+    await state.update_data(proxy=raw)
     await state.set_state(AuthFlow.keys)
     await message.answer(
-        KEYS_PROMPT,
+        f"Прокси принят: <code>{redact_proxy(raw)}</code>\n\n{KEYS_PROMPT}",
         reply_markup=keys_choice(ctx.app_settings.has_shared_keys),
     )
+
+
+@router.callback_query(F.data == "proxy:keep", AuthFlow.proxy)
+async def on_proxy_skip(call: CallbackQuery, ctx: BotContext, state: FSMContext) -> None:
+    await state.set_state(AuthFlow.keys)
+    await call.message.edit_text(
+        KEYS_PROMPT, reply_markup=keys_choice(ctx.app_settings.has_shared_keys)
+    )
+    await call.answer()
 
 
 @router.callback_query(F.data == "keys:auto")
@@ -108,8 +170,9 @@ async def on_keys_auto(call: CallbackQuery, ctx: BotContext, state: FSMContext) 
         await call.answer("Начните заново: нужен номер.", show_alert=True)
         return
 
+    proxy = (await state.get_data()).get("proxy")
     await call.message.edit_text("Запрашиваю код у my.telegram.org…")
-    result = await ctx.auth.start_portal(call.from_user.id, phone)
+    result = await ctx.auth.start_portal(call.from_user.id, phone, proxy)
 
     if result.outcome is Outcome.PORTAL_CODE_SENT:
         # Пад тут не нужен: код портала буквенно-цифровой, ждём сообщение.
@@ -174,7 +237,8 @@ async def on_manual_keys(message: Message, ctx: BotContext, state: FSMContext) -
         await message.answer("Начните заново: нужен номер. /menu")
         return
 
-    await _start_telegram(message, ctx, state, message.from_user.id, phone, keys)
+    proxy = (await state.get_data()).get("proxy")
+    await _start_telegram(message, ctx, state, message.from_user.id, phone, keys, proxy)
 
 
 @router.callback_query(F.data == "keys:shared")
@@ -183,8 +247,11 @@ async def on_keys_shared(call: CallbackQuery, ctx: BotContext, state: FSMContext
     if not phone:
         await call.answer("Начните заново: нужен номер.", show_alert=True)
         return
+    proxy = (await state.get_data()).get("proxy")
     await call.answer()
-    await _start_telegram(call.message, ctx, state, call.from_user.id, phone, None)
+    await _start_telegram(
+        call.message, ctx, state, call.from_user.id, phone, None, proxy
+    )
 
 
 async def _start_telegram(
@@ -194,8 +261,9 @@ async def _start_telegram(
     owner_id: int,
     phone: str,
     keys,
+    proxy: str | None = None,
 ) -> None:
-    result = await ctx.auth.start_telegram(owner_id, phone, keys)
+    result = await ctx.auth.start_telegram(owner_id, phone, keys, proxy)
     if result.outcome is not Outcome.CODE_SENT:
         await state.set_state(AuthFlow.keys)
         await message.answer(result.message, reply_markup=keys_retry())
@@ -351,6 +419,36 @@ async def on_account_info(call: CallbackQuery, ctx: BotContext) -> None:
         )
 
     await call.message.edit_text("\n".join(lines), reply_markup=account_menu())
+    await call.answer()
+
+
+@router.callback_query(F.data == "proxy:edit")
+async def on_proxy_edit(call: CallbackQuery, ctx: BotContext, state: FSMContext) -> None:
+    async with ctx.db.session() as session:
+        account = await AccountRepo(session, call.from_user.id).first_active()
+    if account is None:
+        await call.answer("Аккаунт не подключён.", show_alert=True)
+        return
+
+    await state.set_state(AuthFlow.proxy_value)
+    await state.update_data(editing_account=True)
+    await call.message.edit_text(
+        f"Сейчас: <code>{redact_proxy(account.proxy)}</code>\n\n{PROXY_INPUT}",
+        reply_markup=proxy_choice(account.proxy),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == "proxy:clear")
+async def on_proxy_clear(call: CallbackQuery, ctx: BotContext, state: FSMContext) -> None:
+    await state.clear()
+    async with ctx.db.session() as session:
+        account = await AccountRepo(session, call.from_user.id).first_active()
+        if account is not None:
+            account.proxy = None
+    await call.message.edit_text(
+        "Прокси убран, соединение пойдёт напрямую.", reply_markup=account_menu()
+    )
     await call.answer()
 
 

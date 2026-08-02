@@ -27,6 +27,20 @@ def main_menu(has_account: bool, scanning: bool) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def proxy_choice(current: str | None) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if current:
+        builder.button(text="Оставить как есть", callback_data="proxy:keep")
+        builder.button(text="Изменить прокси", callback_data="proxy:set")
+        builder.button(text="Убрать прокси", callback_data="proxy:clear")
+    else:
+        builder.button(text="Без прокси", callback_data="proxy:keep")
+        builder.button(text="Указать прокси", callback_data="proxy:set")
+    builder.button(text="Отмена", callback_data="menu:main")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 def keys_choice(has_shared: bool) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="Получить ключи автоматически", callback_data="keys:auto")
@@ -190,6 +204,7 @@ def db_menu() -> InlineKeyboardMarkup:
 
 def account_menu() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    builder.button(text="Настроить прокси", callback_data="proxy:edit")
     builder.button(text="Отключить аккаунт", callback_data="auth:logout")
     builder.button(text="Назад", callback_data="menu:main")
     builder.adjust(1)

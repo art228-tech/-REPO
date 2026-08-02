@@ -227,8 +227,10 @@ class TestLoginFlow:
         assert "номер" in " ".join(session.texts()).lower()
 
         await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
-        # Сначала бот спрашивает, откуда взять ключи приложения.
-        choice = session.last_of(SendMessage).reply_markup
+        # Шаг прокси: пропускаем, идём дальше к ключам.
+        await dispatcher.feed_update(bot, callback_update("proxy:keep", update_id=21))
+        # После прокси бот спрашивает, откуда взять ключи приложения.
+        choice = session.last_of(EditMessageText).reply_markup
         options = [
             b.callback_data for row in choice.inline_keyboard for b in row if b.callback_data
         ]
@@ -264,6 +266,8 @@ class TestLoginFlow:
 
         await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
         await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        # Шаг прокси: пропускаем, идём дальше к ключам.
+        await dispatcher.feed_update(bot, callback_update("proxy:keep", update_id=21))
         await dispatcher.feed_update(bot, callback_update("keys:manual", update_id=3))
         await dispatcher.feed_update(
             bot,
@@ -289,6 +293,8 @@ class TestLoginFlow:
 
         await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
         await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        # Шаг прокси: пропускаем, идём дальше к ключам.
+        await dispatcher.feed_update(bot, callback_update("proxy:keep", update_id=21))
         await dispatcher.feed_update(bot, callback_update("keys:manual", update_id=3))
         await dispatcher.feed_update(bot, message_update("абракадабра", update_id=4))
 
@@ -300,6 +306,8 @@ class TestLoginFlow:
         """Код набирается кнопками: бот не должен ждать его сообщением."""
         await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
         await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        # Шаг прокси: пропускаем, идём дальше к ключам.
+        await dispatcher.feed_update(bot, callback_update("proxy:keep", update_id=21))
         await dispatcher.feed_update(bot, callback_update("keys:shared", update_id=3))
         session.calls.clear()
 
@@ -316,6 +324,8 @@ class TestLoginFlow:
     async def test_keypad_updates_on_digit(self, dispatcher, bot, session):
         await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
         await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        # Шаг прокси: пропускаем, идём дальше к ключам.
+        await dispatcher.feed_update(bot, callback_update("proxy:keep", update_id=21))
         await dispatcher.feed_update(bot, callback_update("keys:shared", update_id=3))
         await dispatcher.feed_update(bot, callback_update("code:digit:7", update_id=4))
 
@@ -327,6 +337,8 @@ class TestLoginFlow:
     async def test_cancel_clears_session(self, dispatcher, bot, session):
         await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
         await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        # Шаг прокси: пропускаем, идём дальше к ключам.
+        await dispatcher.feed_update(bot, callback_update("proxy:keep", update_id=21))
         await dispatcher.feed_update(bot, callback_update("keys:shared", update_id=3))
         await dispatcher.feed_update(bot, callback_update("code:cancel", update_id=4))
         assert "отменён" in " ".join(session.texts()).lower()
@@ -496,6 +508,88 @@ class TestScanGuards:
         assert "PeerFlood" in answer.text
 
 
+class TestProxy:
+    """Прокси задаётся из бота: раньше поле было в коде, но недостижимо."""
+
+    async def test_asked_right_after_the_phone(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
+        await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+
+        markup = session.last_of(SendMessage).reply_markup
+        options = [
+            b.callback_data for row in markup.inline_keyboard for b in row if b.callback_data
+        ]
+        assert "proxy:set" in options
+        assert "proxy:keep" in options
+
+    async def test_valid_proxy_is_accepted_and_saved(self, dispatcher, bot, db):
+        from tgparser.db.repo import AccountRepo
+
+        await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
+        await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        await dispatcher.feed_update(bot, callback_update("proxy:set", update_id=3))
+        await dispatcher.feed_update(
+            bot, message_update("socks5://user:secret@1.2.3.4:1080", update_id=4)
+        )
+        await dispatcher.feed_update(bot, callback_update("keys:shared", update_id=5))
+        for index, digit in enumerate("12345", start=6):
+            await dispatcher.feed_update(
+                bot, callback_update(f"code:digit:{digit}", update_id=index)
+            )
+        await dispatcher.feed_update(bot, callback_update("code:submit", update_id=30))
+
+        async with db.session() as db_session:
+            account = await AccountRepo(db_session, OWNER).first_active()
+        assert account.proxy == "socks5://user:secret@1.2.3.4:1080"
+
+    async def test_password_is_hidden_in_confirmation(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
+        await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        await dispatcher.feed_update(bot, callback_update("proxy:set", update_id=3))
+        await dispatcher.feed_update(
+            bot, message_update("socks5://user:secret@1.2.3.4:1080", update_id=4)
+        )
+        text = " ".join(session.texts())
+        assert "secret" not in text
+        assert "1.2.3.4:1080" in text
+
+    async def test_broken_proxy_is_rejected(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
+        await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        await dispatcher.feed_update(bot, callback_update("proxy:set", update_id=3))
+        await dispatcher.feed_update(bot, message_update("ftp://1.2.3.4:21", update_id=4))
+        assert "не годится" in " ".join(session.texts())
+
+    async def test_proxy_can_be_changed_later(self, dispatcher, bot, db):
+        from tgparser.db.repo import AccountRepo
+
+        async with db.session() as db_session:
+            await AccountRepo(db_session, OWNER).upsert_session(
+                "+79990000000", b"enc", 1, "ivanov"
+            )
+
+        await dispatcher.feed_update(bot, callback_update("proxy:edit", update_id=1))
+        await dispatcher.feed_update(bot, message_update("1.2.3.4:1080", update_id=2))
+
+        async with db.session() as db_session:
+            account = await AccountRepo(db_session, OWNER).first_active()
+        assert account.proxy == "1.2.3.4:1080"
+
+    async def test_proxy_can_be_removed(self, dispatcher, bot, db):
+        from tgparser.db.repo import AccountRepo
+
+        async with db.session() as db_session:
+            await AccountRepo(db_session, OWNER).upsert_session(
+                "+79990000000", b"enc", 1, "ivanov", proxy="1.2.3.4:1080"
+            )
+
+        await dispatcher.feed_update(bot, callback_update("proxy:clear", update_id=1))
+
+        async with db.session() as db_session:
+            account = await AccountRepo(db_session, OWNER).first_active()
+        assert account.proxy is None
+
+
 class TestAutoKeysFlow:
     """Путь «получить ключи автоматически» целиком, как его видит человек."""
 
@@ -510,6 +604,8 @@ class TestAutoKeysFlow:
     async def _reach_portal_stage(self, dispatcher, bot):
         await dispatcher.feed_update(bot, callback_update("auth:start", update_id=1))
         await dispatcher.feed_update(bot, message_update("+79991234567", update_id=2))
+        # Шаг прокси: пропускаем, идём дальше к ключам.
+        await dispatcher.feed_update(bot, callback_update("proxy:keep", update_id=21))
         await dispatcher.feed_update(bot, callback_update("keys:auto", update_id=3))
 
     async def test_portal_stage_asks_for_text_not_keypad(

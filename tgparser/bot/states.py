@@ -7,6 +7,8 @@ from aiogram.fsm.state import State, StatesGroup
 
 class AuthFlow(StatesGroup):
     phone = State()
+    proxy = State()
+    proxy_value = State()
     keys = State()
     manual_keys = State()
     # Код с my.telegram.org приходит буквенно-цифровым, поэтому его ждём
