@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tgparser.db.models import (
@@ -139,6 +139,12 @@ class LeadRepo:
             )
         )
         return {row[0] for row in rows}
+
+    async def wipe(self) -> int:
+        """Удалить все записи владельца. Возвращает число удалённых."""
+        removed = await self.count()
+        await self.session.execute(delete(Lead).where(Lead.owner_id == self.owner_id))
+        return removed
 
     async def set_archive(self, lead: Lead, link: str | None, anonymized: bool) -> None:
         lead.archive_link = link

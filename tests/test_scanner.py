@@ -5,8 +5,12 @@ from telethon.errors import ChatForwardsRestrictedError, PeerFloodError
 from telethon.utils import get_peer_id
 
 from tests.factories import (
+    make_added,
     make_basic_group,
     make_channel,
+    make_joined_by_link,
+    make_joined_by_request,
+    make_left,
     make_message,
     make_service_message,
     make_user,
@@ -292,6 +296,159 @@ class TestSkipping:
 
         assert report.chats[0].skipped is not None
         assert len(await leads_in(db)) == 0
+
+
+class TestJoinMessages:
+    """Служебные вступления приезжают вместе с историей и раньше терялись."""
+
+    async def test_joins_are_collected(self, db, scan_settings):
+        users = {
+            1: make_user(1, "writer_tag"),
+            5: make_user(5, "added_tag"),
+            7: make_user(7, "bylink_tag"),
+            8: make_user(8, "byreq_tag"),
+        }
+        chat = ChatFixture(
+            entity=make_channel(1001),
+            messages=[
+                make_message(40, 1),
+                make_added(39, 1, [5]),
+                make_joined_by_link(38, 7),
+                make_joined_by_request(37, 8),
+            ],
+        )
+        await run_scanner(FakeTelegramClient([chat], users), db, scan_settings)
+
+        assert {lead.username for lead in await leads_in(db)} == {
+            "writer_tag",
+            "added_tag",
+            "bylink_tag",
+            "byreq_tag",
+        }
+
+    async def test_source_is_marked_as_join(self, db, scan_settings):
+        users = {7: make_user(7, "bylink_tag")}
+        chat = ChatFixture(
+            entity=make_channel(1001), messages=[make_joined_by_link(38, 7)]
+        )
+        await run_scanner(FakeTelegramClient([chat], users), db, scan_settings)
+
+        stored = await leads_in(db)
+        assert stored[0].source == SourceKind.JOIN.value
+
+    async def test_leaving_is_ignored(self, db, scan_settings):
+        users = {9: make_user(9, "gone_tag")}
+        chat = ChatFixture(entity=make_channel(1001), messages=[make_left(38, 9)])
+        await run_scanner(FakeTelegramClient([chat], users), db, scan_settings)
+        assert await leads_in(db) == []
+
+    async def test_can_be_disabled(self, db, scan_settings):
+        scan_settings.collect_joins = False
+        users = {7: make_user(7, "bylink_tag")}
+        chat = ChatFixture(
+            entity=make_channel(1001), messages=[make_joined_by_link(38, 7)]
+        )
+        await run_scanner(FakeTelegramClient([chat], users), db, scan_settings)
+        assert await leads_in(db) == []
+
+    async def test_bots_among_joiners_are_skipped(self, db, scan_settings):
+        users = {5: make_user(5, "some_bot", bot=True), 6: make_user(6, "human_tag")}
+        chat = ChatFixture(
+            entity=make_channel(1001), messages=[make_added(39, 1, [5, 6])]
+        )
+        await run_scanner(FakeTelegramClient([chat], users), db, scan_settings)
+        assert {lead.username for lead in await leads_in(db)} == {"human_tag"}
+
+    async def test_joins_do_not_cost_extra_requests(self, db, scan_settings):
+        """Профили вступивших приходят тем же ответом getHistory."""
+        users = {i: make_user(i, f"user_{i:04d}") for i in range(1, 11)}
+        chat = ChatFixture(
+            entity=make_channel(1001),
+            messages=[make_joined_by_link(50 - i, i) for i in range(1, 11)],
+        )
+        client = FakeTelegramClient([chat], users)
+        await run_scanner(client, db, scan_settings)
+
+        assert len(await leads_in(db)) == 10
+        assert client.count("GetParticipants") == 0
+
+    async def test_join_older_than_cutoff_is_skipped(self, db, scan_settings):
+        scan_settings.history_depth_days = 30
+        users = {7: make_user(7, "fresh_tag"), 8: make_user(8, "stale_tag")}
+        chat = ChatFixture(
+            entity=make_channel(1001),
+            messages=[
+                make_joined_by_link(40, 7, days_ago=2),
+                make_joined_by_link(39, 8, days_ago=90),
+            ],
+        )
+        await run_scanner(FakeTelegramClient([chat], users), db, scan_settings)
+        assert {lead.username for lead in await leads_in(db)} == {"fresh_tag"}
+
+
+class TestRosterCoversHistory:
+    """Где список участников собран целиком, история уже никого не добавит."""
+
+    async def test_history_skipped_after_roster(self, db, scan_settings):
+        scan_settings.collect_roster = True
+        users = {1: make_user(1, "writer_tag")}
+        chat = ChatFixture(
+            entity=make_channel(1001),
+            participants=[make_user(50, "member_tag")],
+            messages=[make_message(9, 1)],
+        )
+        client = FakeTelegramClient([chat], users)
+
+        await run_scanner(client, db, scan_settings)
+
+        assert client.count("GetHistory") == 0
+        assert {lead.username for lead in await leads_in(db)} == {"member_tag"}
+
+    async def test_history_still_read_when_list_is_hidden(self, db, scan_settings):
+        scan_settings.collect_roster = True
+        users = {1: make_user(1, "writer_tag")}
+        chat = ChatFixture(
+            entity=make_channel(1001),
+            participants=[make_user(50, "member_tag")],
+            participants_hidden=True,
+            messages=[make_message(9, 1)],
+        )
+        client = FakeTelegramClient([chat], users)
+
+        await run_scanner(client, db, scan_settings)
+
+        assert client.count("GetHistory") >= 1
+        assert {lead.username for lead in await leads_in(db)} == {"writer_tag"}
+
+    async def test_history_still_read_when_roster_is_off(self, db, scan_settings):
+        scan_settings.collect_roster = False
+        users = {1: make_user(1, "writer_tag")}
+        chat = ChatFixture(
+            entity=make_channel(1001),
+            participants=[make_user(50, "member_tag")],
+            messages=[make_message(9, 1)],
+        )
+        client = FakeTelegramClient([chat], users)
+
+        await run_scanner(client, db, scan_settings)
+        assert {lead.username for lead in await leads_in(db)} == {"writer_tag"}
+
+    async def test_setting_can_keep_both_passes(self, db, scan_settings):
+        scan_settings.collect_roster = True
+        scan_settings.skip_history_when_roster_done = False
+        users = {1: make_user(1, "writer_tag")}
+        chat = ChatFixture(
+            entity=make_channel(1001),
+            participants=[make_user(50, "member_tag")],
+            messages=[make_message(9, 1)],
+        )
+        client = FakeTelegramClient([chat], users)
+
+        await run_scanner(client, db, scan_settings)
+        assert {lead.username for lead in await leads_in(db)} == {
+            "member_tag",
+            "writer_tag",
+        }
 
 
 class TestParticipantVisibility:

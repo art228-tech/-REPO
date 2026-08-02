@@ -469,6 +469,64 @@ class TestManualEntry:
         assert "корректного тега" in " ".join(session.texts())
 
 
+class TestWipe:
+    async def test_counter_is_shown_before_deleting(self, dispatcher, bot, session, db):
+        from tgparser.db.repo import CollectedUser, LeadRepo
+
+        async with db.session() as db_session:
+            repo = LeadRepo(db_session, OWNER)
+            await repo.add(CollectedUser(tg_user_id=1, username="one_tag"))
+            await repo.add(CollectedUser(tg_user_id=2, username=None))
+
+        await dispatcher.feed_update(bot, callback_update("db:wipe", update_id=1))
+        text = " ".join(session.texts())
+        assert "Удалить 2 записей" in text
+        assert "Без тега: 1" in text
+
+    async def test_nothing_deleted_before_confirmation(self, dispatcher, bot, db):
+        from tgparser.db.repo import CollectedUser, LeadRepo
+
+        async with db.session() as db_session:
+            await LeadRepo(db_session, OWNER).add(CollectedUser(tg_user_id=1))
+
+        await dispatcher.feed_update(bot, callback_update("db:wipe", update_id=1))
+
+        async with db.session() as db_session:
+            assert await LeadRepo(db_session, OWNER).count() == 1
+
+    async def test_confirmation_clears_the_base(self, dispatcher, bot, session, db):
+        from tgparser.db.repo import CollectedUser, LeadRepo
+
+        async with db.session() as db_session:
+            repo = LeadRepo(db_session, OWNER)
+            for uid in range(1, 6):
+                await repo.add(CollectedUser(tg_user_id=uid, username=f"tag_{uid}"))
+
+        await dispatcher.feed_update(bot, callback_update("db:wipe:yes", update_id=1))
+
+        async with db.session() as db_session:
+            assert await LeadRepo(db_session, OWNER).count() == 0
+        assert "удалено 5" in " ".join(session.texts())
+
+    async def test_empty_base_says_so(self, dispatcher, bot, session):
+        await dispatcher.feed_update(bot, callback_update("db:wipe", update_id=1))
+        answer = session.last_of(AnswerCallbackQuery)
+        assert "пустая" in answer.text
+
+    async def test_other_users_are_untouched(self, dispatcher, bot, db):
+        from tgparser.db.repo import CollectedUser, LeadRepo
+
+        async with db.session() as db_session:
+            await LeadRepo(db_session, OWNER).add(CollectedUser(tg_user_id=1))
+            await LeadRepo(db_session, STRANGER).add(CollectedUser(tg_user_id=2))
+
+        await dispatcher.feed_update(bot, callback_update("db:wipe:yes", update_id=1))
+
+        async with db.session() as db_session:
+            assert await LeadRepo(db_session, OWNER).count() == 0
+            assert await LeadRepo(db_session, STRANGER).count() == 1
+
+
 class TestScanGuards:
     async def test_refuses_without_account(self, dispatcher, bot, session):
         await dispatcher.feed_update(bot, callback_update("scan:start", update_id=1))

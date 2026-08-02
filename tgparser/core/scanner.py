@@ -17,6 +17,7 @@ from telethon.utils import get_peer_id
 from tgparser.core.archive import Archive
 from tgparser.core.chats import ChatTarget, inspect, topic_id_of
 from tgparser.core.filters import active_username, classify_user
+from tgparser.core.joins import is_join, joiner_ids
 from tgparser.core.util import (
     chat_matches,
     cutoff_datetime,
@@ -281,11 +282,28 @@ class Scanner:
             if target.is_channel:
                 await self._scan_channel(target, report, resume_from, history_done, state_id)
             else:
-                if self._settings.collect_roster and target.participants_visible and not roster_done:
+                roster_available = bool(
+                    self._settings.collect_roster and target.participants_visible
+                )
+                if roster_available and not roster_done:
                     await self._scan_roster(target, report, roster_offset, state_id)
-                if self._settings.collect_history and not history_done:
+                    roster_done = True
+
+                # Где список участников собран целиком, история уже никого не
+                # добавит: тратить на неё часы незачем.
+                covered = (
+                    roster_available
+                    and roster_done
+                    and self._settings.skip_history_when_roster_done
+                )
+                if self._settings.collect_history and not history_done and not covered:
                     await self._scan_history(
                         target, report, resume_from, state_id, target.entity
+                    )
+                elif covered:
+                    logger.info(
+                        "%r: историю пропускаю, список участников собран",
+                        target.title,
                     )
         except (AccountFlagged, ScanAborted):
             await self._save_state(state_id, error="прогон прерван")
@@ -401,6 +419,10 @@ class Scanner:
                     break
 
                 if isinstance(message, MessageService):
+                    if self._settings.collect_joins and is_join(message):
+                        await self._collect_joiners(
+                            message, target, users_by_id, report
+                        )
                     continue
 
                 topic_id = topic_id_of(message) if target.is_forum else None
@@ -456,6 +478,37 @@ class Scanner:
                 if state_id is not None:
                     await self._save_state(state_id, history_done=True)
                 break
+
+    async def _collect_joiners(
+        self,
+        message: Any,
+        target: ChatTarget,
+        users_by_id: dict[int, Any],
+        report: ChatReport,
+    ) -> None:
+        """Записать людей из служебного сообщения о вступлении.
+
+        Профили приезжают тем же ответом ``getHistory``, что и сами
+        сообщения, поэтому дополнительных запросов это не стоит.
+        """
+        for user_id in joiner_ids(message):
+            user = users_by_id.get(user_id)
+            if user is None:
+                continue
+            skip = classify_user(
+                user,
+                skip_bots=self._settings.skip_bots,
+                skip_deleted=self._settings.skip_deleted,
+                self_id=self._self_id,
+                seen=self._seen,
+            )
+            if skip is not None:
+                continue
+            # Ссылку на служебное сообщение не сохраняем: открывать в нём
+            # нечего, а карточку в архив из него не сделать.
+            await self._collect(
+                user, target, None, source=SourceKind.JOIN, report=report
+            )
 
     def _sender_of(self, message: Any, users_by_id: dict[int, Any]) -> Any | None:
         from_id = getattr(message, "from_id", None)

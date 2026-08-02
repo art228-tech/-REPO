@@ -125,6 +125,45 @@ async def on_reset(call: CallbackQuery, ctx: BotContext) -> None:
     await call.answer()
 
 
+@router.callback_query(F.data == "db:wipe")
+async def on_wipe_prompt(call: CallbackQuery, ctx: BotContext) -> None:
+    owner_id = call.from_user.id
+    async with ctx.db.session() as session:
+        stats = await LeadRepo(session, owner_id).stats()
+
+    if not stats["leads"]:
+        await call.answer("База и так пустая.", show_alert=True)
+        return
+
+    await call.message.edit_text(
+        f"<b>Удалить {stats['leads']} записей?</b>\n\n"
+        f"С тегом: {stats['with_username']}\n"
+        f"Без тега: {stats['without_username']}\n"
+        f"Карточек в архиве: {stats['archived_cards']}\n"
+        f"Добавлено вручную: {stats['manual']}\n\n"
+        "Удалится всё вместе с чекпоинтами обхода — следующий прогон пойдёт "
+        "с начала. Отменить будет нельзя.\n\n"
+        "Сообщения в архивном канале останутся: их удаляйте в самом канале.",
+        reply_markup=confirm("db:wipe:yes", "db:menu"),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == "db:wipe:yes")
+async def on_wipe(call: CallbackQuery, ctx: BotContext) -> None:
+    owner_id = call.from_user.id
+    async with ctx.db.session() as session:
+        removed = await LeadRepo(session, owner_id).wipe()
+        account = await AccountRepo(session, owner_id).first_active()
+        chats = await ChatStateRepo(session).reset(account.id) if account else 0
+
+    await call.message.edit_text(
+        f"База очищена: удалено {removed} записей, сброшено чатов {chats}.",
+        reply_markup=back_to("db:menu"),
+    )
+    await call.answer()
+
+
 @router.callback_query(F.data == "export:menu")
 async def on_export_menu(call: CallbackQuery, ctx: BotContext) -> None:
     async with ctx.db.session() as session:

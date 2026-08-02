@@ -34,6 +34,7 @@ class SourceKind(enum.StrEnum):
     ROSTER = "roster"  # из списка участников
     HISTORY = "history"  # автор сообщения в чате
     COMMENT = "comment"  # автор комментария под постом канала
+    JOIN = "join"  # служебное сообщение о вступлении в чат
     MANUAL = "manual"  # добавлено вручную через бота
 
 

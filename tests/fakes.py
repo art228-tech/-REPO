@@ -21,6 +21,7 @@ from telethon.tl.types import ForumTopic, PeerUser
 from telethon.utils import get_peer_id
 
 from tests.factories import make_channel, make_forwarded
+from tgparser.core.joins import joiner_ids
 
 
 @dataclass
@@ -157,10 +158,16 @@ class FakeTelegramClient:
             messages = [m for m in messages if m.id < request.offset_id]
         page = messages[: request.limit]
 
-        sender_ids = {
-            m.from_id.user_id for m in page if isinstance(getattr(m, "from_id", None), PeerUser)
-        }
-        users = [self._users[uid] for uid in sender_ids if uid in self._users]
+        # Настоящий getHistory кладёт в users всех, на кого ссылаются
+        # сообщения: и авторов, и участников служебных действий.
+        referenced: set[int] = set()
+        for message in page:
+            from_id = getattr(message, "from_id", None)
+            if isinstance(from_id, PeerUser):
+                referenced.add(from_id.user_id)
+            referenced.update(joiner_ids(message))
+
+        users = [self._users[uid] for uid in referenced if uid in self._users]
         return _Result(messages=page, users=users, chats=[])
 
     def _participants(self, request: GetParticipantsRequest) -> _Result:

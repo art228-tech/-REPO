@@ -13,6 +13,10 @@ from telethon.tl.types import (
     Channel,
     Chat,
     Message,
+    MessageActionChatAddUser,
+    MessageActionChatDeleteUser,
+    MessageActionChatJoinedByLink,
+    MessageActionChatJoinedByRequest,
     MessageService,
     PeerChannel,
     PeerUser,
@@ -114,16 +118,49 @@ def make_message(
     return message
 
 
-def make_service_message(message_id: int, from_user_id: int, days_ago: float = 0) -> MessageService:
+def make_service_message(
+    message_id: int,
+    from_user_id: int,
+    days_ago: float = 0,
+    action: Any = None,
+) -> MessageService:
     message = MessageService.__new__(MessageService)
     message.__dict__.update(
         id=message_id,
         from_id=PeerUser(user_id=from_user_id),
         date=datetime.now(UTC) - timedelta(days=days_ago),
         reply_to=None,
-        action=None,
+        action=action,
     )
     return message
+
+
+def make_added(message_id: int, adder_id: int, added_ids: list[int], days_ago: float = 0):
+    """«X добавил Y» — вступившие перечислены в самом действии."""
+    return make_service_message(
+        message_id, adder_id, days_ago, MessageActionChatAddUser(users=added_ids)
+    )
+
+
+def make_joined_by_link(message_id: int, user_id: int, days_ago: float = 0):
+    """«X присоединился по ссылке» — вступивший это автор сообщения."""
+    return make_service_message(
+        message_id, user_id, days_ago, MessageActionChatJoinedByLink(inviter_id=1)
+    )
+
+
+def make_joined_by_request(message_id: int, user_id: int, days_ago: float = 0):
+    """«Заявка X принята» — вступивший это автор сообщения."""
+    return make_service_message(
+        message_id, user_id, days_ago, MessageActionChatJoinedByRequest()
+    )
+
+
+def make_left(message_id: int, user_id: int, days_ago: float = 0):
+    """Выход из чата — не вступление, учитываться не должен."""
+    return make_service_message(
+        message_id, user_id, days_ago, MessageActionChatDeleteUser(user_id=user_id)
+    )
 
 
 def _reply_to(topic_id: int) -> Any:

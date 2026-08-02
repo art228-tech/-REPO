@@ -102,6 +102,10 @@ def settings_menu(s: ScanSettings) -> InlineKeyboardMarkup:
         callback_data="settings:toggle:collect_comments",
     )
     builder.button(
+        text=f"Сообщения о вступлении: {_flag(s.collect_joins)}",
+        callback_data="settings:toggle:collect_joins",
+    )
+    builder.button(
         text=f"Список участников: {_flag(s.collect_roster)}",
         callback_data="settings:toggle:collect_roster",
     )
@@ -196,6 +200,7 @@ def db_menu() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="Добавить теги вручную", callback_data="db:add")
     builder.button(text="Статистика", callback_data="db:stats")
+    builder.button(text="Очистить базу", callback_data="db:wipe")
     builder.button(text="Сбросить чекпоинты обхода", callback_data="db:reset")
     builder.button(text="Назад", callback_data="menu:main")
     builder.adjust(1)

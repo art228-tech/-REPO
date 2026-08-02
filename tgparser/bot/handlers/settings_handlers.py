@@ -24,7 +24,9 @@ router = Router(name="settings")
 TOGGLES = {
     "collect_history",
     "collect_comments",
+    "collect_joins",
     "collect_roster",
+    "skip_history_when_roster_done",
     "forward_untagged",
     "skip_bots",
     "forum_busiest_topic_only",
