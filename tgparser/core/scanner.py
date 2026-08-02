@@ -430,6 +430,11 @@ class Scanner:
                     f"{report.scanned_messages}, найдено {report.collected}, "
                     f"всего за прогон {self._report.new_leads + report.collected}"
                 )
+                # Карточки отправляем по ходу, а не только на границе чатов:
+                # крупный чат идёт час и больше, и всё это время архивный
+                # канал оставался бы пустым и даже несозданным.
+                await self._flush()
+                await self._safe_drain()
 
             if reached_cutoff or len(messages) < batch:
                 if state_id is not None:
@@ -635,6 +640,9 @@ class Scanner:
         моменту уже лежит в базе, поэтому её неудача ничего не теряет.
         """
         await self._flush()
+        await self._safe_drain()
+
+    async def _safe_drain(self) -> None:
         try:
             await self._drain_forwards()
         except (AccountFlagged, ScanAborted):

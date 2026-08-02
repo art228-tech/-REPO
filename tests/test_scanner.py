@@ -584,6 +584,36 @@ class TestArchiveForwarding:
         await scanner.run()
         assert len(await leads_in(db)) == 3
 
+    async def test_cards_are_sent_during_a_long_chat(self, db, scan_settings):
+        """Регресс: пересылка шла только на границе чатов.
+
+        Крупный чат идёт час и больше, и всё это время архивный канал
+        оставался пустым и даже несозданным.
+        """
+        scan_settings.history_batch_size = 10
+        users = {i: make_user(i, username=None) for i in range(1, 121)}
+        chat = ChatFixture(
+            entity=make_channel(1001, "Долгий чат"),
+            messages=[make_message(200 - i, i) for i in range(1, 121)],
+        )
+        client = FakeTelegramClient([chat], users)
+
+        marks: list[int] = []
+        original = client.forward_messages
+
+        async def spy(entity, message_ids, from_peer):
+            result = await original(entity, message_ids, from_peer)
+            marks.append(client.count("GetHistory"))
+            return result
+
+        client.forward_messages = spy
+        await run_scanner(client, db, scan_settings)
+
+        # Первая пересылка случилась задолго до конца чата.
+        assert marks
+        assert marks[0] < client.count("GetHistory")
+        assert client.created_channels == 1
+
     async def test_new_channel_is_reported_immediately(self, db, scan_settings):
         """Регресс: id канала сохранялся только в конце прогона.
 
