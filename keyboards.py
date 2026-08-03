@@ -141,3 +141,33 @@ def cancel_kb() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")]
         ]
     )
+
+
+def code_pad_kb(entered: str = "") -> InlineKeyboardMarkup:
+    """Inline numpad: code never goes into chat text (TG won't invalidate it)."""
+    mask = "•" * len(entered) if entered else "—"
+    rows = [
+        [InlineKeyboardButton(text=f"Код: {mask}", callback_data="code:noop")],
+        [
+            InlineKeyboardButton(text="1", callback_data="code:d:1"),
+            InlineKeyboardButton(text="2", callback_data="code:d:2"),
+            InlineKeyboardButton(text="3", callback_data="code:d:3"),
+        ],
+        [
+            InlineKeyboardButton(text="4", callback_data="code:d:4"),
+            InlineKeyboardButton(text="5", callback_data="code:d:5"),
+            InlineKeyboardButton(text="6", callback_data="code:d:6"),
+        ],
+        [
+            InlineKeyboardButton(text="7", callback_data="code:d:7"),
+            InlineKeyboardButton(text="8", callback_data="code:d:8"),
+            InlineKeyboardButton(text="9", callback_data="code:d:9"),
+        ],
+        [
+            InlineKeyboardButton(text="⌫", callback_data="code:del"),
+            InlineKeyboardButton(text="0", callback_data="code:d:0"),
+            InlineKeyboardButton(text="✅ OK", callback_data="code:ok"),
+        ],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)

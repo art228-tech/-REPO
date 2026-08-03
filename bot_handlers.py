@@ -17,6 +17,7 @@ from keyboards import (
     accounts_kb,
     base_kb,
     cancel_kb,
+    code_pad_kb,
     confirm_kb,
     export_kb,
     main_menu,
@@ -215,11 +216,13 @@ async def acc_phone_step(message: Message, state: FSMContext) -> None:
         phone = await accounts.start_login(
             message.from_user.id, phone, data.get("proxy")
         )
-        await state.update_data(phone=phone)
+        await state.update_data(phone=phone, login_code="")
         await state.set_state(AddAccountSG.code)
         await message.answer(
             f"Код отправлен на {phone}.\n"
-            "Пришли код сюда (цифры из Telegram / SMS)."
+            "⚠️ <b>Не пиши код текстом</b> — Telegram его аннулирует.\n"
+            "Вводи только кнопками ниже, потом ✅ OK.",
+            reply_markup=code_pad_kb(""),
         )
     except Exception as e:
         log.exception("start_login failed")
@@ -228,25 +231,92 @@ async def acc_phone_step(message: Message, state: FSMContext) -> None:
 
 
 @router.message(AddAccountSG.code)
-async def acc_code_step(message: Message, state: FSMContext) -> None:
+async def acc_code_text_blocked(message: Message, state: FSMContext) -> None:
+    """Reject text codes — TG invalidates login codes pasted into chats."""
     if not await ensure_owner(message):
         return
-    code = (message.text or "").strip()
     try:
-        result = await accounts.complete_login_code(message.from_user.id, code)
+        await message.delete()
+    except Exception:
+        pass
+    data = await state.get_data()
+    code = data.get("login_code") or ""
+    await message.answer(
+        "Не отправляй код текстом — Telegram его сбросит.\n"
+        "Жми цифры на клавиатуре у сообщения с кодом.",
+        reply_markup=code_pad_kb(code),
+    )
+
+
+@router.callback_query(AddAccountSG.code, F.data == "code:noop")
+async def code_noop(callback: CallbackQuery) -> None:
+    await callback.answer()
+
+
+@router.callback_query(AddAccountSG.code, F.data.startswith("code:d:"))
+async def code_digit(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await ensure_owner_cb(callback):
+        return
+    digit = callback.data.rsplit(":", 1)[-1]
+    data = await state.get_data()
+    code = (data.get("login_code") or "") + digit
+    if len(code) > 8:
+        await callback.answer("Слишком длинно", show_alert=True)
+        return
+    await state.update_data(login_code=code)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=code_pad_kb(code))
+    except Exception:
+        pass
+    await callback.answer(f"•{len(code)}")
+
+
+@router.callback_query(AddAccountSG.code, F.data == "code:del")
+async def code_del(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await ensure_owner_cb(callback):
+        return
+    data = await state.get_data()
+    code = (data.get("login_code") or "")[:-1]
+    await state.update_data(login_code=code)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=code_pad_kb(code))
+    except Exception:
+        pass
+    await callback.answer()
+
+
+@router.callback_query(AddAccountSG.code, F.data == "code:ok")
+async def code_ok(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await ensure_owner_cb(callback):
+        return
+    data = await state.get_data()
+    code = (data.get("login_code") or "").strip()
+    if len(code) < 4:
+        await callback.answer("Введи код кнопками", show_alert=True)
+        return
+    await callback.answer("Проверяю…")
+    try:
+        result = await accounts.complete_login_code(callback.from_user.id, code)
         if result.get("need_2fa"):
             await state.set_state(AddAccountSG.password)
-            await message.answer("Нужен облачный пароль 2FA. Пришли пароль:")
+            await callback.message.answer(
+                "На аккаунте включён облачный пароль (2FA).\n"
+                "Пришли пароль 2FA текстом (это не код входа, TG его не аннулирует):"
+            )
             return
         await state.clear()
-        await message.answer(
+        await callback.message.answer(
             f"✅ Аккаунт добавлен: {result['phone']}\n"
             f"TG: {result.get('name')} @{result.get('username') or '—'}",
             reply_markup=main_menu(),
         )
     except Exception as e:
         log.exception("complete_login_code failed")
-        await message.answer(f"Ошибка кода: {e}\nМожно /cancel и начать заново.")
+        await state.update_data(login_code="")
+        await callback.message.answer(
+            f"Ошибка кода: {e}\nВведи заново кнопками или /cancel",
+            reply_markup=code_pad_kb(""),
+        )
 
 
 @router.message(AddAccountSG.password)
@@ -257,13 +327,18 @@ async def acc_2fa_step(message: Message, state: FSMContext) -> None:
     try:
         result = await accounts.complete_login_2fa(message.from_user.id, password)
         await state.clear()
+        # try delete password message for safety
+        try:
+            await message.delete()
+        except Exception:
+            pass
         await message.answer(
-            f"✅ Аккаунт добавлен: {result['phone']}",
+            f"✅ Аккаунт добавлен: {result['phone']} (2FA ok)",
             reply_markup=main_menu(),
         )
     except Exception as e:
         log.exception("2fa failed")
-        await message.answer(f"Ошибка 2FA: {e}")
+        await message.answer(f"Ошибка 2FA: {e}\nПопробуй пароль ещё раз.")
 
 
 @router.callback_query(F.data.startswith("acc:view:"))
