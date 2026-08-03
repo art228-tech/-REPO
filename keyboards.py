@@ -118,8 +118,8 @@ def settings_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="API_ID / API_HASH", callback_data="set:api")],
-            [InlineKeyboardButton(text="Пауза msg1 → msg2 (сек)", callback_data="set:delay_msg")],
-            [InlineKeyboardButton(text="Интервал на аккаунт (сек)", callback_data="set:delay_acc")],
+            [InlineKeyboardButton(text="Пауза msg1→msg2 (диапазон)", callback_data="set:delay_msg")],
+            [InlineKeyboardButton(text="Интервал на аккаунт (диапазон)", callback_data="set:delay_acc")],
         ]
     )
 

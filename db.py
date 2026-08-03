@@ -78,10 +78,35 @@ CREATE TABLE IF NOT EXISTS pending_auth (
 DEFAULT_SETTINGS = {
     "api_id": "",
     "api_hash": "",
-    "delay_between_messages": "5",
-    "delay_per_account": "60",
+    "delay_between_messages": "3-8",
+    "delay_per_account": "45-90",
     "owner_ids": "",
 }
+
+
+def parse_delay_range(raw: str, default: tuple[int, int] = (1, 1)) -> tuple[int, int]:
+    """
+    Accepts: "30-60", "30 - 60", "45", "45s"
+    Returns inclusive (min, max) with min<=max, min>=0, max>=1 for account delays.
+    """
+    text = (raw or "").strip().lower().replace("с", "").replace("s", "").strip()
+    if not text:
+        return default
+    text = text.replace("—", "-").replace("–", "-")
+    if "-" in text:
+        left, right = text.split("-", 1)
+        a = int(left.strip())
+        b = int(right.strip())
+    else:
+        a = b = int(text)
+    if a < 0 or b < 0:
+        raise ValueError("Интервал не может быть отрицательным")
+    lo, hi = (a, b) if a <= b else (b, a)
+    return lo, hi
+
+
+def format_delay_range(lo: int, hi: int) -> str:
+    return f"{lo}-{hi}" if lo != hi else str(lo)
 
 
 class Database:
@@ -150,10 +175,27 @@ class Database:
             api_id = 0
         return api_id, api_hash
 
+    async def get_delay_ranges(self) -> tuple[tuple[int, int], tuple[int, int]]:
+        between = parse_delay_range(
+            await self.get_setting("delay_between_messages", "3-8"), default=(3, 8)
+        )
+        per_acc = parse_delay_range(
+            await self.get_setting("delay_per_account", "45-90"), default=(45, 90)
+        )
+        return between, per_acc
+
+    async def pick_delays(self) -> tuple[int, int]:
+        """Random seconds within configured ranges for this send cycle."""
+        import random
+
+        between_r, per_acc_r = await self.get_delay_ranges()
+        between = random.randint(between_r[0], between_r[1])
+        per_acc = random.randint(per_acc_r[0], per_acc_r[1])
+        return between, per_acc
+
+    # kept for compatibility
     async def get_delays(self) -> tuple[int, int]:
-        between = int(await self.get_setting("delay_between_messages", "5") or 5)
-        per_acc = int(await self.get_setting("delay_per_account", "60") or 60)
-        return max(0, between), max(1, per_acc)
+        return await self.pick_delays()
 
     # ---- owners ----
     async def get_owner_ids(self) -> list[int]:

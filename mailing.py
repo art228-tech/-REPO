@@ -14,6 +14,7 @@ from telethon.errors import (
     UsernameNotOccupiedError,
     AuthKeyUnregisteredError,
     SessionRevokedError,
+    InputUserDeactivatedError,
 )
 from telethon.tl.functions.contacts import ImportContactsRequest
 from telethon.tl.types import InputPhoneContact
@@ -121,7 +122,7 @@ class MailingWorker:
         run = await db.get_run()
         stats = await db.contact_stats()
         accounts = await db.list_accounts()
-        between, per_acc = await db.get_delays()
+        between_r, per_acc_r = await db.get_delay_ranges()
         lines = [
             "📊 <b>Статистика рассылки</b>",
             f"Статус: <b>{run['status']}</b>",
@@ -133,8 +134,8 @@ class MailingWorker:
             f"🔄 Processing: {stats.get('processing', 0)}",
             "",
             f"За этот запуск: +{self._sent_this_run} sent / {self._failed_this_run} fail / {self._spamblocks_this_run} SB",
-            f"Пауза msg1→msg2: {between}с",
-            f"Интервал на 1 аккаунт: {per_acc}с",
+            f"Пауза msg1→msg2: {between_r[0]}-{between_r[1]}с (рандом)",
+            f"Интервал на 1 аккаунт: {per_acc_r[0]}-{per_acc_r[1]}с (рандом)",
             "",
             "<b>Аккаунты:</b>",
         ]
@@ -197,10 +198,13 @@ class MailingWorker:
                     await asyncio.sleep(1)
                     continue
 
-                _, per_acc = await db.get_delays()
+                _, per_acc = await db.pick_delays()
                 try:
                     await self._process_contact(account_id, contact)
                     self._account_next_free[account_id] = time.monotonic() + per_acc
+                    log.debug(
+                        "Next free for account %s in %ss", account_id, per_acc
+                    )
                 except AccountSpamblocked:
                     self._spamblocks_this_run += 1
                     await db.requeue_contact(int(contact["id"]))
@@ -254,7 +258,7 @@ class MailingWorker:
 
         msg1 = random.choice([v["text"] for v in variants1])
         msg2 = random.choice([v["text"] for v in variants2]) if variants2 else None
-        between, _ = await db.get_delays()
+        between, _ = await db.pick_delays()
 
         client = await get_runtime_client(account_id)
         entity = await self._resolve_entity(client, contact["identifier"])
@@ -301,6 +305,7 @@ class MailingWorker:
             UserPrivacyRestrictedError,
             UsernameInvalidError,
             UsernameNotOccupiedError,
+            InputUserDeactivatedError,
             ValueError,
         ) as e:
             await db.mark_contact_failed(int(contact["id"]), str(e)[:500])

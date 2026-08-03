@@ -11,7 +11,7 @@ from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
 import accounts
 import config
-from db import db
+from db import db, format_delay_range, parse_delay_range
 from keyboards import (
     account_actions_kb,
     accounts_kb,
@@ -637,13 +637,13 @@ async def settings_menu(message: Message) -> None:
     if not await ensure_owner(message):
         return
     api_id, api_hash = await db.get_api_credentials()
-    between, per_acc = await db.get_delays()
+    between_r, per_acc_r = await db.get_delay_ranges()
     hash_mask = (api_hash[:4] + "…" + api_hash[-4:]) if len(api_hash) > 8 else ("задан" if api_hash else "нет")
     await message.answer(
         f"API_ID: {api_id or 'нет'}\n"
         f"API_HASH: {hash_mask}\n"
-        f"Пауза msg1→msg2: {between}с\n"
-        f"Интервал на 1 аккаунт: {per_acc}с",
+        f"Пауза msg1→msg2: {format_delay_range(*between_r)}с (рандом в диапазоне)\n"
+        f"Интервал на 1 аккаунт: {format_delay_range(*per_acc_r)}с (рандом в диапазоне)",
         reply_markup=settings_kb(),
     )
 
@@ -690,7 +690,11 @@ async def set_delay_msg(callback: CallbackQuery, state: FSMContext) -> None:
     if not await ensure_owner_cb(callback):
         return
     await state.set_state(SettingsSG.delay_msg)
-    await callback.message.answer("Секунды между Msg1 и Msg2:")
+    await callback.message.answer(
+        "Диапазон паузы между Msg1 и Msg2 в секундах.\n"
+        "Примеры: <code>30-60</code> или <code>5</code> (фикс).\n"
+        "Каждый раз берётся случайное число из диапазона."
+    )
     await callback.answer()
 
 
@@ -699,12 +703,18 @@ async def save_delay_msg(message: Message, state: FSMContext) -> None:
     if not await ensure_owner(message):
         return
     raw = (message.text or "").strip()
-    if not raw.isdigit():
-        await message.answer("Число секунд.")
+    try:
+        lo, hi = parse_delay_range(raw)
+    except Exception:
+        await message.answer("Формат: 30-60 или одно число.")
         return
-    await db.set_setting("delay_between_messages", raw)
+    value = format_delay_range(lo, hi)
+    await db.set_setting("delay_between_messages", value)
     await state.clear()
-    await message.answer(f"Пауза msg1→msg2 = {raw}с", reply_markup=main_menu())
+    await message.answer(
+        f"Пауза msg1→msg2 = {value}с (рандом)",
+        reply_markup=main_menu(),
+    )
 
 
 @router.callback_query(F.data == "set:delay_acc")
@@ -713,8 +723,9 @@ async def set_delay_acc(callback: CallbackQuery, state: FSMContext) -> None:
         return
     await state.set_state(SettingsSG.delay_acc)
     await callback.message.answer(
-        "Интервал в секундах между отправками с ОДНОГО аккаунта "
-        "(например 60 = раз в минуту с этого номера):"
+        "Диапазон интервала между отправками с ОДНОГО аккаунта.\n"
+        "Примеры: <code>30-60</code> или <code>60</code>.\n"
+        "После каждой отправки ждём случайные N секунд из диапазона."
     )
     await callback.answer()
 
@@ -724,12 +735,24 @@ async def save_delay_acc(message: Message, state: FSMContext) -> None:
     if not await ensure_owner(message):
         return
     raw = (message.text or "").strip()
-    if not raw.isdigit() or int(raw) < 1:
-        await message.answer("Число ≥ 1.")
+    try:
+        lo, hi = parse_delay_range(raw)
+    except Exception:
+        await message.answer("Формат: 30-60 или одно число.")
         return
-    await db.set_setting("delay_per_account", raw)
+    if hi < 1:
+        await message.answer("Максимум диапазона должен быть ≥ 1.")
+        return
+    # account interval min at least 0, but if both 0 bump to 1
+    if lo == 0 and hi == 0:
+        lo = hi = 1
+    value = format_delay_range(max(0, lo), max(1, hi))
+    await db.set_setting("delay_per_account", value)
     await state.clear()
-    await message.answer(f"Интервал на аккаунт = {raw}с", reply_markup=main_menu())
+    await message.answer(
+        f"Интервал на аккаунт = {value}с (рандом)",
+        reply_markup=main_menu(),
+    )
 
 
 # -------------------- start/stop/stats --------------------
