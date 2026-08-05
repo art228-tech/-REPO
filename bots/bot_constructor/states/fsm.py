@@ -1,0 +1,72 @@
+"""FSM-состояния админского интерфейса."""
+from aiogram.fsm.state import State, StatesGroup
+
+
+class AddBotStates(StatesGroup):
+    waiting_for_token = State()
+
+
+class StepStates(StatesGroup):
+    step_link_new_url = State()
+    step_backup_url = State()             # ввод запасной ссылки
+    # Общие
+    select_type = State()
+
+    # Сообщение
+    msg_content = State()                # ждём контент (текст/фото/...)
+    msg_add_buttons = State()             # добавление кнопок
+    msg_add_button_text = State()
+    msg_add_button_url = State()
+    msg_add_button_color = State()
+    msg_add_button_emoji = State()        # премиум-эмодзи на кнопку (необязательно)
+    msg_wait_mode = State()               # таймер / любое сообщение / без ожидания
+    msg_wait_timer = State()              # вводим число секунд
+    msg_keyboard_choice = State()         # добавлять ли кнопку клавы
+    msg_keyboard_text = State()           # текст кнопки клавы
+    msg_buttons_layout = State()          # раскладка кнопок: 1/2/3 в ряд (патч 14/16)
+    msg_duplicate_after = State()
+    msg_duplicate_increment = State()
+    msg_duplicate_max = State()
+
+    # ОП
+    op_content = State()
+    op_add_sponsor = State()              # текст подсказки
+    op_sponsor_check = State()            # с проверкой или нет
+    op_sponsor_channel_id = State()
+    op_sponsor_link = State()
+    op_sponsor_title = State()
+    op_sponsor_button_text = State()
+    op_sponsor_button_color = State()
+    op_sponsor_button_emoji = State()     # премиум-эмодзи на кнопку спонсора
+    op_check_btn_text = State()
+    op_check_btn_color = State()
+    op_check_btn_emoji = State()          # премиум-эмодзи на кнопку «Проверить»
+    op_duplicate_after = State()
+    op_duplicate_increment = State()
+    op_duplicate_max = State()
+    op_skip_timer = State()
+
+    # Рулетка
+    roulette_content = State()
+    roulette_button_text = State()
+    roulette_button_color = State()
+    roulette_duplicate_after = State()
+    roulette_duplicate_increment = State()
+    roulette_duplicate_max = State()
+
+
+class BotSettingsStates(StatesGroup):
+    wch_add_id = State()
+    wch_set_delay = State()
+    join_delay = State()
+    delete_timer = State()
+    change_token = State()           # смена токена приветки
+
+
+class RefStates(StatesGroup):
+    name = State()
+
+
+class BroadcastStates(StatesGroup):
+    content = State()
+    confirm = State()

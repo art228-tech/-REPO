@@ -1,0 +1,16 @@
+[Unit]
+Description=Telegram bot-constructor
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/bot
+ExecStart=/opt/bot/venv/bin/python /opt/bot/main.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
