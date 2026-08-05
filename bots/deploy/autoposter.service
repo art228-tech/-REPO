@@ -1,0 +1,13 @@
+[Unit]
+Description=Autoposter v2
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/autoposter
+ExecStart=/opt/autoposter/venv/bin/python /opt/autoposter/main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
