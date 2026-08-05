@@ -1,0 +1,13 @@
+[Unit]
+Description=Auto-Accept v2
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/autoaccept
+ExecStart=/opt/autoaccept/venv/bin/python /opt/autoaccept/main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
