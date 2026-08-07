@@ -135,7 +135,7 @@ class ElevenLabsClient:
         except Exception:  # noqa: BLE001
             pass
 
-    def __enter__(self) -> "ElevenLabsClient":
+    def __enter__(self) -> ElevenLabsClient:
         return self
 
     def __exit__(self, *exc: Any) -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -143,7 +143,7 @@ class Settings:
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Settings":
+    def from_dict(cls, data: Dict[str, Any]) -> Settings:
         known = {f.name for f in fields(cls)}
         unknown = set(data) - known
         if unknown:
@@ -169,7 +169,7 @@ class Settings:
         return target
 
     @classmethod
-    def load(cls, path: Optional[Path] = None) -> "Settings":
+    def load(cls, path: Optional[Path] = None) -> Settings:
         target = path or config_path()
         if not target.exists():
             log.info("Конфиг не найден, использую значения по умолчанию: %s", target)

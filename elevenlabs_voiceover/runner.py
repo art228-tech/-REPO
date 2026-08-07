@@ -6,7 +6,6 @@ import csv
 import math
 import re
 import threading
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
@@ -211,7 +210,7 @@ class Runner:
             outcome = "api_error"
             self.stats.stopped_reason = str(exc)
             log.error("Ошибка API, работа остановлена: %s", exc, exc_info=True)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             outcome = "error"
             self.stats.stopped_reason = f"Непредвиденная ошибка: {exc}"
             log.exception("Непредвиденная ошибка")

@@ -121,7 +121,7 @@ def test_tag_at_wrong_offset_is_ignored():
 
 
 def test_non_mpeg_data_is_untouched():
-    data = "это вообще не mpeg".encode("utf-8") * 10
+    data = "это вообще не mpeg".encode() * 10
     assert strip_xing_header(data) == data
 
 

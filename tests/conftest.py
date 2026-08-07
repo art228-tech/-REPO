@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from elevenlabs_voiceover import paths  # noqa: E402
+from elevenlabs_voiceover import paths
 
 
 @pytest.fixture(autouse=True)

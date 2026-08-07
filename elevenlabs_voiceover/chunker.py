@@ -19,7 +19,7 @@ _PREFIX_ABBREVIATIONS = {
     # русские
     "т", "тт", "см", "стр", "рис", "табл", "гл", "им", "ул", "д", "г", "в", "н", "э",
     "руб", "коп", "тыс", "млн", "млрд", "проф", "акад", "доц", "чл", "корр", "зам",
-    "зав", "мин", "макс", "обл", "респ", "изд", "сост", "ред", "кв", "стр",
+    "зав", "мин", "макс", "обл", "респ", "изд", "сост", "ред", "кв",
     # английские
     "mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "inc", "ltd", "co", "fig",
     "no", "vol", "ed", "pp", "dept", "univ", "approx",
@@ -130,10 +130,7 @@ def _looks_like_abbreviation(text: str, dot_index: int) -> bool:
         return True
 
     # Прочие одиночные строчные буквы трактуем как сокращение.
-    if len(word) == 1 and word.isalpha():
-        return True
-
-    return False
+    return len(word) == 1 and word.isalpha()
 
 
 def _next_char_starts_sentence(text: str, dot_index: int) -> bool:

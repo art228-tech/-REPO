@@ -10,7 +10,6 @@ from elevenlabs_voiceover.errors import (
     ElevenLabsError,
     NetworkError,
     QuotaExceeded,
-    RateLimited,
     ScopeError,
     ServerError,
     ValidationFailed,
@@ -273,7 +272,7 @@ def test_models_skip_entries_without_id(client):
 
 # ----------------------------------------------------------------------
 def test_design_voice_parses_previews(client):
-    sample = "звук".encode("utf-8")
+    sample = "звук".encode()
     audio = base64.b64encode(sample).decode()
     session = use(client, response(200, {
         "previews": [

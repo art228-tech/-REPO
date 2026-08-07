@@ -8,9 +8,25 @@ import sys
 import threading
 import webbrowser
 from pathlib import Path
-from tkinter import BOTH, END, LEFT, RIGHT, X, Y, BooleanVar, Canvas, DoubleVar, IntVar, StringVar, Tk
-from tkinter import filedialog, messagebox, scrolledtext, ttk
-from typing import Any, Callable, Dict, List, Optional
+from tkinter import (
+    BOTH,
+    END,
+    LEFT,
+    RIGHT,
+    BooleanVar,
+    Canvas,
+    DoubleVar,
+    IntVar,
+    StringVar,
+    Tk,
+    X,
+    Y,
+    filedialog,
+    messagebox,
+    scrolledtext,
+    ttk,
+)
+from typing import Any, List, Optional
 
 from . import diagnostics
 from .api_client import ModelInfo, verify_key
@@ -59,7 +75,7 @@ class App:
         self.settings = Settings.load()
         self.state = StateStore()
 
-        self.events: "queue.Queue[tuple]" = queue.Queue()
+        self.events: queue.Queue[tuple] = queue.Queue()
         self.cancel_event = threading.Event()
         self.worker: Optional[threading.Thread] = None
         self.models: List[ModelInfo] = []
@@ -673,7 +689,7 @@ class App:
                 stats = runner.run()
             except PreflightError as exc:
                 self.events.put(("failed", str(exc)))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.exception("Рабочий поток упал")
                 self.events.put(("failed", f"Непредвиденная ошибка: {exc}"))
             else:
@@ -935,7 +951,7 @@ def main() -> int:
     root = Tk()
     try:
         App(root)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.exception("Не удалось построить окно")
         messagebox.showerror(APP_TITLE, f"Не удалось запустить программу:\n{exc}")
         return 1

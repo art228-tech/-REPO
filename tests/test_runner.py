@@ -6,7 +6,6 @@ from elevenlabs_voiceover import runner as runner_module
 from elevenlabs_voiceover.api_client import ModelInfo, Subscription, TtsResult, VoicePreview
 from elevenlabs_voiceover.chunker import Chunk
 from elevenlabs_voiceover.config import MODE_ALL_VOICES, MODE_ROUND_ROBIN, Settings
-from elevenlabs_voiceover.errors import QuotaExceeded
 from elevenlabs_voiceover.runner import (
     PreflightError,
     Runner,

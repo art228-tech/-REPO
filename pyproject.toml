@@ -1,0 +1,26 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["error::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "UP", "B", "SIM", "RUF", "BLE"]
+ignore = [
+    "E501",     # длину строк держим мягко, ориентир задан line-length
+    "SIM105",   # try/except/pass в путях очистки читается не хуже suppress
+    "SIM108",   # тернарник не всегда понятнее ветвления
+    "UP006",    # проект поддерживает Python 3.9
+    "UP007",
+    "UP035",
+    "UP045",
+    "RUF001",   # кириллица в строках — это язык интерфейса, а не опечатка
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["BLE001"]
