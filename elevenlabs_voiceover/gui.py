@@ -8,7 +8,7 @@ import sys
 import threading
 import webbrowser
 from pathlib import Path
-from tkinter import BOTH, END, LEFT, RIGHT, X, Y, StringVar, BooleanVar, DoubleVar, IntVar, Tk
+from tkinter import BOTH, END, LEFT, RIGHT, X, Y, BooleanVar, Canvas, DoubleVar, IntVar, StringVar, Tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import Any, Callable, Dict, List, Optional
 
@@ -93,20 +93,24 @@ class App:
         style.configure("Bad.TLabel", foreground="#a11")
         style.configure("Head.TLabel", font=("Segoe UI", 10, "bold"))
 
-        notebook = ttk.Notebook(self.root)
-        notebook.pack(fill=BOTH, expand=True, padx=10, pady=(10, 0))
+        # Нижнюю панель размещаем первой: в pack приоритет у того, кто раньше,
+        # а кнопки «Начать» и «Остановить» должны быть видны всегда, даже если
+        # содержимое вкладки выше окна.
+        self._build_bottom(self.root)
 
-        self.tab_work = ttk.Frame(notebook, padding=12)
-        self.tab_settings = ttk.Frame(notebook, padding=12)
-        self.tab_log = ttk.Frame(notebook, padding=12)
-        notebook.add(self.tab_work, text="  Работа  ")
-        notebook.add(self.tab_settings, text="  Настройки  ")
-        notebook.add(self.tab_log, text="  Журнал  ")
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill=BOTH, expand=True, padx=10, pady=(10, 0), side="top")
+
+        self.tab_work = ttk.Frame(self.notebook, padding=12)
+        self.tab_settings = ttk.Frame(self.notebook)
+        self.tab_log = ttk.Frame(self.notebook, padding=12)
+        self.notebook.add(self.tab_work, text="  Работа  ")
+        self.notebook.add(self.tab_settings, text="  Настройки  ")
+        self.notebook.add(self.tab_log, text="  Журнал  ")
 
         self._build_work_tab(self.tab_work)
-        self._build_settings_tab(self.tab_settings)
+        self._build_settings_tab(_scrollable(self.tab_settings))
         self._build_log_tab(self.tab_log)
-        self._build_bottom(self.root)
 
     # ------------------------------------------------------------------
     def _build_work_tab(self, parent: ttk.Frame) -> None:
@@ -198,7 +202,10 @@ class App:
         ttk.Separator(parent, orient="horizontal").grid(row=row, column=0, columnspan=3, sticky="ew", pady=8)
         row += 1
 
-        self.lbl_estimate = ttk.Label(parent, text="Укажите папки, чтобы увидеть оценку", style="Hint.TLabel")
+        self.lbl_estimate = ttk.Label(
+            parent, text="Укажите папки, чтобы увидеть оценку", style="Hint.TLabel",
+            justify=LEFT, wraplength=880,
+        )
         self.lbl_estimate.grid(row=row, column=0, columnspan=3, sticky="w")
         parent.rowconfigure(row + 1, weight=1)
 
@@ -433,7 +440,7 @@ class App:
     # ------------------------------------------------------------------
     def _build_bottom(self, parent: Tk) -> None:
         frame = ttk.Frame(parent, padding=(10, 8, 10, 10))
-        frame.pack(fill=X)
+        frame.pack(fill=X, side="bottom")
         frame.columnconfigure(0, weight=1)
 
         self.progress = ttk.Progressbar(frame, mode="determinate", maximum=1000)
@@ -611,15 +618,17 @@ class App:
             return
 
         model = self.var_model.get()
-        credits = plan["total_credits_flash"] if "flash" in model or "turbo" in model else plan["total_credits_multilingual"]
+        cheap = "flash" in model or "turbo" in model
+        credits = plan["total_credits_flash"] if cheap else plan["total_credits_multilingual"]
 
         self.lbl_estimate.configure(
             text=(
                 f"Найдено: промптов {plan['prompts']} (будет создано голосов {plan['voices']}), "
-                f"текстов {plan['texts']}, кусков {plan['chunks']}, символов {plan['characters']:,}. "
-                f"Ориентировочный расход: ~{credits:,} кредитов "
-                f"(из них {plan['design_credits']:,} на создание голосов)."
-            ).replace(",", " ")
+                f"текстов {plan['texts']}, кусков {plan['chunks']}, "
+                f"символов {_fmt(plan['characters'])}.\n"
+                f"Ориентировочный расход: около {_fmt(credits)} кредитов, "
+                f"из них {_fmt(plan['design_credits'])} на создание голосов."
+            )
         )
 
     # ------------------------------------------------------------------
@@ -802,9 +811,9 @@ class App:
             f"Пропущено (уже были готовы): {stats.texts_skipped}\n"
             f"С ошибками: {stats.texts_failed}\n"
             f"Голосов создано: {stats.voices_created}, использовано готовых: {stats.voices_reused}\n"
-            f"Озвучено символов: {stats.characters_spent:,}\n"
-            f"Потрачено кредитов (оценка): {stats.credits_estimated:,.0f}"
-        ).replace(",", " ")
+            f"Озвучено символов: {_fmt(stats.characters_spent)}\n"
+            f"Потрачено кредитов (оценка): {_fmt(stats.credits_estimated)}"
+        )
 
         if stats.stopped_reason:
             summary += f"\n\nОстановлено: {stats.stopped_reason}"
@@ -839,6 +848,52 @@ class App:
 
 
 # ----------------------------------------------------------------------
+def _scrollable(parent: ttk.Frame) -> ttk.Frame:
+    """Обернуть вкладку в прокручиваемую область.
+
+    Настроек много, и на ноутбучном экране они не помещаются целиком.
+    """
+    canvas = Canvas(parent, highlightthickness=0, borderwidth=0)
+    scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+    inner = ttk.Frame(canvas, padding=12)
+
+    window = canvas.create_window((0, 0), window=inner, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+    canvas.pack(side=LEFT, fill=BOTH, expand=True)
+    scrollbar.pack(side=RIGHT, fill=Y)
+
+    inner.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+    canvas.bind("<Configure>", lambda e: canvas.itemconfigure(window, width=e.width))
+
+    def on_wheel(event) -> None:
+        if event.num == 5 or event.delta < 0:
+            canvas.yview_scroll(1, "units")
+        elif event.num == 4 or event.delta > 0:
+            canvas.yview_scroll(-1, "units")
+
+    # Колесо перехватываем только пока курсор над вкладкой, иначе оно перестанет
+    # работать в других частях окна.
+    def grab_wheel(_event=None) -> None:
+        canvas.bind_all("<MouseWheel>", on_wheel)
+        canvas.bind_all("<Button-4>", on_wheel)
+        canvas.bind_all("<Button-5>", on_wheel)
+
+    def release_wheel(_event=None) -> None:
+        canvas.unbind_all("<MouseWheel>")
+        canvas.unbind_all("<Button-4>")
+        canvas.unbind_all("<Button-5>")
+
+    canvas.bind("<Enter>", grab_wheel)
+    canvas.bind("<Leave>", release_wheel)
+
+    return inner
+
+
+def _fmt(number: float) -> str:
+    """Число с неразрывным пробелом между разрядами."""
+    return f"{int(number):,}".replace(",", "\u00a0")
+
+
 def _validate(settings: Settings) -> List[str]:
     problems: List[str] = []
     if not settings.resolved_api_key():

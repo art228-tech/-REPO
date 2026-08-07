@@ -19,9 +19,30 @@ from .state import StateStore
 log = get_logger("cli")
 
 
+def say(text: str = "", *, error: bool = False) -> None:
+    """Печать, безопасная в собранном exe.
+
+    Сборка идёт с ключом --windowed, и тогда стандартные потоки могут
+    отсутствовать: обычный print в такой ситуации падает.
+    """
+    stream = sys.stderr if error else sys.stdout
+    if stream is None:
+        return
+    try:
+        stream.write(text + "\n")
+        stream.flush()
+    except (OSError, ValueError):
+        pass
+
+
 def _print_progress(fraction: float, message: str) -> None:
-    sys.stdout.write(f"\r[{fraction * 100:5.1f}%] {message[:100]:<100}")
-    sys.stdout.flush()
+    if sys.stdout is None:
+        return
+    try:
+        sys.stdout.write(f"\r[{fraction * 100:5.1f}%] {message[:100]:<100}")
+        sys.stdout.flush()
+    except (OSError, ValueError):
+        pass
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -80,37 +101,35 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
 
     setup_logging()
-    add_gui_handler(lambda line, level: print(line))
+    add_gui_handler(lambda line, level: say(line))
 
     settings = apply_overrides(Settings.load(), args)
 
     if args.save:
         settings.save()
-        print(f"Настройки сохранены.")
+        say("Настройки сохранены.")
 
     if args.report:
-        path = build_report(settings)
-        print(f"Отчёт: {path}")
+        say(f"Отчёт: {build_report(settings)}")
         return 0
 
     if args.estimate:
-        plan = estimate_plan(settings)
-        for key, value in plan.items():
-            print(f"{key}: {value}")
+        for key, value in estimate_plan(settings).items():
+            say(f"{key}: {value}")
         return 0
 
     if args.check:
         try:
             subscription, models = verify_key(settings.resolved_api_key())
         except ElevenLabsError as exc:
-            print(f"Ключ не принят: {exc}", file=sys.stderr)
+            say(f"Ключ не принят: {exc}", error=True)
             return 2
-        print(subscription.summary())
-        print("Доступные модели озвучки:")
+        say(subscription.summary())
+        say("Доступные модели озвучки:")
         for model in models:
             if model.can_do_text_to_speech:
-                print(f"  {model.model_id:<28} {model.cost_multiplier:g} кред./символ, "
-                      f"до {model.max_chars_per_request} символов")
+                say(f"  {model.model_id:<28} {model.cost_multiplier:g} кред./символ, "
+                    f"до {model.max_chars_per_request} символов")
         return 0
 
     state = StateStore()
@@ -120,16 +139,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         stats = runner.run()
     except PreflightError as exc:
-        print(f"\nНевозможно запустить: {exc}", file=sys.stderr)
+        say(f"\nНевозможно запустить: {exc}", error=True)
         return 2
     except KeyboardInterrupt:
         cancel.set()
-        print("\nОстановлено.")
+        say("\nОстановлено.")
         return 130
     finally:
         state.close()
 
-    print()
+    say()
     for key, value in stats.as_dict().items():
-        print(f"{key}: {value}")
+        say(f"{key}: {value}")
     return 0 if not stats.texts_failed else 1
