@@ -202,12 +202,13 @@ def _concat_with_ffmpeg(ffmpeg: str, paths: List[Path], destination: Path) -> Pa
 
 def _concat_raw(paths: List[Path], destination: Path, *, strip_tags: bool) -> Path:
     with destination.open("wb") as out:
-        for index, path in enumerate(paths):
+        for path in paths:
             data = path.read_bytes()
             if strip_tags:
                 cleaned = strip_id3(data)
-                # Тег в первом файле сохраняем: он несёт корректные заголовки.
-                data = data if index == 0 and len(cleaned) < len(data) * 0.5 else cleaned
+                # Пустой результат означает, что разбор тега пошёл не так:
+                # лучше записать кусок как есть, чем потерять звук.
+                data = cleaned or data
             out.write(data)
     return destination
 

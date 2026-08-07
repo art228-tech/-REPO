@@ -426,7 +426,10 @@ class Runner:
         assert self._client is not None
         settings = self.settings
 
-        existing_ids = set()
+        # None означает «проверить не удалось», пустое множество — «в аккаунте
+        # голосов нет». Смешивать эти случаи нельзя: в первом надо доверять
+        # кэшу, во втором — создавать голоса заново.
+        existing_ids: Optional[set] = None
         try:
             existing_ids = {v.get("voice_id") for v in self._client.list_voices()}
         except ElevenLabsError as exc:
@@ -446,7 +449,7 @@ class Runner:
 
             cached = self.state.get_voice(prompt_key)
             if cached and not settings.recreate_voices:
-                if existing_ids and cached.voice_id not in existing_ids:
+                if existing_ids is not None and cached.voice_id not in existing_ids:
                     log.warning(
                         "Голос «%s» пропал из аккаунта (удалён на сайте?), создам заново",
                         cached.voice_name,
@@ -662,6 +665,7 @@ class Runner:
                 request_id = self.state.get_chunk_request_id(task_key)
                 if request_id:
                     previous_request_ids.append(request_id)
+                    del previous_request_ids[:-3]
                 self.stats.chunks_reused += 1
                 self._done_units += 1
                 self._progress(f"«{job.text.name}»: кусок {chunk.index + 1}/{total} уже готов")
@@ -691,7 +695,7 @@ class Runner:
                     voice_settings=settings.voice_settings_payload(),
                     previous_text=self._previous_text(job.text.chunks, chunk.index),
                     next_text=self._next_text(job.text.chunks, chunk.index),
-                    previous_request_ids=previous_request_ids,
+                    previous_request_ids=list(previous_request_ids),
                     language_code=settings.language_code or None,
                 )
             except ValidationFailed as exc:
@@ -726,7 +730,9 @@ class Runner:
 
             parts.append(chunk_path)
             if result.request_id:
+                # API берёт не больше трёх, а документ может быть на сотни кусков.
                 previous_request_ids.append(result.request_id)
+                del previous_request_ids[:-3]
             self.stats.chunks_done += 1
             self._done_units += 1
 
