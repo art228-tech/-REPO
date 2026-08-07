@@ -1,0 +1,238 @@
+"""Склейка кусков аудио в один файл.
+
+Если рядом есть ffmpeg — используем его: он корректно пересобирает контейнер.
+Без ffmpeg работает запасной путь для MP3: у кусков срезаются ID3-теги, а
+кадры складываются подряд. Это безопасно именно здесь, потому что все куски
+приходят из одного API с одинаковыми частотой дискретизации и битрейтом.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import List, Optional, Sequence
+
+from .logging_setup import get_logger
+from .paths import app_root
+
+log = get_logger("audio")
+
+#: Форматы, которые нельзя просто склеить побайтово.
+_NEEDS_FFMPEG = {"wav", "opus"}
+
+_EXTENSIONS = {
+    "mp3": ".mp3",
+    "pcm": ".pcm",
+    "wav": ".wav",
+    "opus": ".opus",
+    "ulaw": ".ulaw",
+    "alaw": ".alaw",
+}
+
+_ffmpeg_cache: Optional[str] = None
+_ffmpeg_searched = False
+
+
+def format_family(output_format: str) -> str:
+    """Из mp3_44100_128 получить mp3."""
+    return (output_format or "mp3").split("_", 1)[0].lower()
+
+
+def extension_for(output_format: str) -> str:
+    return _EXTENSIONS.get(format_family(output_format), ".bin")
+
+
+def find_ffmpeg() -> Optional[str]:
+    """Найти ffmpeg: сначала рядом с программой, потом в PATH.
+
+    Класть ffmpeg.exe рядом с программой удобно на Windows, где его обычно нет
+    в системе и добавлять его в PATH пользователю не хочется.
+    """
+    global _ffmpeg_cache, _ffmpeg_searched
+    if _ffmpeg_searched:
+        return _ffmpeg_cache
+
+    _ffmpeg_searched = True
+    binary = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
+
+    for candidate in (app_root() / binary, app_root() / "ffmpeg" / binary, app_root() / "bin" / binary):
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            _ffmpeg_cache = str(candidate)
+            log.debug("ffmpeg найден рядом с программой: %s", candidate)
+            return _ffmpeg_cache
+
+    found = shutil.which("ffmpeg")
+    if found:
+        log.debug("ffmpeg найден в PATH: %s", found)
+    else:
+        log.debug("ffmpeg не найден, для MP3 будет использован встроенный склейщик")
+    _ffmpeg_cache = found
+    return _ffmpeg_cache
+
+
+def reset_ffmpeg_cache() -> None:
+    global _ffmpeg_cache, _ffmpeg_searched
+    _ffmpeg_cache = None
+    _ffmpeg_searched = False
+
+
+# ----------------------------------------------------------------------
+# ID3
+# ----------------------------------------------------------------------
+def strip_id3(data: bytes) -> bytes:
+    """Убрать теги ID3v2 в начале и ID3v1 в конце.
+
+    Внутри склеенного потока теги превращаются в мусорные байты между кадрами:
+    большинство плееров их переживают, но длительность и перемотка ломаются.
+    """
+    if not data:
+        return data
+
+    start = 0
+    # ID3v2 может идти несколькими блоками подряд.
+    while len(data) - start >= 10 and data[start : start + 3] == b"ID3":
+        flags = data[start + 5]
+        size_bytes = data[start + 6 : start + 10]
+        if any(b & 0x80 for b in size_bytes):
+            # Некорректный synchsafe-размер: дальше не разбираем.
+            break
+        size = 0
+        for byte in size_bytes:
+            size = (size << 7) | (byte & 0x7F)
+        block = 10 + size
+        if flags & 0x10:  # присутствует футер
+            block += 10
+        if block <= 0 or start + block > len(data):
+            break
+        start += block
+
+    end = len(data)
+    if end - start >= 128 and data[end - 128 : end - 125] == b"TAG":
+        end -= 128
+
+    return data[start:end]
+
+
+# ----------------------------------------------------------------------
+# Склейка
+# ----------------------------------------------------------------------
+def concat_audio(
+    parts: Sequence[Path],
+    destination: Path,
+    *,
+    output_format: str = "mp3_44100_128",
+    use_ffmpeg: bool = True,
+) -> Path:
+    """Склеить куски в один файл. Возвращает путь к результату."""
+    paths = [Path(p) for p in parts]
+    missing = [p for p in paths if not p.exists()]
+    if missing:
+        raise FileNotFoundError(f"Не найдены куски для склейки: {', '.join(str(m) for m in missing[:5])}")
+    if not paths:
+        raise ValueError("Список кусков пуст")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    if len(paths) == 1:
+        shutil.copyfile(paths[0], destination)
+        return destination
+
+    family = format_family(output_format)
+    ffmpeg = find_ffmpeg() if use_ffmpeg else None
+
+    if ffmpeg:
+        try:
+            return _concat_with_ffmpeg(ffmpeg, paths, destination)
+        except Exception as exc:  # noqa: BLE001 - падать из-за склейки нельзя
+            log.warning("ffmpeg не смог склеить файл (%s), перехожу на встроенный склейщик", exc)
+
+    if family in _NEEDS_FFMPEG:
+        raise RuntimeError(
+            f"Для формата {output_format} нужна склейка через ffmpeg, но он не найден. "
+            "Положите ffmpeg.exe рядом с программой или выберите формат mp3."
+        )
+
+    return _concat_raw(paths, destination, strip_tags=(family == "mp3"))
+
+
+def _concat_with_ffmpeg(ffmpeg: str, paths: List[Path], destination: Path) -> Path:
+    list_file = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as handle:
+            list_file = Path(handle.name)
+            for path in paths:
+                escaped = str(path.resolve()).replace("\\", "/").replace("'", r"'\''")
+                handle.write(f"file '{escaped}'\n")
+
+        command = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel", "error",
+            "-nostdin",
+            "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(list_file),
+            "-c", "copy",
+            str(destination),
+        ]
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            creationflags=_no_window_flag(),
+        )
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or "").strip()[:500] or f"код возврата {result.returncode}")
+        if not destination.exists() or destination.stat().st_size == 0:
+            raise RuntimeError("ffmpeg отработал, но файл пуст")
+        return destination
+    finally:
+        if list_file and list_file.exists():
+            try:
+                list_file.unlink()
+            except OSError:
+                pass
+
+
+def _concat_raw(paths: List[Path], destination: Path, *, strip_tags: bool) -> Path:
+    with destination.open("wb") as out:
+        for index, path in enumerate(paths):
+            data = path.read_bytes()
+            if strip_tags:
+                cleaned = strip_id3(data)
+                # Тег в первом файле сохраняем: он несёт корректные заголовки.
+                data = data if index == 0 and len(cleaned) < len(data) * 0.5 else cleaned
+            out.write(data)
+    return destination
+
+
+def _no_window_flag() -> int:
+    """Не показывать чёрное окно консоли при вызове ffmpeg из GUI на Windows."""
+    if sys.platform == "win32":
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
+
+
+def safe_filename(name: str, *, max_length: int = 120) -> str:
+    """Привести имя к виду, который примет файловая система Windows."""
+    forbidden = '<>:"/\\|?*'
+    cleaned = "".join("_" if ch in forbidden or ord(ch) < 32 else ch for ch in name).strip(" .")
+
+    reserved = {
+        "CON", "PRN", "AUX", "NUL",
+        *(f"COM{i}" for i in range(1, 10)),
+        *(f"LPT{i}" for i in range(1, 10)),
+    }
+    if cleaned.upper() in reserved:
+        cleaned = f"_{cleaned}"
+
+    if len(cleaned) > max_length:
+        cleaned = cleaned[:max_length].rstrip(" .")
+
+    return cleaned or "file"
