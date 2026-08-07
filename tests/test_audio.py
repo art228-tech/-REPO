@@ -6,9 +6,23 @@ from elevenlabs_voiceover.audio import (
     format_family,
     safe_filename,
     strip_id3,
+    strip_xing_header,
 )
 
 MP3_FRAME = b"\xff\xfb\x90\x00" + b"\x00" * 100
+
+# MPEG1 Layer III, 128 кбит/с, 44100 Гц: длина кадра 417 байт.
+FRAME_LENGTH = 417
+
+
+def mpeg_frame(*, mono: bool = False, xing: bool = False, tag: bytes = b"Xing") -> bytes:
+    """Собрать один кадр MPEG1 Layer III, при желании со служебным тегом."""
+    header = bytes([0xFF, 0xFB, 0x90, 0xC0 if mono else 0x00])
+    side_info = 17 if mono else 32
+    body = bytearray(b"\x00" * (FRAME_LENGTH - 4))
+    if xing:
+        body[side_info : side_info + 4] = tag
+    return header + bytes(body)
 
 
 def id3v2(payload_size: int = 10) -> bytes:
@@ -75,6 +89,77 @@ def test_malformed_size_does_not_eat_data():
 def test_short_trailer_is_not_mistaken_for_id3v1():
     data = b"TAG" + b"\x00" * 10
     assert strip_id3(data) == data
+
+
+# ----------------------------------------------------------------------
+def test_xing_frame_is_removed():
+    audio = mpeg_frame()
+    assert strip_xing_header(mpeg_frame(xing=True) + audio) == audio
+
+
+def test_info_frame_is_removed():
+    audio = mpeg_frame()
+    assert strip_xing_header(mpeg_frame(xing=True, tag=b"Info") + audio) == audio
+
+
+def test_xing_frame_in_mono_stream_is_removed():
+    audio = mpeg_frame(mono=True)
+    assert strip_xing_header(mpeg_frame(mono=True, xing=True) + audio) == audio
+
+
+def test_ordinary_frame_is_kept():
+    audio = mpeg_frame() + mpeg_frame()
+    assert strip_xing_header(audio) == audio
+
+
+def test_tag_at_wrong_offset_is_ignored():
+    # «Xing» в середине кадра — совпадение, а не служебный заголовок.
+    frame = bytearray(mpeg_frame())
+    frame[200:204] = b"Xing"
+    data = bytes(frame) + mpeg_frame()
+    assert strip_xing_header(data) == data
+
+
+def test_non_mpeg_data_is_untouched():
+    data = "это вообще не mpeg".encode("utf-8") * 10
+    assert strip_xing_header(data) == data
+
+
+def test_short_input_is_untouched():
+    assert strip_xing_header(b"\xff\xfb") == b"\xff\xfb"
+    assert strip_xing_header(b"") == b""
+
+
+def test_free_bitrate_is_untouched():
+    frame = bytearray(mpeg_frame(xing=True))
+    frame[2] = 0x00  # индекс битрейта 0 — «свободный»
+    assert strip_xing_header(bytes(frame)) == bytes(frame)
+
+
+def test_reserved_sample_rate_is_untouched():
+    frame = bytearray(mpeg_frame(xing=True))
+    frame[2] = 0x9C  # индекс частоты 3 — зарезервирован
+    assert strip_xing_header(bytes(frame)) == bytes(frame)
+
+
+def test_layer_other_than_three_is_untouched():
+    frame = bytearray(mpeg_frame(xing=True))
+    frame[1] = 0xFD  # Layer II
+    assert strip_xing_header(bytes(frame)) == bytes(frame)
+
+
+def test_concat_drops_xing_from_every_part(tmp_path):
+    parts = []
+    for index in range(3):
+        path = tmp_path / f"{index}.mp3"
+        path.write_bytes(mpeg_frame(xing=True) + mpeg_frame())
+        parts.append(path)
+
+    target = tmp_path / "out.mp3"
+    concat_audio(parts, target, use_ffmpeg=False)
+
+    # Остались только три звуковых кадра, служебные ушли.
+    assert target.stat().st_size == FRAME_LENGTH * 3
 
 
 # ----------------------------------------------------------------------

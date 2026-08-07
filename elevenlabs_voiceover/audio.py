@@ -117,6 +117,68 @@ def strip_id3(data: bytes) -> bytes:
     return data[start:end]
 
 
+# Таблицы MPEG Layer III: битрейт в кбит/с и частота дискретизации в Гц.
+_BITRATES_V1 = (0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0)
+_BITRATES_V2 = (0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0)
+_SAMPLE_RATES = {
+    3: (44100, 48000, 32000, 0),  # MPEG 1
+    2: (22050, 24000, 16000, 0),  # MPEG 2
+    0: (11025, 12000, 8000, 0),   # MPEG 2.5
+}
+
+
+def strip_xing_header(data: bytes) -> bytes:
+    """Убрать служебный кадр Xing/Info в начале потока.
+
+    Такой кадр описывает длительность всего файла и звука не содержит. При
+    склейке нескольких файлов подряд каждый следующий кадр Xing декодер
+    принимает за обычный и добавляет к записи лишние 26 миллисекунд тишины, а
+    заголовок первого файла начинает врать о длительности всей склейки.
+    Проще выкинуть их все: у потока с постоянным битрейтом длительность и без
+    них считается по размеру верно.
+    """
+    if len(data) < 40 or data[0] != 0xFF or (data[1] & 0xE0) != 0xE0:
+        return data
+
+    version_bits = (data[1] >> 3) & 0x03
+    layer_bits = (data[1] >> 1) & 0x03
+    if version_bits == 1 or layer_bits != 1:  # только MPEG Layer III
+        return data
+
+    bitrate_index = (data[2] >> 4) & 0x0F
+    rate_index = (data[2] >> 2) & 0x03
+    padding = (data[2] >> 1) & 0x01
+    channel_mode = (data[3] >> 6) & 0x03
+
+    bitrates = _BITRATES_V1 if version_bits == 3 else _BITRATES_V2
+    if bitrate_index in (0, 15) or rate_index == 3:
+        return data
+
+    bitrate = bitrates[bitrate_index] * 1000
+    sample_rate = _SAMPLE_RATES[version_bits][rate_index]
+    if not bitrate or not sample_rate:
+        return data
+
+    samples_per_frame = 1152 if version_bits == 3 else 576
+    frame_length = (samples_per_frame // 8) * bitrate // sample_rate + padding
+    if frame_length <= 4 or frame_length > len(data):
+        return data
+
+    mono = channel_mode == 3
+    if version_bits == 3:
+        side_info = 17 if mono else 32
+    else:
+        side_info = 9 if mono else 17
+
+    tag_at = 4 + side_info
+    if tag_at + 4 > len(data):
+        return data
+    if data[tag_at : tag_at + 4] not in (b"Xing", b"Info"):
+        return data
+
+    return data[frame_length:]
+
+
 # ----------------------------------------------------------------------
 # Склейка
 # ----------------------------------------------------------------------
@@ -205,10 +267,10 @@ def _concat_raw(paths: List[Path], destination: Path, *, strip_tags: bool) -> Pa
         for path in paths:
             data = path.read_bytes()
             if strip_tags:
+                # Пустой результат означает, что разбор пошёл не так: лучше
+                # записать кусок как есть, чем потерять звук.
                 cleaned = strip_id3(data)
-                # Пустой результат означает, что разбор тега пошёл не так:
-                # лучше записать кусок как есть, чем потерять звук.
-                data = cleaned or data
+                data = strip_xing_header(cleaned) or cleaned or data
             out.write(data)
     return destination
 
