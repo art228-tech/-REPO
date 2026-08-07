@@ -283,15 +283,18 @@ class Runner:
                 "Кредитов не хватит на всё задание — работа остановится, когда они закончатся"
             )
 
-        for job in jobs:
-            self._check_cancelled()
-            if not self._has_budget_for(job.text.chunks[0].characters if job.text.chunks else 0):
-                self.stats.stopped_reason = "Кредиты закончились"
-                log.warning("Кредиты закончились, останавливаюсь до следующего файла")
-                break
-            self._process_job(job)
-
-        self._write_manifest(jobs, output_dir)
+        try:
+            for job in jobs:
+                self._check_cancelled()
+                if not self._has_budget_for(job.text.chunks[0].characters if job.text.chunks else 0):
+                    self.stats.stopped_reason = "Кредиты закончились"
+                    log.warning("Кредиты закончились, останавливаюсь до следующего файла")
+                    break
+                self._process_job(job)
+        finally:
+            # Манифест нужен и при остановке по кредитам или по кнопке: он
+            # показывает, что успело озвучиться и каким голосом.
+            self._write_manifest(jobs, output_dir)
 
     # ------------------------------------------------------------------
     def _load_prompts(self, directory: Path) -> List[PromptSpec]:

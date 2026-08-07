@@ -326,6 +326,12 @@ def test_run_stops_on_quota_and_resumes(api, tmp_path):
     assert first.stopped_reason
     assert 0 < first.texts_done < 8
 
+    # Манифест должен появиться и после аварийной остановки.
+    manifest = (root / "out" / "_manifest.csv").read_text(encoding="utf-8-sig")
+    ready = [line.split(";")[5] for line in manifest.strip().splitlines()[1:]]
+    assert ready.count("да") == first.texts_done
+    assert ready.count("нет") == 8 - first.texts_done
+
     second = run(root, db, max_voices=1, reserve_credits=0)
 
     assert second.texts_skipped == first.texts_done
