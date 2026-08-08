@@ -42,11 +42,32 @@ jobs:
         run: |
           $exe = "dist\ElevenLabsVoiceover.exe"
           if (-not (Test-Path $exe)) { throw "exe не собрался" }
-          # Консольный режим отрабатывает без окна и должен вернуть код 0.
-          & $exe --estimate --prompts samples\prompts --texts samples\texts --output out
-          if ($LASTEXITCODE -ne 0) { throw "exe завершился с кодом $LASTEXITCODE" }
+
+          # Сборка идёт без консоли, поэтому оболочка не ждёт процесс сама и
+          # не заполняет $LASTEXITCODE. Ждём явно и смотрим код возврата.
+          function Invoke-Exe([string[]] $Arguments) {
+            $process = Start-Process -FilePath $exe -ArgumentList $Arguments `
+              -Wait -PassThru -NoNewWindow
+            return $process.ExitCode
+          }
+
+          $code = Invoke-Exe @("--estimate", "--prompts", "samples\prompts",
+                               "--texts", "samples\texts", "--output", "out")
+          if ($code -ne 0) { throw "оценка объёма завершилась с кодом $code" }
+
+          # На вывод в консоль полагаться нельзя, поэтому берём действие со
+          # следом на диске: сбор отчёта поднимает логи, базу и упаковку в zip.
+          $reports = "$env:APPDATA\ElevenLabsVoiceover\reports"
+          if (Test-Path $reports) { Remove-Item "$reports\*.zip" -Force }
+
+          $code = Invoke-Exe @("--report")
+          if ($code -ne 0) { throw "сбор отчёта завершился с кодом $code" }
+
+          $made = @(Get-ChildItem "$reports\*.zip" -ErrorAction SilentlyContinue)
+          if ($made.Count -eq 0) { throw "отчёт не появился, сборка нерабочая" }
+
           $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
-          Write-Host "exe собран и запускается, размер $size МБ"
+          Write-Host "exe собран и работает: $size МБ, отчёт $($made[0].Name)"
 
       - name: Собрать комплект для раздачи
         shell: pwsh
