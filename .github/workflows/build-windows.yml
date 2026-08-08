@@ -1,0 +1,103 @@
+name: Сборка для Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["cursor/elevenlabs-api-voiceover-gui-edb4"]
+    paths:
+      - "elevenlabs_voiceover/**"
+      - "app.py"
+      - "requirements.txt"
+      - "samples/**"
+      - ".github/workflows/build-windows.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Установить зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Собрать exe
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name ElevenLabsVoiceover
+          --hidden-import tkinter
+          app.py
+
+      - name: Проверить, что exe запускается
+        shell: pwsh
+        run: |
+          $exe = "dist\ElevenLabsVoiceover.exe"
+          if (-not (Test-Path $exe)) { throw "exe не собрался" }
+          # Консольный режим отрабатывает без окна и должен вернуть код 0.
+          & $exe --estimate --prompts samples\prompts --texts samples\texts --output out
+          if ($LASTEXITCODE -ne 0) { throw "exe завершился с кодом $LASTEXITCODE" }
+          $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          Write-Host "exe собран и запускается, размер $size МБ"
+
+      - name: Собрать комплект для раздачи
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item dist\ElevenLabsVoiceover.exe package\
+          Copy-Item README.md package\
+          Copy-Item -Recurse samples package\samples
+          New-Item -ItemType Directory -Force -Path package\промпты, package\тексты, package\готово | Out-Null
+          Copy-Item samples\prompts\*.txt package\промпты\
+          Copy-Item samples\texts\*.txt package\тексты\
+          Compress-Archive -Path package\* -DestinationPath ElevenLabsVoiceover-windows.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ElevenLabsVoiceover-windows
+          path: |
+            dist/ElevenLabsVoiceover.exe
+            ElevenLabsVoiceover-windows.zip
+          retention-days: 90
+
+      - name: Выложить в релиз
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          notes=$(cat <<'EOF'
+          Готовая сборка для Windows. Python устанавливать не нужно.
+
+          **ElevenLabsVoiceover-windows.zip** — программа вместе с примерами
+          промптов и заготовленными папками. Распакуйте и запустите
+          `ElevenLabsVoiceover.exe`.
+
+          **ElevenLabsVoiceover.exe** — только программа, если папки у вас уже есть.
+
+          Настройки и журналы хранятся в `%APPDATA%\ElevenLabsVoiceover`,
+          поэтому обновление exe их не затрагивает.
+
+          Сборка обновляется автоматически при каждом изменении кода.
+          EOF
+          )
+          if gh release view windows-latest >/dev/null 2>&1; then
+            gh release upload windows-latest \
+              dist/ElevenLabsVoiceover.exe ElevenLabsVoiceover-windows.zip --clobber
+            gh release edit windows-latest --notes "$notes"
+          else
+            gh release create windows-latest \
+              dist/ElevenLabsVoiceover.exe ElevenLabsVoiceover-windows.zip \
+              --title "Озвучка ElevenLabs — сборка для Windows" \
+              --notes "$notes" \
+              --prerelease \
+              --target "${{ github.sha }}"
+          fi
