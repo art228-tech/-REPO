@@ -72,14 +72,30 @@ jobs:
       - name: Собрать комплект для раздачи
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path package | Out-Null
+          # Раскладка сразу готова к работе: три папки, которые остаётся
+          # указать в окне, и примеры внутри двух из них.
+          New-Item -ItemType Directory -Force -Path `
+            package\промпты, package\тексты, package\готово | Out-Null
+
           Copy-Item dist\ElevenLabsVoiceover.exe package\
           Copy-Item README.md package\
-          Copy-Item -Recurse samples package\samples
-          New-Item -ItemType Directory -Force -Path package\промпты, package\тексты, package\готово | Out-Null
           Copy-Item samples\prompts\*.txt package\промпты\
           Copy-Item samples\texts\*.txt package\тексты\
+
+          # Пустые папки в zip не попадают, поэтому кладём пояснение внутрь.
+          Set-Content -Path package\готово\'что здесь будет.txt' -Encoding UTF8 -Value @'
+          Сюда лягут готовые mp3.
+
+          Рядом появятся папка _voices с вариантами созданных голосов,
+          которые можно послушать, и таблица _manifest.csv с тем, какой
+          файл каким голосом озвучен.
+
+          Этот файл можно удалить.
+          '@
+
           Compress-Archive -Path package\* -DestinationPath ElevenLabsVoiceover-windows.zip -Force
+          $size = [math]::Round((Get-Item ElevenLabsVoiceover-windows.zip).Length / 1MB, 1)
+          Write-Host "комплект собран, $size МБ"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -98,14 +114,23 @@ jobs:
           notes=$(cat <<'EOF'
           Готовая сборка для Windows. Python устанавливать не нужно.
 
-          **ElevenLabsVoiceover-windows.zip** — программа вместе с примерами
-          промптов и заготовленными папками. Распакуйте и запустите
-          `ElevenLabsVoiceover.exe`.
+          **ElevenLabsVoiceover-windows.zip** — рекомендуемый вариант. Внутри
+          программа, готовые папки `промпты`, `тексты`, `готово` с примерами
+          и инструкция. Распакуйте и запустите `ElevenLabsVoiceover.exe`.
 
-          **ElevenLabsVoiceover.exe** — только программа, если папки у вас уже есть.
+          **ElevenLabsVoiceover.exe** — только программа, если папки уже есть.
+
+          Перед первым запуском создайте API-ключ на странице
+          [API Keys](https://elevenlabs.io/app/developers/api-keys) и обязательно
+          отметьте разрешения **Text to Speech**, **Voices** и **User** — по
+          умолчанию ключ создаётся ограниченным и работать не будет.
 
           Настройки и журналы хранятся в `%APPDATA%\ElevenLabsVoiceover`,
-          поэтому обновление exe их не затрагивает.
+          поэтому замена exe их не затрагивает.
+
+          Windows SmartScreen может предупредить о неизвестном издателе:
+          сборка не подписана сертификатом. Нажмите «Подробнее» и
+          «Выполнить в любом случае».
 
           Сборка обновляется автоматически при каждом изменении кода.
           EOF
