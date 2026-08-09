@@ -1,0 +1,56 @@
+ElevenLabs Voice Design prompts for TikTok / Shorts creators
+Limit: each voice_description is under 1000 characters (EL requires 20-1000).
+Policy-safe: ages are young adult / early-mid 20s (avoid under-18 / child-like; EL restricts child voices).
+Avoid celebrity names and real-person impersonation.
+Copy each prompt block into Voice Design as the voice description.
+
+=== PROMPT 01 | 01_young_male_hype_creator | 664 chars ===
+Young adult male voice, early 20s, charismatic and energetic, fast-paced natural speech, neutral accent, clean pronunciation, engaging TikTok-style delivery, confident and lively tone, youthful masculine voice, dynamic pacing, sharp articulation, expressive and authentic, high energy but controlled, conversational flow, natural rhythm variation, spontaneous and human-like, slightly playful confidence, modern short-form creator vibe, magnetic personality, realistic imperfections, fluid transitions, strong presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
+
+=== PROMPT 02 | 02_young_female_storytime | 603 chars ===
+Young adult female voice, early 20s, warm and expressive, storytime Shorts delivery, medium-fast natural speech, neutral accent, clear diction, intimate conversational tone, soft youthful feminine timbre, engaging and curious, emotional nuance without drama, lively storytelling rhythm, natural pauses and emphasis, friendly and relatable, modern internet creator vibe, playful confidence, authentic and human-like, fluid transitions, strong screen presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
+
+=== PROMPT 03 | 03_male_gaming_hype | 613 chars ===
+Young adult male voice, early 20s, high-energy gaming creator, rapid natural speech, neutral accent, crisp articulation, hype commentary style for Shorts, excited but intelligible, youthful masculine tone, punchy pacing, sharp emphasis on key words, spontaneous reactions, confident and competitive vibe, conversational and chaotic in a controlled way, modern streamer energy, magnetic and loud-clear presence, realistic imperfections, fluid transitions, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no screaming, no overacting.
+
+=== PROMPT 04 | 04_female_tea_gossip | 548 chars ===
+Young adult female voice, early 20s, spicy gossip Shorts host, fast conversational speech, neutral accent, clean pronunciation, intimate and conspiratorial tone, youthful feminine voice, playful sarcasm, expressive pitch variation, tight rhythmic delivery, engaging and magnetic, modern TikTok creator vibe, slightly dramatic but controlled, authentic and human-like, fluid transitions, strong presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
+
+=== PROMPT 05 | 05_male_fitness_coach | 560 chars ===
+Young adult male voice, mid 20s, motivational fitness Shorts coach, clear and punchy speech, neutral accent, strong articulation, confident coaching delivery, energetic but grounded, youthful masculine timbre, direct and inspiring tone, dynamic pacing with firm emphasis, modern creator vibe, authentic intensity, controlled high energy, conversational motivation, fluid transitions, magnetic presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no shouting, no overacting.
+
+=== PROMPT 06 | 06_female_beauty_grwm | 559 chars ===
+Young adult female voice, early 20s, beauty and GRWM Shorts creator, smooth conversational speech, neutral accent, clean pronunciation, soft-bright youthful feminine tone, friendly and stylish delivery, medium pace with natural bounce, warm confidence, engaging and relatable, modern internet creator vibe, light playful charm, expressive but polished, authentic and human-like, fluid transitions, strong presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
+
+=== PROMPT 07 | 07_male_tech_explainer | 550 chars ===
+Young adult male voice, mid 20s, fast tech explainer for Shorts, clear rapid natural speech, neutral accent, precise pronunciation, smart and confident tone, youthful masculine voice, punchy educational delivery, energetic but calm control, sharp articulation, modern creator vibe, engaging and credible, conversational flow with tight rhythm, authentic and human-like, fluid transitions, strong presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
+
+=== PROMPT 08 | 08_female_lifestyle_vlog | 537 chars ===
+Young adult female voice, early 20s, lifestyle day-in-my-life Shorts voice, natural conversational speech, neutral accent, clean diction, bright youthful feminine timbre, casual and sunny tone, easy rhythmic pacing, warm and approachable, modern TikTok creator vibe, lightly playful confidence, authentic and spontaneous, expressive without exaggeration, fluid transitions, magnetic presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
+
+=== PROMPT 09 | 09_male_comedy_skit | 532 chars ===
+Young adult male voice, early 20s, comedy Shorts performer, quick natural speech, neutral accent, crisp pronunciation, witty and charismatic delivery, youthful masculine tone, playful timing, expressive emphasis, confident deadpan switches, modern meme-creator vibe, high energy with control, spontaneous and human-like, realistic imperfections, fluid transitions, strong comic presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
+
+=== PROMPT 10 | 10_female_motivational | 534 chars ===
+Young adult female voice, mid 20s, motivational Shorts coach, clear confident speech, neutral accent, polished pronunciation, empowering and uplifting tone, youthful feminine voice, strong yet warm delivery, dynamic pacing, sharp emphasis on key lines, modern creator vibe, authentic conviction, high energy but controlled, conversational inspiration, fluid transitions, magnetic presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
+
+=== PROMPT 11 | 11_male_food_review | 520 chars ===
+Young adult male voice, early 20s, food review Shorts creator, lively natural speech, neutral accent, clean pronunciation, excited tasting commentary style, youthful masculine timbre, vivid and expressive, medium-fast pacing, playful confidence, modern internet creator vibe, conversational and magnetic, authentic reactions without chaos, fluid transitions, strong presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
+
+=== PROMPT 12 | 12_female_sarcastic_relatable | 509 chars ===
+Young adult female voice, early 20s, sarcastic relatable Shorts narrator, quick conversational speech, neutral accent, clear diction, dry witty youthful feminine tone, subtle eye-roll energy, expressive but understated, snappy rhythm, modern TikTok creator vibe, playful confidence, authentic and human-like, controlled emotion, fluid transitions, strong presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
+
+=== PROMPT 13 | 13_male_street_interview | 534 chars ===
+Young adult male voice, mid 20s, street interview Shorts host, natural conversational speech, neutral accent, clean pronunciation, curious and charismatic tone, youthful masculine voice, energetic but chill pacing, sharp follow-up delivery, engaging interviewer vibe, modern creator presence, spontaneous and human-like, realistic imperfections, fluid transitions, strong on-camera energy, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
+
+=== PROMPT 14 | 14_female_booktok_soft | 528 chars ===
+Young adult female voice, early 20s, BookTok Shorts creator, soft expressive speech, neutral accent, clear gentle pronunciation, warm youthful feminine timbre, intimate storytelling tone, medium pace with emotional color, cozy and engaging, modern internet creator vibe, lightly playful confidence, authentic and human-like, fluid transitions, strong presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no whispery muddiness, no overacting.
+
+=== PROMPT 15 | 15_male_sports_hype | 528 chars ===
+Young adult male voice, mid 20s, sports hype Shorts commentator, fast punchy speech, neutral accent, sharp articulation, intense and exciting tone, youthful masculine voice, dynamic pacing, bold emphasis, confident locker-room energy, modern creator vibe, high energy but controlled, conversational and magnetic, authentic intensity, fluid transitions, strong presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no screaming, no overacting.
+
+=== PROMPT 16 | 16_female_chaos_meme | 514 chars ===
+Young adult female voice, early 20s, chaotic meme Shorts creator, rapid-fire natural speech, neutral accent, crisp pronunciation, unhinged-but-controlled comedy energy, youthful feminine tone, wild expressive pitch swings kept intelligible, snappy timing, modern TikTok creator vibe, playful confidence, spontaneous and human-like, fluid transitions, magnetic presence, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
+
+=== PROMPT 17 | 17_male_chill_faceless | 526 chars ===
+Young adult male voice, early 20s, chill faceless Shorts narrator, smooth conversational speech, neutral accent, clean pronunciation, calm-confident youthful masculine tone, relaxed but engaging pacing, clear storytelling delivery, modern internet creator vibe, lightly playful presence, authentic and human-like, natural rhythm variation, fluid transitions, strong quiet charisma, clean studio audio, no breath sounds, no inhalations, no mouth noises, no clicks, no lip smacks, no robotic cadence, no monotone, no overacting.
