@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 from typing import List, Optional
 
-from .api_client import verify_key
+from .api_client import decoder_support, probe_connection, safe_proxy_summary, verify_key
 from .config import MODE_ALL_VOICES, MODE_ROUND_ROBIN, Settings
 from .diagnostics import build_report
 from .errors import ElevenLabsError
@@ -66,6 +66,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--chunk", type=int, help="символов в одном куске")
     parser.add_argument("--recreate-voices", action="store_true", help="создать голоса заново")
     parser.add_argument("--check", action="store_true", help="проверить ключ и выйти")
+    parser.add_argument(
+        "--diagnose", action="store_true",
+        help="показать, что именно возвращает API: код, заголовки и начало тела",
+    )
     parser.add_argument("--estimate", action="store_true", help="показать оценку объёма и выйти")
     parser.add_argument("--report", action="store_true", help="собрать диагностический отчёт и выйти")
     parser.add_argument("--save", action="store_true", help="сохранить переданные параметры в настройки")
@@ -117,6 +121,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         for key, value in estimate_plan(settings).items():
             say(f"{key}: {value}")
         return 0
+
+    if args.diagnose:
+        say(f"Сжатие, доступное программе: {decoder_support()}")
+        say(f"Прокси: {safe_proxy_summary() or 'не настроен'}")
+        say("")
+        broken = 0
+        for result in probe_connection(settings.resolved_api_key(), timeout=settings.request_timeout):
+            say(result.line())
+            if result.error or not result.json_ok:
+                broken += 1
+        say("")
+        say("Соединение в порядке." if not broken else f"Запросов с неожиданным ответом: {broken}")
+        return 0 if not broken else 1
 
     if args.check:
         try:

@@ -481,6 +481,121 @@ def test_list_voices_handles_unexpected_shape(client):
     assert client.list_voices() == []
 
 
+def test_decoder_support_always_lists_gzip():
+    from elevenlabs_voiceover.api_client import decoder_support
+
+    assert "gzip" in decoder_support()
+    assert "deflate" in decoder_support()
+
+
+def test_probe_reports_healthy_api(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    monkeypatch.setattr(
+        api_client.requests, "get",
+        lambda url, **kwargs: response(200, {"models": []}, headers={"Content-Type": "application/json"}),
+    )
+
+    results = api_client.probe_connection("sk_test_key_1234567890")
+
+    assert len(results) == 3
+    assert all(r.json_ok for r in results)
+    assert "JSON разобран" in results[0].line()
+
+
+def test_probe_without_key_checks_only_public_endpoint(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    monkeypatch.setattr(api_client.requests, "get", lambda url, **kwargs: response(200, {"ok": True}))
+
+    results = api_client.probe_connection("")
+
+    assert len(results) == 1
+
+
+def test_probe_exposes_non_json_body(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    page = b"<!DOCTYPE html><html>stub page</html>"
+    monkeypatch.setattr(
+        api_client.requests, "get",
+        lambda url, **kwargs: response(200, content=page, headers={"Content-Type": "text/html"}),
+    )
+
+    results = api_client.probe_connection("sk_test_key_1234567890")
+
+    assert not results[0].json_ok
+    line = results[0].line()
+    assert "ОТВЕТ НЕ JSON" in line
+    assert "DOCTYPE" in line
+
+
+def test_probe_survives_network_failure(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    def boom(url, **kwargs):
+        raise requests.exceptions.ConnectionError("сеть недоступна")
+
+    monkeypatch.setattr(api_client.requests, "get", boom)
+
+    results = api_client.probe_connection("sk_test_key_1234567890")
+
+    assert all(r.error for r in results)
+    assert "не удалось" in results[0].line()
+
+
+def test_probe_sends_key_only_where_needed(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    seen = []
+
+    def capture(url, **kwargs):
+        seen.append((url, "xi-api-key" in kwargs.get("headers", {})))
+        return response(200, {"ok": True})
+
+    monkeypatch.setattr(api_client.requests, "get", capture)
+    api_client.probe_connection("sk_test_key_1234567890")
+
+    assert seen[0][1] is False
+    assert seen[1][1] is True
+    assert seen[2][0].endswith("/v1/user/subscription")
+
+
+def test_probe_does_not_leak_key_into_snippet(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    echoed = b"<html>xi-api-key: sk_test_key_1234567890</html>"
+    monkeypatch.setattr(
+        api_client.requests, "get",
+        lambda url, **kwargs: response(200, content=echoed, headers={"Content-Type": "text/html"}),
+    )
+
+    results = api_client.probe_connection("sk_test_key_1234567890")
+
+    assert all("sk_test_key_1234567890" not in r.snippet for r in results)
+
+
+def test_proxy_summary_hides_credentials(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    monkeypatch.setattr(
+        api_client.requests.utils, "getproxies",
+        lambda: {"https": "http://логин:пароль@proxy.local:8080"},
+    )
+
+    summary = api_client.safe_proxy_summary()
+
+    assert "proxy.local:8080" in summary
+    assert "пароль" not in summary
+
+
+def test_proxy_summary_empty_without_proxy(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    monkeypatch.setattr(api_client.requests.utils, "getproxies", lambda: {})
+    assert api_client.safe_proxy_summary() == ""
+
+
 def test_delete_voice_uses_delete_method(client):
     session = use(client, response(200, {}))
     client.delete_voice("v-1")

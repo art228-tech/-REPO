@@ -30,7 +30,7 @@ from tkinter import (
 from typing import Any, List, Optional
 
 from . import clipboard, diagnostics
-from .api_client import ModelInfo, verify_key
+from .api_client import ModelInfo, decoder_support, probe_connection, safe_proxy_summary, verify_key
 from .audio import find_ffmpeg
 from .config import (
     DEFAULT_GUIDANCE,
@@ -511,7 +511,10 @@ class App:
 
         extras = ttk.Frame(frame)
         extras.grid(row=2, column=0, columnspan=4, sticky="w", pady=(8, 0))
-        ttk.Button(extras, text="Собрать отчёт о проблеме", command=self._build_report).pack(side=LEFT)
+        ttk.Button(extras, text="Проверить соединение", command=self._probe_connection).pack(side=LEFT)
+        ttk.Button(extras, text="Собрать отчёт о проблеме", command=self._build_report).pack(
+            side=LEFT, padx=(8, 0)
+        )
         ttk.Button(extras, text="Сбросить прогресс", command=self._reset_progress).pack(side=LEFT, padx=(8, 0))
         ttk.Button(extras, text="Ключи ElevenLabs", command=self._open_keys_page).pack(side=LEFT, padx=(8, 0))
 
@@ -786,6 +789,52 @@ class App:
         self.state.reset_progress(drop_voices=not answer)
         messagebox.showinfo(APP_TITLE, "Прогресс сброшен.", parent=self.root)
 
+    def _probe_connection(self) -> None:
+        """Постучаться в API напрямую и показать, что вернулось."""
+        settings = self._widgets_to_settings()
+        self.lbl_status.configure(text="Проверяю соединение…")
+        self._set_busy(True)
+
+        def work() -> None:
+            try:
+                results = probe_connection(settings.resolved_api_key(), timeout=settings.request_timeout)
+            except Exception as exc:
+                log.exception("Проверка соединения упала")
+                self.events.put(("probe_failed", str(exc)))
+            else:
+                self.events.put(("probe_done", results))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_probe_done(self, results: List[Any]) -> None:
+        self._set_busy(False)
+        self.lbl_status.configure(text="Проверка соединения завершена")
+
+        broken = [r for r in results if r.error or not r.json_ok]
+        report = "\n\n".join(r.line() for r in results)
+        tail = (
+            f"\n\nСжатие, доступное программе: {decoder_support()}"
+            f"\nПрокси: {safe_proxy_summary() or 'не настроен'}"
+        )
+
+        if not broken:
+            messagebox.showinfo(
+                APP_TITLE,
+                "Соединение в порядке, API отвечает как положено.\n\n" + report + tail,
+                parent=self.root,
+            )
+            return
+
+        messagebox.showwarning(
+            APP_TITLE,
+            "Часть запросов вернулась не такой, как ожидалось.\n\n"
+            + report
+            + tail
+            + "\n\nПодробности записаны в журнал. Нажмите «Собрать отчёт о проблеме», "
+              "чтобы отправить их на разбор.",
+            parent=self.root,
+        )
+
     def _build_report(self) -> None:
         try:
             settings = self._widgets_to_settings()
@@ -840,6 +889,12 @@ class App:
         elif kind == "verify_ok":
             self._set_busy(False)
             self._on_verified(event[1], event[2])
+        elif kind == "probe_done":
+            self._on_probe_done(event[1])
+        elif kind == "probe_failed":
+            self._set_busy(False)
+            self.lbl_status.configure(text="Проверка соединения не удалась")
+            messagebox.showerror(APP_TITLE, event[1], parent=self.root)
         elif kind == "verify_failed":
             self._set_busy(False)
             self.lbl_account.configure(text=f"Ключ не принят: {event[1]}", style="Bad.TLabel")

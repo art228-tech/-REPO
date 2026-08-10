@@ -551,6 +551,105 @@ def _describe_bad_body(response: requests.Response, path: str) -> InvalidRespons
     )
 
 
+@dataclass
+class ProbeResult:
+    """Что именно вернулось на один пробный запрос."""
+
+    label: str
+    url: str
+    status: Optional[int] = None
+    content_type: str = ""
+    content_encoding: str = ""
+    length: int = 0
+    json_ok: bool = False
+    snippet: str = ""
+    error: str = ""
+    elapsed: float = 0.0
+
+    def line(self) -> str:
+        if self.error:
+            return f"{self.label}: не удалось — {self.error}"
+        verdict = "JSON разобран" if self.json_ok else "ОТВЕТ НЕ JSON"
+        encoding = f", сжатие {self.content_encoding}" if self.content_encoding else ""
+        return (
+            f"{self.label}: HTTP {self.status}, {verdict}, тип {self.content_type or 'не указан'}"
+            f"{encoding}, {self.length} байт, {self.elapsed:.2f} с\n    начало: «{self.snippet}»"
+        )
+
+
+def decoder_support() -> str:
+    """Какие способы сжатия умеет распаковать эта сборка.
+
+    Если сервер сожмёт ответ способом, которого в сборке нет, тело придёт
+    нечитаемым, а по ошибке разбора JSON это никак не опознать.
+    """
+    available = ["gzip", "deflate"]
+    for name, label in (("brotli", "br"), ("brotlicffi", "br"), ("zstandard", "zstd")):
+        try:
+            __import__(name)
+        except ImportError:
+            continue
+        if label not in available:
+            available.append(label)
+    return ", ".join(available)
+
+
+def probe_connection(api_key: str = "", timeout: int = 30, base_url: str = BASE_URL) -> List[ProbeResult]:
+    """Постучаться в API и записать всё, что вернулось.
+
+    Нужна, когда обычный запрос падает на разборе ответа: здесь видно и код,
+    и заголовки, и настоящие байты тела, а не только сообщение JSON-разборщика.
+    """
+    key = (api_key or "").strip()
+    if key:
+        register_secret(key)
+
+    checks = [("Список моделей без ключа", "/v1/models", False)]
+    if key:
+        checks.append(("Список моделей с ключом", "/v1/models", True))
+        checks.append(("Сведения о подписке", "/v1/user/subscription", True))
+
+    log.info("Проверка соединения. Поддерживаемое сжатие: %s", decoder_support())
+    proxy = safe_proxy_summary()
+    log.info("Прокси: %s", proxy or "не настроен")
+
+    results: List[ProbeResult] = []
+    for label, path, with_key in checks:
+        url = f"{base_url.rstrip('/')}{path}"
+        result = ProbeResult(label=label, url=url)
+        headers = {"User-Agent": "elevenlabs-voiceover/1.0 (+desktop)", "Accept": "application/json"}
+        if with_key:
+            headers["xi-api-key"] = key
+
+        started = time.monotonic()
+        try:
+            response = requests.get(url, headers=headers, timeout=(15, timeout))
+        except requests.exceptions.RequestException as exc:
+            result.error = str(exc)
+        else:
+            body = response.content or b""
+            result.status = response.status_code
+            result.elapsed = time.monotonic() - started
+            result.content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip()
+            result.content_encoding = response.headers.get("Content-Encoding") or ""
+            result.length = len(body)
+            result.snippet = redact(
+                body[:200].decode("utf-8", errors="replace").replace("\r", " ").replace("\n", " ").strip()
+            )
+            try:
+                response.json()
+                result.json_ok = True
+            except ValueError:
+                result.json_ok = False
+                # Байты нужны целиком: по ним видно и сжатие, и подмену.
+                log.warning("%s: тело не разобралось как JSON, первые байты: %r", label, body[:120])
+
+        log.info("%s", result.line())
+        results.append(result)
+
+    return results
+
+
 def _parse_error_body(response: requests.Response) -> Tuple[Optional[str], str, Any]:
     """Достать из тела ошибки её код и человекочитаемое сообщение."""
     try:
