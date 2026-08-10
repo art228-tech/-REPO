@@ -596,10 +596,13 @@ def _describe_bad_body(response: requests.Response, path: str) -> InvalidRespons
     header_names = {k.lower() for k in response.headers}
     if any(marker in head for marker in _GEO_BLOCK_MARKERS):
         cause = (
-            "ElevenLabs ответил своей справкой об ограничениях по странам: сервис не "
-            "обслуживает страну, из которой пришёл запрос. API-ключ здесь ни при чём. "
-            "Нужно сменить страну в VPN — подойдут США или Европа. Убедитесь также, что "
-            "через VPN идёт весь трафик, а не только выбранные сайты."
+            "ElevenLabs отказал по адресу, с которого пришёл запрос, и вернул свою справку "
+            "об ограничениях. API-ключ здесь ни при чём. Отказ бывает не только из-за страны: "
+            "по собственному объяснению ElevenLabs под запрет попадают и серверные адреса вне "
+            "запрещённых стран, если их облако считает такой адрес связанным с ними. Поэтому "
+            "VPN с европейским выходом тоже нередко отклоняют. Нужен другой адрес — лучше "
+            "домашний или мобильный интернет либо резидентный прокси, а не арендованный сервер. "
+            "Нажмите «Проверить соединение»: там видно, на какую страну записана ваша сеть."
         )
     elif b"cloudflare" in head or "cf-ray" in header_names or "cf-mitigated" in header_names:
         cause = (
@@ -686,11 +689,40 @@ TRACE_URL = "https://www.cloudflare.com/cdn-cgi/trace"
 _LIKELY_BLOCKED = {"RU", "BY", "IR", "KP", "SY", "CU", "VE"}
 
 
+def network_owner(session: requests.Session, ip: str, timeout: int = 8) -> str:
+    """Кому принадлежит сеть, из которой вышел запрос.
+
+    Геолокация показывает, где сервер стоит физически, а реестр — на какую
+    страну он записан. ElevenLabs смотрит на второе, и расхождение объясняет,
+    почему «немецкий» прокси всё равно получает отказ.
+    """
+    try:
+        response = session.get(f"https://rdap.org/ip/{ip}", timeout=(timeout, timeout))
+        data = response.json()
+    except (requests.exceptions.RequestException, ValueError) as exc:
+        log.debug("Владельца сети определить не удалось: %s", str(exc)[:150])
+        return ""
+
+    if not isinstance(data, dict):
+        return ""
+
+    name = str(data.get("name") or "").strip()
+    registered = str(data.get("country") or "").strip().upper()
+
+    parts = []
+    if name:
+        parts.append(f"сеть {name}")
+    if registered:
+        parts.append(f"записана на {registered}")
+    return ", ".join(parts)
+
+
 def outbound_address(timeout: int = 10, proxy_url: str = "", ignore_system_proxy: bool = False) -> str:
     """Узнать, с какого адреса и из какой страны запросы выходят наружу.
 
     Главный вопрос при отказе по географии — действительно ли трафик идёт через
-    VPN и в какой стране он выныривает. Догадаться об этом по ошибке нельзя.
+    VPN, где он выныривает и на кого записана эта сеть. По самой ошибке об этом
+    не догадаться.
     """
     session = requests.Session()
     apply_proxy(session, proxy_url, ignore_system_proxy)
@@ -703,19 +735,29 @@ def outbound_address(timeout: int = 10, proxy_url: str = "", ignore_system_proxy
         )
     except (requests.exceptions.RequestException, ValueError) as exc:
         log.debug("Адрес выхода определить не удалось: %s", str(exc)[:150])
-        return ""
-    finally:
         session.close()
+        return ""
 
     ip = values.get("ip", "")
     country = (values.get("loc") or "").upper()
     if not ip:
+        session.close()
         return ""
 
-    note = ""
-    if country in _LIKELY_BLOCKED:
-        note = " — ElevenLabs такие страны не обслуживает, смените страну в VPN"
-    return f"{ip}, страна {country or 'не определена'}{note}"
+    owner = network_owner(session, ip)
+    session.close()
+
+    line = f"{ip}, страна {country or 'не определена'}"
+    if owner:
+        line = f"{line} ({owner})"
+
+    registered = ""
+    if owner and "записана на " in owner:
+        registered = owner.rsplit("записана на ", 1)[1].strip()
+
+    if country in _LIKELY_BLOCKED or registered in _LIKELY_BLOCKED:
+        line += " — ElevenLabs такие страны не обслуживает, нужен другой адрес"
+    return line
 
 
 @dataclass

@@ -225,8 +225,7 @@ def test_country_restriction_page_is_recognised(client):
         client.get_subscription()
 
     message = str(exc.value)
-    assert "по странам" in message
-    assert "VPN" in message
+    assert "справку об ограничениях" in message
     # Ключ ни при чём, и об этом надо сказать прямо.
     assert "ключ здесь ни при чём" in message.lower()
 
@@ -238,7 +237,10 @@ def test_country_restriction_wins_over_cloudflare(client):
 
     with pytest.raises(InvalidResponse) as exc:
         client.get_subscription()
-    assert "по странам" in str(exc.value)
+
+    message = str(exc.value)
+    assert "справку об ограничениях" in message
+    assert "Cloudflare" not in message
 
 
 def test_restriction_marker_found_beyond_first_bytes(client):
@@ -248,7 +250,7 @@ def test_restriction_marker_found_beyond_first_bytes(client):
 
     with pytest.raises(InvalidResponse) as exc:
         client.get_subscription()
-    assert "по странам" in str(exc.value)
+    assert "справку об ограничениях" in str(exc.value)
 
 
 def test_cloudflare_page_is_named(client):
@@ -524,28 +526,74 @@ def test_list_voices_handles_unexpected_shape(client):
     assert client.list_voices() == []
 
 
+def route_lookups(monkeypatch, *, loc="US", rdap=None):
+    """Подменить оба служебных запроса: адрес выхода и реестр сетей."""
+    def get(self, url, **kwargs):
+        if "cdn-cgi/trace" in url:
+            return response(200, content=f"ip=203.0.113.7\nloc={loc}\n".encode())
+        if "rdap.org" in url:
+            return response(200, rdap if rdap is not None else {})
+        return response(200, {})
+
+    monkeypatch.setattr(requests.Session, "get", get)
+
+
 def test_outbound_address_reports_ip_and_country(monkeypatch):
     from elevenlabs_voiceover import api_client
 
-    trace = "fl=123\nip=203.0.113.7\nts=1\nvisit_scheme=https\nloc=US\n"
-    monkeypatch.setattr(
-        requests.Session, "get", lambda self, url, **kw: response(200, content=trace.encode())
-    )
+    route_lookups(monkeypatch, loc="US")
+    assert api_client.outbound_address() == "203.0.113.7, страна US"
 
+
+def test_outbound_address_reports_network_owner(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    route_lookups(monkeypatch, loc="DE", rdap={"name": "LT-CHERRYSERVERS-20170222", "country": "LT"})
+
+    result = api_client.outbound_address()
+    assert "страна DE" in result
+    assert "LT-CHERRYSERVERS" in result
+    assert "записана на LT" in result
+
+
+def test_registration_country_triggers_warning(monkeypatch):
+    """Выход в Германии, а сеть записана на запрещённую страну — это и есть отказ."""
+    from elevenlabs_voiceover import api_client
+
+    route_lookups(monkeypatch, loc="DE", rdap={"name": "SOME-NET", "country": "RU"})
+
+    result = api_client.outbound_address()
+    assert "страна DE" in result
+    assert "нужен другой адрес" in result
+
+
+def test_clean_network_gives_no_warning(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    route_lookups(monkeypatch, loc="US", rdap={"name": "AT-88-Z", "country": "US"})
+    assert "нужен другой адрес" not in api_client.outbound_address()
+
+
+def test_owner_lookup_failure_is_not_fatal(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    def get(self, url, **kwargs):
+        if "cdn-cgi/trace" in url:
+            return response(200, content=b"ip=203.0.113.7\nloc=US\n")
+        raise requests.exceptions.ConnectionError("реестр недоступен")
+
+    monkeypatch.setattr(requests.Session, "get", get)
     assert api_client.outbound_address() == "203.0.113.7, страна US"
 
 
 def test_outbound_address_warns_about_blocked_country(monkeypatch):
     from elevenlabs_voiceover import api_client
 
-    trace = "ip=203.0.113.7\nloc=RU\n"
-    monkeypatch.setattr(
-        requests.Session, "get", lambda self, url, **kw: response(200, content=trace.encode())
-    )
+    route_lookups(monkeypatch, loc="RU")
 
     result = api_client.outbound_address()
     assert "страна RU" in result
-    assert "смените страну" in result
+    assert "нужен другой адрес" in result
 
 
 def test_outbound_address_survives_failure(monkeypatch):
@@ -581,6 +629,18 @@ def test_outbound_address_uses_proxy(monkeypatch):
 
     assert seen["proxies"]["https"] == "socks5h://127.0.0.1:1080"
     assert "страна DE" in result
+
+
+def test_geo_block_message_explains_server_addresses(client):
+    """Человеку с европейским VPN важно понять, почему его всё равно отклонили."""
+    use(client, response(200, content=GEO_BLOCK_PAGE, headers={"Content-Type": "text/html"}))
+
+    with pytest.raises(InvalidResponse) as exc:
+        client.get_subscription()
+
+    message = str(exc.value)
+    assert "серверные адреса" in message
+    assert "резидентный" in message
 
 
 def test_decoder_support_always_lists_gzip():
