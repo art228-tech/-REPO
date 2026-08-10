@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from . import audio as audio_utils
+from .api_client import safe_proxy_summary
 from .config import Settings
 from .logging_setup import get_logger, log_files, redact
 from .paths import reports_dir, user_data_dir
@@ -50,6 +51,9 @@ def environment_info() -> Dict[str, Any]:
         "machine": platform.machine(),
         "data_dir": str(user_data_dir()),
         "ffmpeg": ffmpeg or "не найден",
+        # Прокси стоит первым подозреваемым, когда вместо ответа API приходит
+        # веб-страница, поэтому попадает в отчёт всегда.
+        "proxy": safe_proxy_summary() or "не настроен",
     }
 
 

@@ -8,6 +8,7 @@ from elevenlabs_voiceover.api_client import ElevenLabsClient
 from elevenlabs_voiceover.errors import (
     AuthError,
     ElevenLabsError,
+    InvalidResponse,
     NetworkError,
     QuotaExceeded,
     ScopeError,
@@ -191,6 +192,74 @@ def test_retry_after_header_is_respected(client):
     )
     client.get_subscription()
     assert delays == [7.0]
+
+
+def test_html_page_instead_of_json_is_explained(client):
+    page = b"<!DOCTYPE html><html><head><title>Blocked</title></head><body>nope</body></html>"
+    use(client, response(200, content=page, headers={"Content-Type": "text/html; charset=utf-8"}))
+
+    with pytest.raises(InvalidResponse) as exc:
+        client.get_subscription()
+
+    message = str(exc.value)
+    assert "веб-страница" in message
+    assert "text/html" in message
+    # В сообщении должно быть начало ответа, иначе причину не разобрать.
+    assert "DOCTYPE" in message
+
+
+def test_cloudflare_page_is_named(client):
+    page = b"<html><body>Attention Required! | Cloudflare</body></html>"
+    use(client, response(200, content=page, headers={"cf-ray": "8a2b3c4d", "Content-Type": "text/html"}))
+
+    with pytest.raises(InvalidResponse) as exc:
+        client.get_subscription()
+    assert "Cloudflare" in str(exc.value)
+
+
+def test_plain_garbage_body_is_reported(client):
+    use(client, response(200, content=b"\x00\x01\x02 not json at all",
+                         headers={"Content-Type": "application/octet-stream"}))
+
+    with pytest.raises(InvalidResponse) as exc:
+        client.get_subscription()
+    assert "не похоже ни на JSON" in str(exc.value)
+
+
+def test_bad_body_is_retried(client):
+    session = use(
+        client,
+        response(200, content="<html>перехват</html>".encode(), headers={"Content-Type": "text/html"}),
+        response(200, _subscription_body()),
+    )
+
+    result = client.get_subscription()
+
+    assert result.tier == "free"
+    assert len(session.calls) == 2
+
+
+def test_bad_body_gives_up_after_retries(client):
+    session = use(client, response(200, content="<html>всегда так</html>".encode(),
+                                   headers={"Content-Type": "text/html"}))
+    with pytest.raises(InvalidResponse):
+        client.get_subscription()
+    assert len(session.calls) == 4
+
+
+def test_api_key_is_not_leaked_into_bad_body_message(client):
+    # Заглушка может отразить запрос вместе с заголовками.
+    page = b"<html>rejected request with xi-api-key: sk_test_key_1234567890</html>"
+    use(client, response(200, content=page, headers={"Content-Type": "text/html"}))
+
+    with pytest.raises(InvalidResponse) as exc:
+        client.get_subscription()
+    assert "sk_test_key_1234567890" not in str(exc.value)
+
+
+def test_empty_body_with_success_is_not_an_error(client):
+    use(client, response(200, content=b""))
+    assert client.list_voices() == []
 
 
 def test_non_json_error_body_is_handled(client):

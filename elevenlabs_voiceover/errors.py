@@ -83,6 +83,17 @@ class QuotaExceeded(ElevenLabsError):
     fatal = True
 
 
+class InvalidResponse(ElevenLabsError):
+    """Ответ пришёл с кодом успеха, но это не то, что отдаёт API.
+
+    Почти всегда означает, что соединение читает кто-то посередине: антивирус
+    с проверкой HTTPS, корпоративный прокси, VPN или страница-заглушка
+    провайдера. Повторить стоит: перехват бывает и разовым.
+    """
+
+    retryable = True
+
+
 class ValidationFailed(ElevenLabsError):
     """422: запрос не прошёл валидацию. Повтор не поможет."""
 

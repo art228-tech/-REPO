@@ -13,6 +13,7 @@ import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
 
 import requests
 
@@ -20,6 +21,7 @@ from .errors import (
     AuthError,
     Cancelled,
     ElevenLabsError,
+    InvalidResponse,
     NetworkError,
     QuotaExceeded,
     RateLimited,
@@ -28,7 +30,7 @@ from .errors import (
     ValidationFailed,
     VoiceLimitReached,
 )
-from .logging_setup import get_logger, register_secret
+from .logging_setup import get_logger, redact, register_secret
 
 log = get_logger("api")
 
@@ -128,6 +130,11 @@ class ElevenLabsClient:
             }
         )
 
+        # Прокси — самая частая причина подменённых ответов, и без записи в лог
+        # понять это по отчёту невозможно.
+        proxy = safe_proxy_summary()
+        log.debug("Соединение с %s%s", self._base_url, f", прокси: {proxy}" if proxy else ", без прокси")
+
     # ------------------------------------------------------------------
     def close(self) -> None:
         try:
@@ -207,13 +214,11 @@ class ElevenLabsClient:
                         return None, headers
                     try:
                         return response.json(), headers
-                    except ValueError as exc:
-                        raise ElevenLabsError(
-                            f"API вернул не-JSON ответ: {exc}",
-                            status_code=response.status_code,
-                            endpoint=path,
-                        ) from exc
-                error = self._classify(response, path)
+                    except ValueError:
+                        error = _describe_bad_body(response, path)
+                        log.warning("%s", error.message)
+                else:
+                    error = self._classify(response, path)
 
             if error.fatal or not error.retryable or attempt > self._max_retries:
                 if isinstance(error, RateLimited) and attempt > self._max_retries:
@@ -478,6 +483,72 @@ class ElevenLabsClient:
             request_id=headers.get("request-id") or headers.get("x-request-id"),
             characters=len(text),
         )
+
+
+_HTML_MARKERS = (b"<!doctype html", b"<html", b"<head", b"<body", b"<!--")
+
+
+def safe_proxy_summary() -> str:
+    """Прокси, через которые пойдут запросы, без логинов и паролей."""
+    try:
+        proxies = requests.utils.getproxies()
+    except Exception:  # noqa: BLE001 - опрос системных настроек не должен ронять запуск
+        return ""
+
+    parts = []
+    for scheme in ("http", "https"):
+        url = proxies.get(scheme)
+        if not url:
+            continue
+        try:
+            split = urlsplit(url if "://" in url else f"//{url}")
+            host = split.hostname or "?"
+            port = f":{split.port}" if split.port else ""
+            parts.append(f"{scheme} через {host}{port}")
+        except ValueError:
+            parts.append(f"{scheme} через (адрес не разобран)")
+    return ", ".join(parts)
+
+
+def _describe_bad_body(response: requests.Response, path: str) -> InvalidResponse:
+    """Объяснить, что пришло вместо JSON, и на кого это похоже.
+
+    Без разбора тела в логе остаётся только «Expecting value: line 1 column 1»,
+    по которому невозможно понять, кто именно вмешался в соединение.
+    """
+    content_type = (response.headers.get("Content-Type") or "не указан").split(";")[0].strip()
+    body = response.content or b""
+    head = body[:512].lower()
+
+    snippet = redact(
+        body[:300].decode("utf-8", errors="replace").replace("\r", " ").replace("\n", " ").strip()
+    )
+
+    header_names = {k.lower() for k in response.headers}
+    if b"cloudflare" in head or "cf-ray" in header_names or "cf-mitigated" in header_names:
+        cause = (
+            "Похоже на проверочную страницу Cloudflare: запрос сочли подозрительным. "
+            "Чаще всего дело в VPN или прокси, через который идёт соединение."
+        )
+    elif any(marker in head for marker in _HTML_MARKERS) or content_type.startswith("text/html"):
+        cause = (
+            "Вместо ответа API пришла веб-страница. Так бывает, когда соединение читает "
+            "кто-то посередине: антивирус с проверкой HTTPS, корпоративный прокси, VPN "
+            "или страница-заглушка провайдера."
+        )
+    else:
+        cause = "Тело ответа не похоже ни на JSON, ни на веб-страницу."
+
+    proxy = safe_proxy_summary()
+    proxy_note = f" В системе настроен прокси: {proxy}." if proxy else ""
+
+    return InvalidResponse(
+        f"{cause}{proxy_note} Тип содержимого {content_type}, {len(body)} байт. "
+        f"Начало ответа: «{snippet}»",
+        status_code=response.status_code,
+        payload=snippet,
+        endpoint=path,
+    )
 
 
 def _parse_error_body(response: requests.Response) -> Tuple[Optional[str], str, Any]:
