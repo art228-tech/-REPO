@@ -776,6 +776,9 @@ class App:
         self.lbl_account.configure(text="Проверяю ключ…", style="Hint.TLabel")
         self._set_busy(True)
 
+        route = describe_route(settings.proxy_url, settings.ignore_system_proxy)
+        log.info("Проверяю ключ, путь в сеть: %s", route)
+
         def work() -> None:
             try:
                 subscription, models = verify_key(
@@ -785,9 +788,9 @@ class App:
                     ignore_system_proxy=settings.ignore_system_proxy,
                 )
             except ElevenLabsError as exc:
-                self.events.put(("verify_failed", str(exc)))
+                self.events.put(("verify_failed", f"{exc}\n\nЗапрос шёл {route}."))
             except Exception as exc:  # noqa: BLE001
-                self.events.put(("verify_failed", f"Непредвиденная ошибка: {exc}"))
+                self.events.put(("verify_failed", f"Непредвиденная ошибка: {exc}\n\nЗапрос шёл {route}."))
             else:
                 self.events.put(("verify_ok", subscription, models))
 
