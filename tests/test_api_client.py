@@ -208,6 +208,49 @@ def test_html_page_instead_of_json_is_explained(client):
     assert "DOCTYPE" in message
 
 
+#: Страница, которую ElevenLabs присылает вместо ответа API запросам из стран,
+#: которые не обслуживает. Приходит с кодом 200.
+GEO_BLOCK_PAGE = (
+    b'<!DOCTYPE html> <html dir="ltr" lang="en-US"> <head> <meta charset="utf-8" /> '
+    b"<title>Do you restrict access to the service and platform for any specific "
+    b'countries? &ndash; ElevenLabs</title> <meta name="description" '
+    b'content="We are required to restrict access from the following countries" />'
+)
+
+
+def test_country_restriction_page_is_recognised(client):
+    use(client, response(200, content=GEO_BLOCK_PAGE, headers={"Content-Type": "text/html"}))
+
+    with pytest.raises(InvalidResponse) as exc:
+        client.get_subscription()
+
+    message = str(exc.value)
+    assert "по странам" in message
+    assert "VPN" in message
+    # Ключ ни при чём, и об этом надо сказать прямо.
+    assert "ключ здесь ни при чём" in message.lower()
+
+
+def test_country_restriction_wins_over_cloudflare(client):
+    """На странице ограничений тоже бывает след Cloudflare, но причина другая."""
+    use(client, response(200, content=GEO_BLOCK_PAGE,
+                         headers={"Content-Type": "text/html", "cf-ray": "8a2b3c4d"}))
+
+    with pytest.raises(InvalidResponse) as exc:
+        client.get_subscription()
+    assert "по странам" in str(exc.value)
+
+
+def test_restriction_marker_found_beyond_first_bytes(client):
+    """Заголовок страницы может оказаться далеко от начала тела."""
+    padded = b"<html><head>" + b" " * 1500 + GEO_BLOCK_PAGE
+    use(client, response(200, content=padded, headers={"Content-Type": "text/html"}))
+
+    with pytest.raises(InvalidResponse) as exc:
+        client.get_subscription()
+    assert "по странам" in str(exc.value)
+
+
 def test_cloudflare_page_is_named(client):
     page = b"<html><body>Attention Required! | Cloudflare</body></html>"
     use(client, response(200, content=page, headers={"cf-ray": "8a2b3c4d", "Content-Type": "text/html"}))
@@ -481,6 +524,65 @@ def test_list_voices_handles_unexpected_shape(client):
     assert client.list_voices() == []
 
 
+def test_outbound_address_reports_ip_and_country(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    trace = "fl=123\nip=203.0.113.7\nts=1\nvisit_scheme=https\nloc=US\n"
+    monkeypatch.setattr(
+        requests.Session, "get", lambda self, url, **kw: response(200, content=trace.encode())
+    )
+
+    assert api_client.outbound_address() == "203.0.113.7, страна US"
+
+
+def test_outbound_address_warns_about_blocked_country(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    trace = "ip=203.0.113.7\nloc=RU\n"
+    monkeypatch.setattr(
+        requests.Session, "get", lambda self, url, **kw: response(200, content=trace.encode())
+    )
+
+    result = api_client.outbound_address()
+    assert "страна RU" in result
+    assert "смените страну" in result
+
+
+def test_outbound_address_survives_failure(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    def boom(self, url, **kwargs):
+        raise requests.exceptions.ConnectionError("нет связи")
+
+    monkeypatch.setattr(requests.Session, "get", boom)
+    assert api_client.outbound_address() == ""
+
+
+def test_outbound_address_handles_junk_response(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    monkeypatch.setattr(
+        requests.Session, "get", lambda self, url, **kw: response(200, content="<html>ерунда</html>".encode())
+    )
+    assert api_client.outbound_address() == ""
+
+
+def test_outbound_address_uses_proxy(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    seen = {}
+
+    def get(self, url, **kwargs):
+        seen["proxies"] = dict(self.proxies)
+        return response(200, content=b"ip=1.2.3.4\nloc=DE\n")
+
+    monkeypatch.setattr(requests.Session, "get", get)
+    result = api_client.outbound_address(proxy_url="socks5h://127.0.0.1:1080")
+
+    assert seen["proxies"]["https"] == "socks5h://127.0.0.1:1080"
+    assert "страна DE" in result
+
+
 def test_decoder_support_always_lists_gzip():
     from elevenlabs_voiceover.api_client import decoder_support
 
@@ -572,9 +674,12 @@ def test_probe_sends_key_only_where_needed(monkeypatch):
     calls = fake_session_get(monkeypatch, lambda url, **kw: response(200, {"ok": True}))
     api_client.probe_connection("sk_test_key_1234567890")
 
-    assert "xi-api-key" not in calls[0][1]["headers"]
-    assert "xi-api-key" in calls[1][1]["headers"]
-    assert calls[2][0].endswith("/v1/user/subscription")
+    # Первым идёт служебный запрос за адресом выхода, он к API не относится.
+    api_calls = [c for c in calls if "/v1/" in c[0]]
+
+    assert "xi-api-key" not in api_calls[0][1]["headers"]
+    assert "xi-api-key" in api_calls[1][1]["headers"]
+    assert api_calls[2][0].endswith("/v1/user/subscription")
 
 
 def test_probe_does_not_leak_key_into_snippet(monkeypatch):

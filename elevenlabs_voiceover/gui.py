@@ -38,6 +38,7 @@ from .api_client import (
     describe_route,
     detect_proxy_scheme,
     hide_credentials,
+    outbound_address,
     probe_connection,
     swap_proxy_scheme,
     verify_key,
@@ -939,9 +940,13 @@ class App:
             return
         report = "\n\n".join(r.line() for r in results)
         settings = self.settings
+        outbound = outbound_address(
+            proxy_url=settings.proxy_url, ignore_system_proxy=settings.ignore_system_proxy
+        )
         tail = (
-            f"\n\nСжатие, доступное программе: {decoder_support()}"
-            f"\nПуть в сеть: {describe_route(settings.proxy_url, settings.ignore_system_proxy)}"
+            f"\n\nПуть в сеть: {describe_route(settings.proxy_url, settings.ignore_system_proxy)}"
+            f"\nВыход в интернет: {outbound or 'определить не удалось'}"
+            f"\nСжатие, доступное программе: {decoder_support()}"
         )
 
         if not broken:

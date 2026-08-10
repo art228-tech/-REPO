@@ -492,6 +492,16 @@ class ElevenLabsClient:
 
 _HTML_MARKERS = (b"<!doctype html", b"<html", b"<head", b"<body", b"<!--")
 
+#: Признаки страницы ElevenLabs про запрет обслуживания отдельных стран. Она
+#: приходит с кодом 200 вместо ответа API, и без разбора тела выглядит просто
+#: как «ответ не разобрался».
+_GEO_BLOCK_MARKERS = (
+    b"restrict access",
+    b"specific countries",
+    b"not available in your country",
+    b"unsupported region",
+)
+
 
 def hide_credentials(url: str) -> str:
     """Убрать логин и пароль из адреса прокси перед записью в лог.
@@ -577,14 +587,21 @@ def _describe_bad_body(response: requests.Response, path: str) -> InvalidRespons
     """
     content_type = (response.headers.get("Content-Type") or "не указан").split(";")[0].strip()
     body = response.content or b""
-    head = body[:512].lower()
+    head = body[:4096].lower()
 
     snippet = redact(
         body[:300].decode("utf-8", errors="replace").replace("\r", " ").replace("\n", " ").strip()
     )
 
     header_names = {k.lower() for k in response.headers}
-    if b"cloudflare" in head or "cf-ray" in header_names or "cf-mitigated" in header_names:
+    if any(marker in head for marker in _GEO_BLOCK_MARKERS):
+        cause = (
+            "ElevenLabs ответил своей справкой об ограничениях по странам: сервис не "
+            "обслуживает страну, из которой пришёл запрос. API-ключ здесь ни при чём. "
+            "Нужно сменить страну в VPN — подойдут США или Европа. Убедитесь также, что "
+            "через VPN идёт весь трафик, а не только выбранные сайты."
+        )
+    elif b"cloudflare" in head or "cf-ray" in header_names or "cf-mitigated" in header_names:
         cause = (
             "Похоже на проверочную страницу Cloudflare: запрос сочли подозрительным. "
             "Чаще всего дело в VPN или прокси, через который идёт соединение."
@@ -661,6 +678,46 @@ def detect_proxy_scheme(
     return None
 
 
+#: Служебная страница Cloudflare: отдаёт адрес и страну выхода простым текстом.
+TRACE_URL = "https://www.cloudflare.com/cdn-cgi/trace"
+
+#: Страны, из которых ElevenLabs не обслуживает запросы. Список неполный и может
+#: меняться, поэтому служит только подсказкой в проверке соединения.
+_LIKELY_BLOCKED = {"RU", "BY", "IR", "KP", "SY", "CU", "VE"}
+
+
+def outbound_address(timeout: int = 10, proxy_url: str = "", ignore_system_proxy: bool = False) -> str:
+    """Узнать, с какого адреса и из какой страны запросы выходят наружу.
+
+    Главный вопрос при отказе по географии — действительно ли трафик идёт через
+    VPN и в какой стране он выныривает. Догадаться об этом по ошибке нельзя.
+    """
+    session = requests.Session()
+    apply_proxy(session, proxy_url, ignore_system_proxy)
+    try:
+        response = session.get(TRACE_URL, timeout=(timeout, timeout))
+        values = dict(
+            line.split("=", 1)
+            for line in (response.text or "").splitlines()
+            if "=" in line
+        )
+    except (requests.exceptions.RequestException, ValueError) as exc:
+        log.debug("Адрес выхода определить не удалось: %s", str(exc)[:150])
+        return ""
+    finally:
+        session.close()
+
+    ip = values.get("ip", "")
+    country = (values.get("loc") or "").upper()
+    if not ip:
+        return ""
+
+    note = ""
+    if country in _LIKELY_BLOCKED:
+        note = " — ElevenLabs такие страны не обслуживает, смените страну в VPN"
+    return f"{ip}, страна {country or 'не определена'}{note}"
+
+
 @dataclass
 class ProbeResult:
     """Что именно вернулось на один пробный запрос."""
@@ -727,6 +784,9 @@ def probe_connection(
 
     log.info("Проверка соединения. Поддерживаемое сжатие: %s", decoder_support())
     log.info("Путь в сеть: %s", describe_route(proxy_url, ignore_system_proxy))
+
+    outbound = outbound_address(proxy_url=proxy_url, ignore_system_proxy=ignore_system_proxy)
+    log.info("Выход в интернет: %s", outbound or "определить не удалось")
 
     session = requests.Session()
     apply_proxy(session, proxy_url, ignore_system_proxy)

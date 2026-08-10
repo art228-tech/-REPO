@@ -12,6 +12,7 @@ from .api_client import (
     decoder_support,
     describe_route,
     detect_proxy_scheme,
+    outbound_address,
     probe_connection,
     swap_proxy_scheme,
     verify_key,
@@ -138,8 +139,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     if args.diagnose:
-        say(f"Сжатие, доступное программе: {decoder_support()}")
         say(f"Путь в сеть: {describe_route(settings.proxy_url, settings.ignore_system_proxy)}")
+        outbound = outbound_address(
+            proxy_url=settings.proxy_url, ignore_system_proxy=settings.ignore_system_proxy
+        )
+        say(f"Выход в интернет: {outbound or 'определить не удалось'}")
+        say(f"Сжатие, доступное программе: {decoder_support()}")
         say("")
         broken = 0
         for result in probe_connection(
