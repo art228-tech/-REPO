@@ -20,6 +20,7 @@ from tkinter import (
     IntVar,
     StringVar,
     Tk,
+    Variable,
     X,
     Y,
     filedialog,
@@ -30,7 +31,14 @@ from tkinter import (
 from typing import Any, List, Optional
 
 from . import clipboard, diagnostics
-from .api_client import ModelInfo, decoder_support, describe_route, probe_connection, verify_key
+from .api_client import (
+    ModelInfo,
+    decoder_support,
+    describe_route,
+    hide_credentials,
+    probe_connection,
+    verify_key,
+)
 from .audio import find_ffmpeg
 from .config import (
     DEFAULT_GUIDANCE,
@@ -38,6 +46,7 @@ from .config import (
     MODE_ROUND_ROBIN,
     VOICE_MODES,
     Settings,
+    normalize_proxy_url,
 )
 from .errors import ElevenLabsError
 from .logging_setup import add_gui_handler, get_logger, register_secret, setup_logging
@@ -82,8 +91,12 @@ class App:
         self.worker: Optional[threading.Thread] = None
         self.models: List[ModelInfo] = []
 
+        self._save_job: Optional[str] = None
+        self._autosave_ready = False
+
         self._build_ui()
         self._settings_to_widgets()
+        self._enable_autosave()
 
         self.log_handler = add_gui_handler(self._enqueue_log)
         self.root.after(100, self._drain_events)
@@ -92,6 +105,7 @@ class App:
         register_secret(self.settings.api_key)
         self._refresh_estimate()
         self._report_ffmpeg()
+        self._refresh_proxy_hint()
 
     # ==================================================================
     # Построение интерфейса
@@ -130,6 +144,38 @@ class App:
         self._build_settings_tab(_scrollable(self.tab_settings))
         self._build_log_tab(self.tab_log)
         self._enable_clipboard()
+
+    def _enable_autosave(self) -> None:
+        """Сохранять настройки сразу, а не только при запуске и выходе.
+
+        Поля перебираем по атрибутам var_*, а не списком: список рано или
+        поздно разойдётся с окном, и очередная настройка потеряется.
+        """
+        for name, value in vars(self).items():
+            if name.startswith("var_") and isinstance(value, Variable):
+                value.trace_add("write", lambda *_: self._schedule_save())
+
+        self.txt_preview.bind("<KeyRelease>", lambda _e: self._schedule_save())
+        self.txt_preview.bind("<<Paste>>", lambda _e: self._schedule_save())
+        self._autosave_ready = True
+
+    def _schedule_save(self) -> None:
+        """Отложить запись: пока человек печатает, писать на диск каждый символ ни к чему."""
+        if not self._autosave_ready:
+            return
+        if self._save_job is not None:
+            try:
+                self.root.after_cancel(self._save_job)
+            except Exception:  # noqa: BLE001
+                pass
+        self._save_job = self.root.after(700, self._save_now)
+
+    def _save_now(self) -> None:
+        self._save_job = None
+        try:
+            self._widgets_to_settings().save()
+        except Exception as exc:  # noqa: BLE001 - неудачная запись не должна мешать работе
+            log.debug("Не удалось сохранить настройки: %s", exc)
 
     def _enable_clipboard(self) -> None:
         """Оживить работу с буфером во всех полях окна.
@@ -456,11 +502,16 @@ class App:
         row += 1
         ttk.Label(
             canvas_frame,
-            text="Пусто — как настроено в Windows. Иначе, например, socks5h://127.0.0.1:1080 "
-                 "или http://127.0.0.1:8080. Пригодится, если соединение с ElevenLabs рвётся: "
-                 "многие VPN поднимают у себя такой адрес.",
+            text="Пусто — как настроено в Windows. Понимает socks5h://127.0.0.1:1080, "
+                 "http://127.0.0.1:8080 и запись продавцов прокси адрес:порт:логин:пароль.",
             style="Hint.TLabel", justify=LEFT, wraplength=700,
-        ).grid(row=row, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        ).grid(row=row, column=1, columnspan=2, sticky="w")
+        row += 1
+
+        self.lbl_proxy = ttk.Label(canvas_frame, text="", style="Hint.TLabel",
+                                   justify=LEFT, wraplength=700)
+        self.lbl_proxy.grid(row=row, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        self.var_proxy.trace_add("write", lambda *_: self._refresh_proxy_hint())
         row += 1
 
         self.var_ignore_system_proxy = BooleanVar(value=False)
@@ -673,6 +724,32 @@ class App:
 
     def _open_keys_page(self) -> None:
         webbrowser.open("https://elevenlabs.io/app/developers/api-keys")
+
+    def _refresh_proxy_hint(self) -> None:
+        """Показать, во что превратился введённый адрес.
+
+        Непонятный адрес программа отбрасывает; без подписи это выглядит как
+        будто настройка просто не работает.
+        """
+        raw = self.var_proxy.get().strip()
+        if not raw:
+            self.lbl_proxy.configure(text="Сейчас: путь в сеть берётся из настроек Windows.",
+                                     style="Hint.TLabel")
+            return
+
+        parsed = normalize_proxy_url(raw)
+        if parsed:
+            self.lbl_proxy.configure(
+                text=f"Будет использован: {hide_credentials(parsed)}"
+                     + (" (с логином и паролем)" if "@" in parsed else ""),
+                style="Good.TLabel",
+            )
+        else:
+            self.lbl_proxy.configure(
+                text="Адрес не разобран, прокси использован не будет. "
+                     "Ожидается вид адрес:порт, адрес:порт:логин:пароль либо со схемой впереди.",
+                style="Bad.TLabel",
+            )
 
     def _report_ffmpeg(self) -> None:
         found = find_ffmpeg()

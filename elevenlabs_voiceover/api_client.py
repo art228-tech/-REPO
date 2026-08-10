@@ -491,15 +491,25 @@ _HTML_MARKERS = (b"<!doctype html", b"<html", b"<head", b"<body", b"<!--")
 
 
 def hide_credentials(url: str) -> str:
-    """Убрать логин и пароль из адреса прокси перед записью в лог."""
-    try:
-        split = urlsplit(url if "://" in url else f"//{url}")
-    except ValueError:
-        return "(адрес не разобран)"
-    host = split.hostname or "?"
-    port = f":{split.port}" if split.port else ""
-    scheme = f"{split.scheme}://" if split.scheme else ""
-    return f"{scheme}{host}{port}"
+    """Убрать логин и пароль из адреса прокси перед записью в лог.
+
+    Разбор строковый, без urlsplit: его свойство port бросает исключение на
+    любом непонятном адресе, а функция вызывается из конструктора клиента и
+    обязана отработать при любом содержимом поля.
+    """
+    text = (url or "").strip()
+    if not text:
+        return ""
+
+    scheme, separator, rest = text.partition("://")
+    if not separator:
+        scheme, rest = "", text
+
+    if "@" in rest:
+        rest = rest.rsplit("@", 1)[1]
+    rest = rest.split("/", 1)[0]
+
+    return f"{scheme}://{rest}" if scheme else rest
 
 
 def apply_proxy(session: requests.Session, proxy_url: str = "", ignore_system_proxy: bool = False) -> None:
@@ -516,14 +526,22 @@ def apply_proxy(session: requests.Session, proxy_url: str = "", ignore_system_pr
 
 
 def describe_route(proxy_url: str = "", ignore_system_proxy: bool = False) -> str:
-    """Человекочитаемое описание пути в сеть — для лога и отчёта."""
-    proxy = (proxy_url or "").strip()
-    if proxy:
-        return f"через свой прокси {hide_credentials(proxy)}"
-    if ignore_system_proxy:
-        return "напрямую, системный прокси отключён"
-    system = safe_proxy_summary()
-    return f"через системный прокси ({system})" if system else "напрямую"
+    """Человекочитаемое описание пути в сеть — для лога и отчёта.
+
+    Вызывается при создании клиента, поэтому не имеет права бросить исключение:
+    иначе непонятная строка в поле прокси уронит запуск ещё до первого запроса.
+    """
+    try:
+        proxy = (proxy_url or "").strip()
+        if proxy:
+            return f"через свой прокси {hide_credentials(proxy)}"
+        if ignore_system_proxy:
+            return "напрямую, системный прокси отключён"
+        system = safe_proxy_summary()
+        return f"через системный прокси ({system})" if system else "напрямую"
+    except Exception as exc:  # noqa: BLE001
+        log.debug("Не удалось описать путь в сеть: %s", exc)
+        return "путь в сеть определить не удалось"
 
 
 def safe_proxy_summary() -> str:

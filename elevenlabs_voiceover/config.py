@@ -6,7 +6,7 @@ import json
 import os
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from .logging_setup import get_logger, register_secret
 from .paths import config_path
@@ -209,23 +209,84 @@ PROXY_SCHEMES = ("http", "https", "socks5", "socks5h", "socks4")
 def normalize_proxy_url(value: str) -> str:
     """Привести адрес прокси к виду, который примет requests.
 
-    Человек обычно пишет просто «127.0.0.1:1080», без схемы. Молча уронить
-    запуск из-за этого нельзя, поэтому недостающую схему подставляем сами.
+    Принимаются все ходовые записи, потому что человек копирует адрес оттуда,
+    где его выдали, а не переписывает под формат библиотеки:
+
+        127.0.0.1:1080                      -> http://127.0.0.1:1080
+        socks5h://127.0.0.1:1080            -> без изменений
+        1.2.3.4:8000:логин:пароль           -> http://логин:пароль@1.2.3.4:8000
+        socks5://1.2.3.4:8000:логин:пароль  -> socks5://логин:пароль@1.2.3.4:8000
+
+    Третья строка — то, в каком виде прокси продают чаще всего.
     """
     text = (value or "").strip()
     if not text:
         return ""
 
-    if "://" not in text:
-        text = f"http://{text}"
+    scheme, separator, rest = text.partition("://")
+    if separator:
+        scheme = scheme.lower()
+    else:
+        scheme, rest = "http", text
 
-    scheme, _, rest = text.partition("://")
-    scheme = scheme.lower()
-    if scheme not in PROXY_SCHEMES or not rest.strip("/"):
-        log.warning("Адрес прокси %r не разобран, пропускаю его", value)
+    if scheme not in PROXY_SCHEMES:
+        log.warning("Схема прокси %r не поддерживается, адрес не будет использован", scheme)
         return ""
 
-    return f"{scheme}://{rest}"
+    rest = rest.strip("/").strip()
+    if not rest:
+        log.warning("В адресе прокси нет самого адреса, он не будет использован")
+        return ""
+
+    credentials = ""
+    if "@" in rest:
+        credentials, _, rest = rest.rpartition("@")
+        credentials = f"{credentials}@"
+
+    host_port = _parse_host_port(rest)
+    if host_port is None:
+        log.warning("Адрес прокси %r не разобран, он не будет использован", value)
+        return ""
+
+    host, port, extra_credentials = host_port
+    if extra_credentials and not credentials:
+        credentials = extra_credentials
+    elif extra_credentials:
+        log.warning("В адресе прокси логин и пароль указаны дважды, беру те, что перед знаком @")
+
+    return f"{scheme}://{credentials}{host}:{port}" if port else f"{scheme}://{credentials}{host}"
+
+
+def _parse_host_port(rest: str) -> Optional[Tuple[str, str, str]]:
+    """Разобрать хвост адреса. Возвращает хост, порт и логин с паролем."""
+    # Адрес IPv6 записывают в скобках, двоеточия внутри трогать нельзя.
+    if rest.startswith("["):
+        closing = rest.find("]")
+        if closing == -1:
+            return None
+        host = rest[: closing + 1]
+        tail = rest[closing + 1 :]
+        if not tail:
+            return host, "", ""
+        if tail.startswith(":") and tail[1:].isdigit():
+            return host, tail[1:], ""
+        return None
+
+    parts = rest.split(":")
+
+    if len(parts) == 1:
+        return parts[0], "", ""
+
+    if len(parts) == 2:
+        host, port = parts
+        return (host, port, "") if port.isdigit() else None
+
+    # Формат продавцов прокси: адрес:порт:логин:пароль.
+    if len(parts) == 4 and parts[1].isdigit():
+        host, port, user, password = parts
+        return host, port, f"{user}:{password}@"
+
+    return None
 
 
 def _clamp_int(value: Any, low: int, high: int, default: int) -> int:

@@ -1,0 +1,139 @@
+"""Настройки должны сохраняться сами, а не только при запуске и выходе."""
+
+from __future__ import annotations
+
+import pytest
+
+pytest.importorskip("tkinter")
+
+import tkinter as tk
+
+from elevenlabs_voiceover.config import Settings
+from elevenlabs_voiceover.logging_setup import setup_logging
+
+
+@pytest.fixture
+def app(isolated_data_dir):
+    from elevenlabs_voiceover.gui import App
+
+    setup_logging()
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"нет графического окружения: {exc}")
+    root.withdraw()
+
+    instance = App(root)
+    try:
+        yield instance
+    finally:
+        instance.state.close()
+        root.destroy()
+
+
+def flush(app) -> None:
+    """Дождаться отложенной записи настроек."""
+    app._save_now()
+    app.root.update_idletasks()
+
+
+def reload_settings() -> Settings:
+    return Settings.load()
+
+
+# ----------------------------------------------------------------------
+def test_autosave_is_armed(app):
+    assert app._autosave_ready is True
+
+
+def test_change_is_scheduled_for_saving(app):
+    app.var_max_voices.set(7)
+    app.root.update_idletasks()
+    assert app._save_job is not None
+
+
+def test_folder_is_saved(app, tmp_path):
+    app.var_texts_dir.set(str(tmp_path))
+    flush(app)
+    assert reload_settings().texts_dir == str(tmp_path)
+
+
+def test_proxy_is_saved(app):
+    app.var_proxy.set("socks5h://127.0.0.1:1080")
+    flush(app)
+    assert reload_settings().proxy_url == "socks5h://127.0.0.1:1080"
+
+
+def test_seller_format_proxy_is_saved_normalised(app):
+    app.var_proxy.set("1.2.3.4:8000:wVgThP:kjSdfL")
+    flush(app)
+    assert reload_settings().proxy_url == "http://wVgThP:kjSdfL@1.2.3.4:8000"
+
+
+def test_checkbox_is_saved(app):
+    app.var_ignore_system_proxy.set(True)
+    flush(app)
+    assert reload_settings().ignore_system_proxy is True
+
+
+def test_slider_is_saved(app):
+    app.var_stability.set(0.23)
+    flush(app)
+    assert abs(reload_settings().stability - 0.23) < 1e-6
+
+
+def test_guidance_is_saved(app):
+    app.var_guidance.set(30.0)
+    flush(app)
+    assert reload_settings().guidance_scale == 30.0
+
+
+def test_model_is_saved(app):
+    app.var_model.set("eleven_multilingual_v2")
+    flush(app)
+    assert reload_settings().model_id == "eleven_multilingual_v2"
+
+
+def test_preview_text_is_saved(app):
+    text = "Новый текст прослушивания, достаточно длинный для того, чтобы пройти проверку минимальной длины в сто символов."
+    app.txt_preview.delete("1.0", "end")
+    app.txt_preview.insert("1.0", text)
+    flush(app)
+    assert reload_settings().preview_text == text
+
+
+def test_api_key_is_saved_when_remembered(app):
+    app.var_remember_key.set(True)
+    app.var_api_key.set("sk_saved_key_1234567890")
+    flush(app)
+    assert reload_settings().api_key == "sk_saved_key_1234567890"
+
+
+def test_api_key_is_not_saved_when_not_remembered(app):
+    app.var_remember_key.set(False)
+    app.var_api_key.set("sk_secret_not_to_store_1234")
+    flush(app)
+    assert reload_settings().api_key == ""
+
+
+def test_every_variable_is_watched(app):
+    """Ни одно поле окна не должно остаться без автосохранения."""
+    unwatched = [
+        name
+        for name, value in vars(app).items()
+        if name.startswith("var_") and isinstance(value, tk.Variable)
+        and not value.trace_info()
+    ]
+    assert unwatched == []
+
+
+def test_settings_survive_restart(app, tmp_path):
+    app.var_output_dir.set(str(tmp_path))
+    app.var_chunk.set(1200)
+    app.var_reserve.set(2500)
+    flush(app)
+
+    restored = reload_settings()
+    assert restored.output_dir == str(tmp_path)
+    assert restored.chunk_target_chars == 1200
+    assert restored.reserve_credits == 2500

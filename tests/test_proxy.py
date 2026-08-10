@@ -44,6 +44,60 @@ def test_credentials_survive_normalisation():
     assert normalize_proxy_url("socks5://user:pass@host:1080") == "socks5://user:pass@host:1080"
 
 
+# ----------------------------------------------------------------------
+# Запись адрес:порт:логин:пароль — в таком виде прокси обычно и продают.
+# Именно на ней программа падала.
+# ----------------------------------------------------------------------
+def test_seller_format_becomes_url():
+    assert normalize_proxy_url("1.2.3.4:8000:wVgThP:kjSdfL") == "http://wVgThP:kjSdfL@1.2.3.4:8000"
+
+
+def test_seller_format_with_scheme():
+    assert (
+        normalize_proxy_url("socks5://1.2.3.4:8000:wVgThP:kjSdfL")
+        == "socks5://wVgThP:kjSdfL@1.2.3.4:8000"
+    )
+
+
+def test_seller_format_with_hostname():
+    assert (
+        normalize_proxy_url("proxy.example.com:3128:vasya:secret")
+        == "http://vasya:secret@proxy.example.com:3128"
+    )
+
+
+def test_seller_format_requires_numeric_port():
+    assert normalize_proxy_url("host:порт:user:pass") == ""
+
+
+def test_three_parts_are_rejected():
+    assert normalize_proxy_url("host:8000:token") == ""
+
+
+def test_non_numeric_port_is_rejected():
+    assert normalize_proxy_url("1.2.3.4:порт") == ""
+
+
+def test_host_without_port_is_accepted():
+    assert normalize_proxy_url("proxy.local") == "http://proxy.local"
+
+
+def test_ipv6_address_survives():
+    assert normalize_proxy_url("[::1]:8080") == "http://[::1]:8080"
+
+
+def test_ipv6_without_closing_bracket_is_rejected():
+    assert normalize_proxy_url("[::1:8080") == ""
+
+
+def test_trailing_slash_is_trimmed():
+    assert normalize_proxy_url("http://127.0.0.1:8080/") == "http://127.0.0.1:8080"
+
+
+def test_scheme_only_is_rejected():
+    assert normalize_proxy_url("socks5://") == ""
+
+
 def test_settings_normalise_proxy():
     assert Settings(proxy_url=" 127.0.0.1:1080 ").proxy_url == "http://127.0.0.1:1080"
 
@@ -73,6 +127,57 @@ def test_credentials_are_hidden():
 
 def test_plain_proxy_is_shown_as_is():
     assert hide_credentials("http://127.0.0.1:8080") == "http://127.0.0.1:8080"
+
+
+def test_hide_credentials_never_raises():
+    # Функция вызывается при создании клиента: исключение здесь роняет запуск
+    # ещё до первого запроса. Именно так и падала прошлая версия.
+    for value in (
+        "1.2.3.4:8000:wVgThP:kjSdfL",
+        "http://1.2.3.4:8000:wVgThP:kjSdfL",
+        "[::1",
+        "host:порт",
+        "://",
+        ":::::",
+        "",
+        None,
+    ):
+        assert isinstance(hide_credentials(value), str)
+
+
+def test_hide_credentials_on_seller_format():
+    assert hide_credentials("http://1.2.3.4:8000:wVgThP:kjSdfL") == "http://1.2.3.4:8000:wVgThP:kjSdfL"
+
+
+def test_describe_route_never_raises_on_broken_input():
+    for value in ("1.2.3.4:8000:u:p", "[::1", "://", ":::::"):
+        assert isinstance(describe_route(value), str)
+
+
+def test_client_starts_with_unparsed_proxy():
+    # Раньше такой адрес ронял конструктор клиента.
+    client = ElevenLabsClient(KEY, proxy_url="1.2.3.4:8000:wVgThP:kjSdfL")
+    try:
+        assert client._session.proxies["https"] == "1.2.3.4:8000:wVgThP:kjSdfL"
+    finally:
+        client.close()
+
+
+def test_settings_convert_seller_format_before_use():
+    settings = Settings(proxy_url="1.2.3.4:8000:wVgThP:kjSdfL")
+    client = ElevenLabsClient(KEY, proxy_url=settings.proxy_url)
+    try:
+        assert client._session.proxies["https"] == "http://wVgThP:kjSdfL@1.2.3.4:8000"
+    finally:
+        client.close()
+
+
+def test_password_never_reaches_the_log():
+    settings = Settings(proxy_url="1.2.3.4:8000:wVgThP:kjSdfL")
+    route = describe_route(settings.proxy_url)
+    assert "kjSdfL" not in route
+    assert "wVgThP" not in route
+    assert "1.2.3.4:8000" in route
 
 
 # ----------------------------------------------------------------------

@@ -555,6 +555,30 @@ def test_estimate_flash_is_half_of_multilingual(workspace):
     assert plan["total_credits_flash"] - plan["design_credits"] == pytest.approx(body / 2, abs=1)
 
 
+def test_run_starts_with_seller_format_proxy(workspace, store, monkeypatch):
+    """Адрес вида адрес:порт:логин:пароль ронял запуск ещё до первого запроса."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+
+    settings = make_settings(workspace, max_voices=1, proxy_url="1.2.3.4:8000:wVgThP:kjSdfL")
+    stats = run_with(monkeypatch, settings, store, FakeClient())
+
+    assert stats.stopped_reason == ""
+    assert stats.texts_done == 1
+
+
+def test_run_starts_with_unparseable_proxy(workspace, store, monkeypatch):
+    """Совсем непонятный адрес отбрасывается, но работу не срывает."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+
+    settings = make_settings(workspace, max_voices=1, proxy_url="[::1:8080")
+    assert settings.proxy_url == ""
+
+    stats = run_with(monkeypatch, settings, store, FakeClient())
+    assert stats.texts_done == 1
+
+
 def test_estimate_on_empty_folders(workspace):
     plan = estimate_plan(make_settings(workspace))
     assert plan["texts"] == 0
