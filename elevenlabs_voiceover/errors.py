@@ -46,6 +46,16 @@ class NetworkError(ElevenLabsError):
     retryable = True
 
 
+class ProxyFailure(ElevenLabsError):
+    """Прокси из настроек не отвечает.
+
+    Повторять бессмысленно: это не помеха на линии, а неверная настройка, и
+    каждая попытка стоит человеку ещё одного таймаута ожидания впустую.
+    """
+
+    retryable = False
+
+
 class RateLimited(ElevenLabsError):
     """429: слишком много запросов."""
 

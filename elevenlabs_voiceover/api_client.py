@@ -23,6 +23,7 @@ from .errors import (
     ElevenLabsError,
     InvalidResponse,
     NetworkError,
+    ProxyFailure,
     QuotaExceeded,
     RateLimited,
     ScopeError,
@@ -188,10 +189,12 @@ class ElevenLabsClient:
                     params=params,
                     timeout=(15, self._timeout),
                 )
-            except requests.exceptions.Timeout as exc:
-                error: ElevenLabsError = NetworkError(
-                    f"Таймаут запроса: {_explain_network_error(exc)}", endpoint=path
+            except requests.exceptions.ProxyError as exc:
+                error: ElevenLabsError = ProxyFailure(
+                    f"Не удалось выйти через прокси: {_explain_network_error(exc)}", endpoint=path
                 )
+            except requests.exceptions.Timeout as exc:
+                error = NetworkError(f"Таймаут запроса: {_explain_network_error(exc)}", endpoint=path)
             except requests.exceptions.ConnectionError as exc:
                 error = NetworkError(f"Нет связи с API: {_explain_network_error(exc)}", endpoint=path)
             except requests.exceptions.RequestException as exc:
@@ -607,6 +610,57 @@ def _describe_bad_body(response: requests.Response, path: str) -> InvalidRespons
     )
 
 
+#: Порядок перебора схем при автоподборе. socks5h идёт раньше socks5: разрешение
+#: имён на стороне прокси нужно ровно там, где прокси и понадобился.
+PROXY_SCHEME_CANDIDATES = ("http", "socks5h", "socks5")
+
+
+def swap_proxy_scheme(proxy_url: str, scheme: str) -> str:
+    """Заменить схему в адресе прокси, оставив всё остальное."""
+    text = (proxy_url or "").strip()
+    if not text:
+        return ""
+    _, separator, rest = text.partition("://")
+    return f"{scheme}://{rest if separator else text}"
+
+
+def detect_proxy_scheme(
+    proxy_url: str,
+    timeout: int = 8,
+    base_url: str = BASE_URL,
+) -> Optional[str]:
+    """Подобрать схему, с которой прокси действительно отвечает.
+
+    Продавцы обычно дают адрес без схемы, а http и socks5 внешне неотличимы.
+    Перебрать три варианта быстрее и надёжнее, чем предлагать человеку гадать.
+    """
+    proxy = (proxy_url or "").strip()
+    if not proxy:
+        return None
+
+    url = f"{base_url.rstrip('/')}/v1/models"
+    for scheme in PROXY_SCHEME_CANDIDATES:
+        candidate = swap_proxy_scheme(proxy, scheme)
+        session = requests.Session()
+        session.trust_env = False
+        session.proxies = {"http": candidate, "https": candidate}
+        try:
+            session.get(url, timeout=(timeout, timeout))
+        except requests.exceptions.RequestException as exc:
+            log.debug("Прокси по схеме %s не отозвался: %s", scheme, str(exc)[:150])
+            continue
+        else:
+            # Любой ответ означает, что через прокси мы вышли наружу: код
+            # ответа тут неважен, важно что соединение состоялось.
+            log.info("Прокси отвечает по схеме %s", scheme)
+            return scheme
+        finally:
+            session.close()
+
+    log.warning("Ни одна из схем %s не подошла к прокси", ", ".join(PROXY_SCHEME_CANDIDATES))
+    return None
+
+
 @dataclass
 class ProbeResult:
     """Что именно вернулось на один пробный запрос."""
@@ -729,22 +783,31 @@ _BLOCKED_MARKERS = (
 
 
 def _explain_network_error(exc: Exception) -> str:
-    """Перевести сетевую ошибку в формулировку, по которой понятно, что делать."""
+    """Перевести сетевую ошибку в формулировку, по которой понятно, что делать.
+
+    Порядок проверок важен. Когда не отвечает прокси, в тексте ошибки есть и
+    слово timeout, и слово proxy: сообщить надо про прокси, потому что чинить
+    нужно именно его.
+    """
     text = str(exc)
     lowered = text.lower()
 
+    if "proxy" in lowered or "socks" in lowered:
+        return (
+            "прокси из настроек не отвечает. Проверьте его адрес и порт, а если схема не "
+            "указана — попробуйте socks5h://, многие прокси работают именно по нему. "
+            f"Исходная ошибка: {text[:200]}"
+        )
     if any(marker in lowered for marker in _BLOCKED_MARKERS):
         return (
             "соединение разорвано на полпути. Так выглядит фильтрация трафика: запрос до "
             "ElevenLabs не доходит, хотя интернет работает. Помогает VPN или прокси, "
             f"указанный в настройках. Исходная ошибка: {text[:200]}"
         )
-    if "timed out" in lowered or "timeout" in lowered:
-        return f"ответа не дождались за отведённое время. Исходная ошибка: {text[:200]}"
     if "name or service not known" in lowered or "getaddrinfo" in lowered or "nodename" in lowered:
         return f"имя api.elevenlabs.io не разрешается в адрес — похоже на проблему с DNS. {text[:200]}"
-    if "proxy" in lowered or "socks" in lowered:
-        return f"не удалось пройти через прокси. Проверьте его адрес в настройках. {text[:200]}"
+    if "timed out" in lowered or "timeout" in lowered:
+        return f"ответа не дождались за отведённое время. Исходная ошибка: {text[:200]}"
     return text[:300]
 
 

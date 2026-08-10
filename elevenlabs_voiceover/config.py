@@ -7,6 +7,7 @@ import os
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
+from urllib.parse import quote
 
 from .logging_setup import get_logger, register_secret
 from .paths import config_path
@@ -238,6 +239,12 @@ def normalize_proxy_url(value: str) -> str:
         log.warning("В адресе прокси нет самого адреса, он не будет использован")
         return ""
 
+    # Позиционную запись продавцов разбираем первой. В ней пароль вполне может
+    # содержать @ и двоеточия, и поиск @ разорвал бы адрес не в том месте.
+    seller = _parse_seller_format(rest)
+    if seller:
+        return f"{scheme}://{seller}"
+
     credentials = ""
     if "@" in rest:
         credentials, _, rest = rest.rpartition("@")
@@ -248,17 +255,32 @@ def normalize_proxy_url(value: str) -> str:
         log.warning("Адрес прокси %r не разобран, он не будет использован", value)
         return ""
 
-    host, port, extra_credentials = host_port
-    if extra_credentials and not credentials:
-        credentials = extra_credentials
-    elif extra_credentials:
-        log.warning("В адресе прокси логин и пароль указаны дважды, беру те, что перед знаком @")
-
+    host, port = host_port
     return f"{scheme}://{credentials}{host}:{port}" if port else f"{scheme}://{credentials}{host}"
 
 
-def _parse_host_port(rest: str) -> Optional[Tuple[str, str, str]]:
-    """Разобрать хвост адреса. Возвращает хост, порт и логин с паролем."""
+def _parse_seller_format(rest: str) -> Optional[str]:
+    """Разобрать запись адрес:порт:логин:пароль, если это она.
+
+    Делим слева и не более чем на четыре части: пароль идёт последним и может
+    содержать любые символы, включая двоеточия.
+    """
+    if rest.startswith("["):
+        return None
+
+    parts = rest.split(":", 3)
+    if len(parts) != 4:
+        return None
+
+    host, port, user, password = parts
+    if not port.isdigit() or "@" in host or "/" in host or not host:
+        return None
+
+    return f"{_encode_credential(user)}:{_encode_credential(password)}@{host}:{port}"
+
+
+def _parse_host_port(rest: str) -> Optional[Tuple[str, str]]:
+    """Разобрать адрес и порт."""
     # Адрес IPv6 записывают в скобках, двоеточия внутри трогать нельзя.
     if rest.startswith("["):
         closing = rest.find("]")
@@ -267,26 +289,34 @@ def _parse_host_port(rest: str) -> Optional[Tuple[str, str, str]]:
         host = rest[: closing + 1]
         tail = rest[closing + 1 :]
         if not tail:
-            return host, "", ""
+            return host, ""
         if tail.startswith(":") and tail[1:].isdigit():
-            return host, tail[1:], ""
+            return host, tail[1:]
         return None
 
     parts = rest.split(":")
-
     if len(parts) == 1:
-        return parts[0], "", ""
-
+        return (parts[0], "") if parts[0] else None
     if len(parts) == 2:
         host, port = parts
-        return (host, port, "") if port.isdigit() else None
-
-    # Формат продавцов прокси: адрес:порт:логин:пароль.
-    if len(parts) == 4 and parts[1].isdigit():
-        host, port, user, password = parts
-        return host, port, f"{user}:{password}@"
-
+        return (host, port) if port.isdigit() and host else None
     return None
+
+
+def _encode_credential(value: str) -> str:
+    """Подготовить логин или пароль к подстановке в адрес.
+
+    В паролях к прокси регулярно встречаются @, : и /. Без кодирования такой
+    пароль разрывает адрес на части, и запрос уходит не туда.
+    """
+    if not value.isascii():
+        # HTTP Basic передаёт учётные данные в latin-1, и кириллица в них
+        # приводит к обрыву глубоко внутри библиотеки. Предупредим заранее.
+        log.warning(
+            "Логин или пароль прокси содержит нелатинские символы — такие данные "
+            "протокол не передаёт, прокси, скорее всего, откажет"
+        )
+    return quote(value, safe="")
 
 
 def _clamp_int(value: Any, low: int, high: int, default: int) -> int:

@@ -32,11 +32,14 @@ from typing import Any, List, Optional
 
 from . import clipboard, diagnostics
 from .api_client import (
+    PROXY_SCHEME_CANDIDATES,
     ModelInfo,
     decoder_support,
     describe_route,
+    detect_proxy_scheme,
     hide_credentials,
     probe_connection,
+    swap_proxy_scheme,
     verify_key,
 )
 from .audio import find_ffmpeg
@@ -928,6 +931,12 @@ class App:
         self.lbl_status.configure(text="Проверка соединения завершена")
 
         broken = [r for r in results if r.error or not r.json_ok]
+
+        # Прокси не отозвался — почти всегда дело в схеме: адрес продают без
+        # неё, а http и socks5 на вид неотличимы. Подберём сами.
+        if broken and self.settings.proxy_url and any("прокси" in (r.error or "") for r in broken):
+            self._offer_working_proxy_scheme()
+            return
         report = "\n\n".join(r.line() for r in results)
         settings = self.settings
         tail = (
@@ -952,6 +961,46 @@ class App:
               "чтобы отправить их на разбор.",
             parent=self.root,
         )
+
+    def _offer_working_proxy_scheme(self) -> None:
+        """Перебрать схемы прокси и предложить ту, что отвечает."""
+        current = self.settings.proxy_url
+        self.lbl_status.configure(text="Прокси не ответил, подбираю схему…")
+        self._set_busy(True)
+
+        def work() -> None:
+            scheme = detect_proxy_scheme(current)
+            self.events.put(("proxy_scheme", scheme, current))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_proxy_scheme(self, scheme: Optional[str], previous: str) -> None:
+        self._set_busy(False)
+
+        if not scheme:
+            self.lbl_status.configure(text="Прокси не отвечает")
+            messagebox.showwarning(
+                APP_TITLE,
+                f"Прокси {hide_credentials(previous)} не отвечает ни по одной из схем "
+                f"({', '.join(PROXY_SCHEME_CANDIDATES)}).\n\n"
+                "Проверьте адрес, порт, логин и пароль. Если прокси платный — не истёк ли срок. "
+                "Либо очистите поле «Прокси», чтобы выходить в сеть напрямую.",
+                parent=self.root,
+            )
+            return
+
+        working = swap_proxy_scheme(previous, scheme)
+        self.lbl_status.configure(text=f"Прокси отвечает по схеме {scheme}")
+
+        if messagebox.askyesno(
+            APP_TITLE,
+            f"Прокси не отвечает по текущей схеме, но отзывается по «{scheme}».\n\n"
+            f"Записать как {hide_credentials(working)} и проверить снова?",
+            parent=self.root,
+        ):
+            self.var_proxy.set(working)
+            self._save_now()
+            self._probe_connection()
 
     def _build_report(self) -> None:
         try:
@@ -1009,6 +1058,8 @@ class App:
             self._on_verified(event[1], event[2])
         elif kind == "probe_done":
             self._on_probe_done(event[1])
+        elif kind == "proxy_scheme":
+            self._on_proxy_scheme(event[1], event[2])
         elif kind == "probe_failed":
             self._set_busy(False)
             self.lbl_status.configure(text="Проверка соединения не удалась")

@@ -17,6 +17,7 @@ from .config import MODE_ALL_VOICES, Settings
 from .errors import (
     Cancelled,
     ElevenLabsError,
+    ProxyFailure,
     QuotaExceeded,
     ValidationFailed,
     VoiceLimitReached,
@@ -206,6 +207,14 @@ class Runner:
             self.stats.stopped_reason = str(exc)
             log.error("Проверка перед запуском не пройдена: %s", exc)
             raise
+        except ProxyFailure as exc:
+            outcome = "proxy_error"
+            self.stats.stopped_reason = str(exc)
+            log.error("%s", exc)
+            log.error(
+                "Нажмите «Проверить соединение» — программа переберёт схемы прокси "
+                "и подскажет рабочую, либо очистите поле «Прокси» в настройках."
+            )
         except ElevenLabsError as exc:
             outcome = "api_error"
             self.stats.stopped_reason = str(exc)

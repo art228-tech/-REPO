@@ -8,7 +8,14 @@ import threading
 from pathlib import Path
 from typing import List, Optional
 
-from .api_client import decoder_support, describe_route, probe_connection, verify_key
+from .api_client import (
+    decoder_support,
+    describe_route,
+    detect_proxy_scheme,
+    probe_connection,
+    swap_proxy_scheme,
+    verify_key,
+)
 from .config import MODE_ALL_VOICES, MODE_ROUND_ROBIN, Settings
 from .diagnostics import build_report
 from .errors import ElevenLabsError
@@ -145,8 +152,20 @@ def main(argv: Optional[List[str]] = None) -> int:
             if result.error or not result.json_ok:
                 broken += 1
         say("")
-        say("Соединение в порядке." if not broken else f"Запросов с неожиданным ответом: {broken}")
-        return 0 if not broken else 1
+        if not broken:
+            say("Соединение в порядке.")
+            return 0
+
+        say(f"Запросов с неожиданным ответом: {broken}")
+        if settings.proxy_url:
+            say("Подбираю схему прокси…")
+            scheme = detect_proxy_scheme(settings.proxy_url)
+            if scheme:
+                say(f"Прокси отвечает по схеме «{scheme}». Впишите адрес так:")
+                say(f"  {swap_proxy_scheme(settings.proxy_url, scheme)}")
+            else:
+                say("Прокси не отвечает ни по одной из схем. Проверьте адрес, порт и доступ.")
+        return 1
 
     if args.check:
         try:

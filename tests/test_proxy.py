@@ -1,3 +1,4 @@
+import pytest
 import requests
 
 from elevenlabs_voiceover.api_client import (
@@ -6,6 +7,7 @@ from elevenlabs_voiceover.api_client import (
     apply_proxy,
     describe_route,
     hide_credentials,
+    swap_proxy_scheme,
 )
 from elevenlabs_voiceover.config import Settings, normalize_proxy_url
 
@@ -72,6 +74,38 @@ def test_seller_format_requires_numeric_port():
 
 def test_three_parts_are_rejected():
     assert normalize_proxy_url("host:8000:token") == ""
+
+
+def test_password_with_at_sign_is_encoded():
+    # Без кодирования @ разорвал бы адрес и запрос ушёл бы не туда.
+    assert normalize_proxy_url("1.2.3.4:8000:user:p@ss") == "http://user:p%40ss@1.2.3.4:8000"
+
+
+def test_password_with_colons_is_kept_whole():
+    assert normalize_proxy_url("1.2.3.4:8000:user:pa:ss") == "http://user:pa%3Ass@1.2.3.4:8000"
+
+
+def test_password_with_slash_is_encoded():
+    assert normalize_proxy_url("1.2.3.4:8000:user:a/b") == "http://user:a%2Fb@1.2.3.4:8000"
+
+
+def test_login_with_special_characters_is_encoded():
+    assert normalize_proxy_url("1.2.3.4:8000:us@er:pass") == "http://us%40er:pass@1.2.3.4:8000"
+
+
+def test_classic_form_with_credentials_is_left_alone():
+    # Здесь человек записал адрес сам и, возможно, уже закодировал его.
+    assert normalize_proxy_url("user:pass@1.2.3.4:8000") == "http://user:pass@1.2.3.4:8000"
+
+
+def test_seller_format_is_recognised_before_at_sign():
+    """Позиционную запись нельзя разбирать по @: он бывает внутри пароля."""
+    result = normalize_proxy_url("1.2.3.4:8000:user:p@ss")
+
+    assert result.endswith("@1.2.3.4:8000")
+    # Единственный оставшийся @ — разделитель: тот, что был в пароле, закодирован.
+    assert result.count("@") == 1
+    assert "%40" in result
 
 
 def test_non_numeric_port_is_rejected():
@@ -278,3 +312,114 @@ def test_proxy_failure_points_at_settings():
 
 def test_unknown_error_is_passed_through():
     assert "что-то своё" in _explain_network_error(RuntimeError("что-то своё"))
+
+
+def test_proxy_wins_over_timeout_in_message():
+    """Недоступный прокси всегда выглядит и как таймаут: чинить надо прокси."""
+    exc = requests.exceptions.ProxyError(
+        "HTTPSConnectionPool(host='api.elevenlabs.io', port=443): Max retries exceeded "
+        "(Caused by ProxyError('Unable to connect to proxy', ConnectTimeoutError(...)))"
+    )
+    text = _explain_network_error(exc)
+    assert "прокси" in text
+    assert "не дождались" not in text
+    assert "socks5h" in text
+
+
+# ----------------------------------------------------------------------
+# Недоступный прокси не повторяем
+# ----------------------------------------------------------------------
+def test_proxy_failure_is_not_retried(monkeypatch):
+    from elevenlabs_voiceover.errors import ProxyFailure
+
+    calls = []
+
+    def boom(self, method, url, **kwargs):
+        calls.append(url)
+        raise requests.exceptions.ProxyError("Unable to connect to proxy")
+
+    monkeypatch.setattr(requests.Session, "request", boom)
+
+    client = ElevenLabsClient(KEY, max_retries=5, proxy_url="http://127.0.0.1:9")
+    client._sleep = lambda seconds: None
+    try:
+        with pytest.raises(ProxyFailure):
+            client.get_subscription()
+    finally:
+        client.close()
+
+    # Одна попытка вместо шести: каждая стоила бы человеку таймаута ожидания.
+    assert len(calls) == 1
+
+
+# ----------------------------------------------------------------------
+# Подбор схемы
+# ----------------------------------------------------------------------
+def test_swap_scheme_replaces_existing():
+    assert swap_proxy_scheme("http://user:pass@h:1080", "socks5h") == "socks5h://user:pass@h:1080"
+
+
+def test_swap_scheme_adds_missing():
+    assert swap_proxy_scheme("h:1080", "socks5h") == "socks5h://h:1080"
+
+
+def test_swap_scheme_on_empty():
+    assert swap_proxy_scheme("", "socks5h") == ""
+
+
+def test_detect_picks_first_working_scheme(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    tried = []
+
+    def get(self, url, **kwargs):
+        scheme = self.proxies["https"].split("://")[0]
+        tried.append(scheme)
+        if scheme != "socks5h":
+            raise requests.exceptions.ProxyError("Unable to connect to proxy")
+        return requests.Response()
+
+    monkeypatch.setattr(requests.Session, "get", get)
+
+    assert api_client.detect_proxy_scheme("1.2.3.4:8000") == "socks5h"
+    assert tried[:2] == ["http", "socks5h"]
+
+
+def test_detect_prefers_http_when_it_works(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    monkeypatch.setattr(requests.Session, "get", lambda self, url, **kw: requests.Response())
+    assert api_client.detect_proxy_scheme("1.2.3.4:8000") == "http"
+
+
+def test_detect_returns_none_when_nothing_works(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    def boom(self, url, **kwargs):
+        raise requests.exceptions.ProxyError("Unable to connect to proxy")
+
+    monkeypatch.setattr(requests.Session, "get", boom)
+    assert api_client.detect_proxy_scheme("1.2.3.4:8000") is None
+
+
+def test_detect_on_empty_proxy_does_nothing(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    def fail(self, url, **kwargs):
+        raise AssertionError("сеть трогать не нужно")
+
+    monkeypatch.setattr(requests.Session, "get", fail)
+    assert api_client.detect_proxy_scheme("") is None
+
+
+def test_detect_accepts_any_http_status(monkeypatch):
+    """Прокси считается рабочим, если через него вообще вышли наружу."""
+    from elevenlabs_voiceover import api_client
+
+    def unauthorised(self, url, **kwargs):
+        resp = requests.Response()
+        resp.status_code = 401
+        return resp
+
+    monkeypatch.setattr(requests.Session, "get", unauthorised)
+    assert api_client.detect_proxy_scheme("1.2.3.4:8000") == "http"
