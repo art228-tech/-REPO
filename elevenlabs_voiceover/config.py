@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 from .logging_setup import get_logger, register_secret
@@ -24,6 +24,18 @@ MODE_ALL_VOICES = "all_voices"
 VOICE_MODES = {
     MODE_ROUND_ROBIN: "По кругу: текст 1 — голос 1, текст 2 — голос 2, ...",
     MODE_ALL_VOICES: "Каждый текст всеми голосами",
+}
+
+#: Голоса создаются программой по промптам через Voice Design.
+SOURCE_DESIGN = "design"
+#: Голоса уже созданы в личном кабинете, программа только выбирает из них.
+#: Нужен на бесплатном тарифе: слоты для голосов там есть, но заполнять их
+#: разрешено только на сайте, через API создание отклоняется.
+SOURCE_ACCOUNT = "account"
+
+VOICE_SOURCES = {
+    SOURCE_DESIGN: "Создавать по промптам из папки (нужен платный тариф)",
+    SOURCE_ACCOUNT: "Брать готовые из личного кабинета",
 }
 
 #: Минимальная длина preview-текста, которую принимает Voice Design.
@@ -57,6 +69,8 @@ class Settings:
     output_dir: str = ""
 
     # --- голоса ---
+    voice_source: str = SOURCE_DESIGN
+    selected_voice_ids: List[str] = field(default_factory=list)
     max_voices: int = 3
     voice_mode: str = MODE_ROUND_ROBIN
     recreate_voices: bool = False
@@ -105,6 +119,14 @@ class Settings:
         self.max_voices = _clamp_int(self.max_voices, 1, 50, 3)
         if self.voice_mode not in VOICE_MODES:
             self.voice_mode = MODE_ROUND_ROBIN
+        if self.voice_source not in VOICE_SOURCES:
+            self.voice_source = SOURCE_DESIGN
+
+        if isinstance(self.selected_voice_ids, str):
+            self.selected_voice_ids = [self.selected_voice_ids]
+        self.selected_voice_ids = [
+            str(v).strip() for v in (self.selected_voice_ids or []) if str(v).strip()
+        ]
 
         self.chunk_target_chars = _clamp_int(self.chunk_target_chars, 200, 40000, 2500)
         self.reserve_credits = max(0, _clamp_int(self.reserve_credits, 0, 10**9, 0))

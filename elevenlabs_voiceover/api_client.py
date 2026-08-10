@@ -23,6 +23,7 @@ from .errors import (
     ElevenLabsError,
     InvalidResponse,
     NetworkError,
+    PlanLimitation,
     ProxyFailure,
     QuotaExceeded,
     RateLimited,
@@ -84,6 +85,28 @@ class ModelInfo:
     def label(self) -> str:
         rate = f"{self.cost_multiplier:g} кред./символ"
         return f"{self.name or self.model_id} — {rate}"
+
+
+@dataclass
+class AccountVoice:
+    voice_id: str
+    name: str
+    category: str = ""
+    description: str = ""
+
+    @property
+    def is_custom(self) -> bool:
+        """Голос создан самим пользователем, а не взят из общей библиотеки."""
+        return self.category in {"cloned", "generated", "professional"}
+
+    def label(self) -> str:
+        kind = {
+            "generated": "Voice Design",
+            "cloned": "клон",
+            "professional": "профессиональный клон",
+            "premade": "готовый",
+        }.get(self.category, self.category or "голос")
+        return f"{self.name}  ({kind})"
 
 
 @dataclass
@@ -274,6 +297,22 @@ class ElevenLabsClient:
         if detail_status in _STATUS_AUTH:
             return AuthError(f"Проблема с API-ключом: {text}", status_code=code, payload=payload, endpoint=path)
 
+        lowered_message = text.lower()
+        if "only available on a paid plan" in lowered_message or "requires a paid" in lowered_message:
+            hint = ""
+            if "text-to-voice" in path:
+                # Слоты для голосов на бесплатном тарифе есть, но заполнять их
+                # разрешено только на сайте. Это и есть обходной путь.
+                hint = (
+                    " Создайте голоса вручную на сайте ElevenLabs (Voices — My Voices — "
+                    "Add a new voice — Voice Design), а в программе переключите источник "
+                    "голосов на «Брать готовые из аккаунта». Озвучка через API на бесплатном "
+                    "тарифе работает, ограничение касается только создания голосов."
+                )
+            return PlanLimitation(
+                f"Тариф не позволяет: {text}.{hint}", status_code=code, payload=payload, endpoint=path
+            )
+
         if code == 429:
             return RateLimited(
                 f"Слишком много запросов: {text}",
@@ -356,6 +395,25 @@ class ElevenLabsClient:
             if isinstance(voices, list):
                 return [v for v in voices if isinstance(v, dict)]
         return []
+
+    def account_voices(self) -> List[AccountVoice]:
+        """Голоса аккаунта в удобном виде: свои первыми, дальше по имени.
+
+        Порядок важен: в нём голоса показываются в окне и в нём же раздаются
+        текстам по кругу, поэтому он должен быть предсказуемым.
+        """
+        voices = [
+            AccountVoice(
+                voice_id=str(item.get("voice_id")),
+                name=str(item.get("name") or item.get("voice_id") or "без имени"),
+                category=str(item.get("category") or ""),
+                description=str(item.get("description") or ""),
+            )
+            for item in self.list_voices()
+            if item.get("voice_id")
+        ]
+        # Созданные пользователем важнее готовых из библиотеки: обычно нужны они.
+        return sorted(voices, key=lambda v: (not v.is_custom, v.name.lower()))
 
     # ------------------------------------------------------------------
     def design_voice(

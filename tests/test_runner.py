@@ -5,7 +5,12 @@ import pytest
 from elevenlabs_voiceover import runner as runner_module
 from elevenlabs_voiceover.api_client import ModelInfo, Subscription, TtsResult, VoicePreview
 from elevenlabs_voiceover.chunker import Chunk
-from elevenlabs_voiceover.config import MODE_ALL_VOICES, MODE_ROUND_ROBIN, Settings
+from elevenlabs_voiceover.config import (
+    MODE_ALL_VOICES,
+    MODE_ROUND_ROBIN,
+    SOURCE_ACCOUNT,
+    Settings,
+)
 from elevenlabs_voiceover.runner import (
     PreflightError,
     Runner,
@@ -100,6 +105,7 @@ class FakeClient:
         self.tts_calls = []
         self.deleted = []
         self.existing_voices = []
+        self.account_catalog = []
         self._counter = 0
 
     # -- служебное -----------------------------------------------------
@@ -129,7 +135,25 @@ class FakeClient:
         ]
 
     def list_voices(self):
+        if self.account_catalog:
+            return [
+                {"voice_id": vid, "name": name, "category": category}
+                for vid, name, category in self.account_catalog
+            ]
         return [{"voice_id": v} for v in self.existing_voices]
+
+    def account_voices(self):
+        from elevenlabs_voiceover.api_client import AccountVoice
+
+        voices = [
+            AccountVoice(
+                voice_id=str(item["voice_id"]),
+                name=str(item.get("name") or item["voice_id"]),
+                category=str(item.get("category") or ""),
+            )
+            for item in self.list_voices()
+        ]
+        return sorted(voices, key=lambda v: (not v.is_custom, v.name.lower()))
 
     # -- голоса --------------------------------------------------------
     def design_voice(self, description, **kwargs):
@@ -553,6 +577,108 @@ def test_estimate_flash_is_half_of_multilingual(workspace):
     plan = estimate_plan(make_settings(workspace, max_voices=1))
     body = plan["total_credits_multilingual"] - plan["design_credits"]
     assert plan["total_credits_flash"] - plan["design_credits"] == pytest.approx(body / 2, abs=1)
+
+
+def test_uses_voices_from_account(workspace, store, monkeypatch):
+    """Обходной путь для бесплатного тарифа: голоса созданы на сайте заранее."""
+    write_texts(workspace["texts"], 4)
+    client = FakeClient()
+    client.account_catalog = [
+        ("voice-a", "Диктор", "generated"),
+        ("voice-b", "Ведущая", "generated"),
+        ("voice-c", "Рассказчик", "generated"),
+    ]
+
+    settings = make_settings(workspace, voice_source=SOURCE_ACCOUNT)
+    stats = run_with(monkeypatch, settings, store, client)
+
+    # Ни одного обращения к Voice Design: на бесплатном тарифе оно запрещено.
+    assert client.designs == []
+    assert client.creates == []
+    assert stats.voices_reused == 3
+    assert stats.texts_done == 4
+
+    # Порядок — по имени голоса, тот же, что человек видит в списке:
+    # Ведущая, Диктор, Рассказчик.
+    used = [call[0] for call in client.tts_calls]
+    assert used == ["voice-b", "voice-a", "voice-c", "voice-b"]
+
+
+def test_account_mode_needs_no_prompts_folder(workspace, store, monkeypatch):
+    write_texts(workspace["texts"], 1)
+    client = FakeClient()
+    client.account_catalog = [("voice-a", "Диктор", "generated")]
+
+    settings = make_settings(
+        workspace, voice_source=SOURCE_ACCOUNT, prompts_dir=str(workspace["root"] / "нет-такой")
+    )
+    stats = run_with(monkeypatch, settings, store, client)
+
+    assert stats.texts_done == 1
+
+
+def test_account_mode_respects_selection(workspace, store, monkeypatch):
+    write_texts(workspace["texts"], 2)
+    client = FakeClient()
+    client.account_catalog = [
+        ("voice-a", "Диктор", "generated"),
+        ("voice-b", "Ведущая", "generated"),
+        ("voice-c", "Рассказчик", "generated"),
+    ]
+
+    settings = make_settings(
+        workspace, voice_source=SOURCE_ACCOUNT, selected_voice_ids=["voice-c", "voice-a"]
+    )
+    run_with(monkeypatch, settings, store, client)
+
+    assert [call[0] for call in client.tts_calls] == ["voice-c", "voice-a"]
+
+
+def test_account_mode_skips_library_voices_by_default(workspace, store, monkeypatch):
+    """Без явного выбора берём свои голоса, а не всю общую библиотеку."""
+    write_texts(workspace["texts"], 1)
+    client = FakeClient()
+    client.account_catalog = [
+        ("premade-1", "Rachel", "premade"),
+        ("voice-a", "Мой голос", "generated"),
+    ]
+
+    settings = make_settings(workspace, voice_source=SOURCE_ACCOUNT)
+    run_with(monkeypatch, settings, store, client)
+
+    assert client.tts_calls[0][0] == "voice-a"
+
+
+def test_account_mode_without_voices_is_explained(workspace, store, monkeypatch):
+    write_texts(workspace["texts"], 1)
+    client = FakeClient()
+    client.account_catalog = []
+
+    settings = make_settings(workspace, voice_source=SOURCE_ACCOUNT)
+    with pytest.raises(PreflightError, match="Voice Design"):
+        run_with(monkeypatch, settings, store, client)
+
+
+def test_account_mode_survives_missing_selected_voice(workspace, store, monkeypatch):
+    write_texts(workspace["texts"], 1)
+    client = FakeClient()
+    client.account_catalog = [("voice-a", "Диктор", "generated")]
+
+    settings = make_settings(
+        workspace, voice_source=SOURCE_ACCOUNT, selected_voice_ids=["voice-a", "удалённый"]
+    )
+    stats = run_with(monkeypatch, settings, store, client)
+
+    assert stats.texts_done == 1
+    assert client.tts_calls[0][0] == "voice-a"
+
+
+def test_account_mode_costs_nothing_to_prepare(workspace):
+    write_texts(workspace["texts"], 2)
+    plan = estimate_plan(make_settings(workspace, voice_source=SOURCE_ACCOUNT))
+
+    # Голоса уже созданы, значит кредитов на их подготовку не нужно.
+    assert plan["design_credits"] == 0
 
 
 def test_run_starts_with_seller_format_proxy(workspace, store, monkeypatch):

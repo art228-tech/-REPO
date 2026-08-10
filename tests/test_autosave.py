@@ -127,6 +127,68 @@ def test_every_variable_is_watched(app):
     assert unwatched == []
 
 
+def test_voice_source_is_saved(app):
+    from elevenlabs_voiceover.config import SOURCE_ACCOUNT, VOICE_SOURCES
+
+    app.var_voice_source.set(VOICE_SOURCES[SOURCE_ACCOUNT])
+    flush(app)
+    assert reload_settings().voice_source == SOURCE_ACCOUNT
+
+
+def test_account_mode_hides_prompts_folder(app):
+    from elevenlabs_voiceover.config import SOURCE_ACCOUNT, SOURCE_DESIGN, VOICE_SOURCES
+
+    caption = app.folder_rows["prompts"][0]
+
+    app.var_voice_source.set(VOICE_SOURCES[SOURCE_ACCOUNT])
+    app._on_voice_source_changed()
+    app.root.update_idletasks()
+    assert not caption.winfo_ismapped()
+
+    app.var_voice_source.set(VOICE_SOURCES[SOURCE_DESIGN])
+    app._on_voice_source_changed()
+    app.root.update_idletasks()
+    assert caption.winfo_manager()
+
+
+def test_selected_voices_are_saved(app):
+    from elevenlabs_voiceover.api_client import AccountVoice
+
+    app._on_voices_loaded([
+        AccountVoice("v1", "Первый", "generated"),
+        AccountVoice("v2", "Второй", "generated"),
+    ])
+    app.list_voices.selection_set(0)
+    flush(app)
+
+    assert reload_settings().selected_voice_ids == ["v1"]
+
+
+def test_selection_survives_list_reload(app):
+    """Обновление списка не должно сбрасывать отмеченные голоса."""
+    from elevenlabs_voiceover.api_client import AccountVoice
+
+    voices = [AccountVoice("v1", "Первый", "generated"), AccountVoice("v2", "Второй", "generated")]
+    app._on_voices_loaded(voices)
+    app.list_voices.selection_set(1)
+    flush(app)
+
+    app._on_voices_loaded(voices)
+    assert app._selected_voice_ids() == ["v2"]
+
+
+def test_select_own_skips_library_voices(app):
+    from elevenlabs_voiceover.api_client import AccountVoice
+
+    app._on_voices_loaded([
+        AccountVoice("v1", "Мой", "generated"),
+        AccountVoice("p1", "Rachel", "premade"),
+    ])
+    app._select_own_voices()
+
+    assert app._selected_voice_ids() == ["v1"]
+
+
 def test_settings_survive_restart(app, tmp_path):
     app.var_output_dir.set(str(tmp_path))
     app.var_chunk.set(1200)

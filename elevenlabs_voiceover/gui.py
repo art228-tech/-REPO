@@ -18,6 +18,7 @@ from tkinter import (
     Canvas,
     DoubleVar,
     IntVar,
+    Listbox,
     StringVar,
     Tk,
     Variable,
@@ -33,6 +34,7 @@ from typing import Any, List, Optional
 from . import clipboard, diagnostics
 from .api_client import (
     PROXY_SCHEME_CANDIDATES,
+    ElevenLabsClient,
     ModelInfo,
     decoder_support,
     describe_route,
@@ -48,7 +50,10 @@ from .config import (
     DEFAULT_GUIDANCE,
     MODE_ALL_VOICES,
     MODE_ROUND_ROBIN,
+    SOURCE_ACCOUNT,
+    SOURCE_DESIGN,
     VOICE_MODES,
+    VOICE_SOURCES,
     Settings,
     normalize_proxy_url,
 )
@@ -94,6 +99,8 @@ class App:
         self.cancel_event = threading.Event()
         self.worker: Optional[threading.Thread] = None
         self.models: List[ModelInfo] = []
+        self.account_voices: List[Any] = []
+        self.folder_rows: dict = {}
 
         self._save_job: Optional[str] = None
         self._autosave_ready = False
@@ -257,7 +264,7 @@ class App:
         self.var_output_dir = StringVar()
 
         row = self._folder_row(parent, row, "Промпты голосов:", self.var_prompts_dir,
-                               "Папка с .txt, в каждом — описание одного голоса")
+                               "Папка с .txt, в каждом — описание одного голоса", key="prompts")
         row = self._folder_row(parent, row, "Тексты для озвучки:", self.var_texts_dir,
                                "Папка с .txt, каждый файл станет отдельной озвучкой")
         row = self._folder_row(parent, row, "Куда сохранять:", self.var_output_dir,
@@ -271,7 +278,44 @@ class App:
         )
         row += 1
 
-        ttk.Label(parent, text="Голосов создать:").grid(row=row, column=0, sticky="w", pady=3)
+        ttk.Label(parent, text="Откуда голоса:").grid(row=row, column=0, sticky="w", pady=3)
+        self.var_voice_source = StringVar(value=VOICE_SOURCES[SOURCE_DESIGN])
+        combo_source = ttk.Combobox(
+            parent, textvariable=self.var_voice_source, state="readonly",
+            values=[VOICE_SOURCES[SOURCE_DESIGN], VOICE_SOURCES[SOURCE_ACCOUNT]],
+        )
+        combo_source.grid(row=row, column=1, columnspan=2, sticky="ew", pady=3)
+        combo_source.bind("<<ComboboxSelected>>", lambda _e: self._on_voice_source_changed())
+        row += 1
+
+        self.frame_account_voices = ttk.Frame(parent)
+        self.frame_account_voices.grid(row=row, column=1, columnspan=2, sticky="ew", pady=(0, 6))
+        self.frame_account_voices.columnconfigure(0, weight=1)
+
+        ttk.Label(
+            self.frame_account_voices,
+            text="Отметьте голоса из личного кабинета. Создать их можно на сайте: "
+                 "Voices — My Voices — Add a new voice — Voice Design.",
+            style="Hint.TLabel", justify=LEFT, wraplength=620,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+
+        self.list_voices = Listbox(self.frame_account_voices, selectmode="extended", height=5,
+                                   exportselection=False)
+        self.list_voices.grid(row=1, column=0, sticky="ew")
+        self.list_voices.bind("<<ListboxSelect>>", lambda _e: self._on_voice_selection())
+
+        buttons = ttk.Frame(self.frame_account_voices)
+        buttons.grid(row=1, column=1, sticky="nw", padx=(8, 0))
+        ttk.Button(buttons, text="Обновить", width=11, command=self._load_account_voices).pack()
+        ttk.Button(buttons, text="Все свои", width=11, command=self._select_own_voices).pack(pady=(4, 0))
+
+        self.lbl_voices_hint = ttk.Label(self.frame_account_voices, text="Список ещё не загружен",
+                                         style="Hint.TLabel")
+        self.lbl_voices_hint.grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        row += 1
+
+        self.lbl_max_voices = ttk.Label(parent, text="Голосов создать:")
+        self.lbl_max_voices.grid(row=row, column=0, sticky="w", pady=3)
         self.var_max_voices = IntVar(value=3)
         ttk.Spinbox(parent, from_=1, to=50, width=6, textvariable=self.var_max_voices,
                     command=self._refresh_estimate).grid(row=row, column=1, sticky="w", pady=3)
@@ -306,9 +350,12 @@ class App:
         parent.rowconfigure(row + 1, weight=1)
 
     def _folder_row(
-        self, parent: ttk.Frame, row: int, label: str, variable: StringVar, hint: str
+        self, parent: ttk.Frame, row: int, label: str, variable: StringVar, hint: str,
+        key: str = "",
     ) -> int:
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=3)
+        caption = ttk.Label(parent, text=label)
+        caption.grid(row=row, column=0, sticky="w", pady=3)
+
         entry = ttk.Entry(parent, textvariable=variable)
         entry.grid(row=row, column=1, sticky="ew", pady=3)
         variable.trace_add("write", lambda *_: self._refresh_estimate())
@@ -320,9 +367,11 @@ class App:
         ttk.Button(buttons, text="Открыть", width=9,
                    command=lambda v=variable: self._open_path(v.get())).pack(side=LEFT, padx=(4, 0))
 
-        ttk.Label(parent, text=hint, style="Hint.TLabel").grid(
-            row=row + 1, column=1, columnspan=2, sticky="w", pady=(0, 6)
-        )
+        note = ttk.Label(parent, text=hint, style="Hint.TLabel")
+        note.grid(row=row + 1, column=1, columnspan=2, sticky="w", pady=(0, 6))
+
+        if key:
+            self.folder_rows[key] = (caption, entry, buttons, note)
         return row + 2
 
     # ------------------------------------------------------------------
@@ -611,6 +660,7 @@ class App:
         self.var_output_dir.set(s.output_dir)
         self.var_max_voices.set(s.max_voices)
         self.var_voice_mode.set(VOICE_MODES.get(s.voice_mode, VOICE_MODES[MODE_ROUND_ROBIN]))
+        self.var_voice_source.set(VOICE_SOURCES.get(s.voice_source, VOICE_SOURCES[SOURCE_DESIGN]))
         self.var_recreate.set(s.recreate_voices)
 
         self.var_model.set(s.model_id)
@@ -648,6 +698,10 @@ class App:
         s.output_dir = self.var_output_dir.get().strip()
         s.max_voices = _safe_int(self.var_max_voices, s.max_voices)
         s.voice_mode = _mode_from_label(self.var_voice_mode.get())
+        s.voice_source = _source_from_label(self.var_voice_source.get())
+        if self.account_voices:
+            # Пока список не загружен, прежний выбор затирать нельзя.
+            s.selected_voice_ids = self._selected_voice_ids()
         s.recreate_voices = bool(self.var_recreate.get())
 
         s.model_id = self.var_model.get().strip() or s.model_id
@@ -729,6 +783,92 @@ class App:
     def _open_keys_page(self) -> None:
         webbrowser.open("https://elevenlabs.io/app/developers/api-keys")
 
+    def _on_voice_source_changed(self) -> None:
+        """Показать или спрятать список голосов аккаунта."""
+        from_account = _source_from_label(self.var_voice_source.get()) == SOURCE_ACCOUNT
+
+        if from_account:
+            self.frame_account_voices.grid()
+            self.lbl_max_voices.configure(text="Голосов брать:")
+            # Промпты в этом режиме не нужны: голоса уже созданы на сайте.
+            for widget in self.folder_rows.get("prompts", ()):
+                widget.grid_remove()
+            if not self.account_voices:
+                self._load_account_voices()
+        else:
+            self.frame_account_voices.grid_remove()
+            self.lbl_max_voices.configure(text="Голосов создать:")
+            for widget in self.folder_rows.get("prompts", ()):
+                widget.grid()
+
+        self._refresh_estimate()
+
+    def _load_account_voices(self) -> None:
+        settings = self._widgets_to_settings()
+        if not settings.resolved_api_key():
+            self.lbl_voices_hint.configure(text="Сначала укажите API-ключ", style="Bad.TLabel")
+            return
+
+        self.lbl_voices_hint.configure(text="Загружаю список голосов…", style="Hint.TLabel")
+
+        def work() -> None:
+            client = None
+            try:
+                client = ElevenLabsClient(
+                    settings.resolved_api_key(),
+                    timeout=settings.request_timeout,
+                    max_retries=2,
+                    proxy_url=settings.proxy_url,
+                    ignore_system_proxy=settings.ignore_system_proxy,
+                )
+                voices = client.account_voices()
+            except Exception as exc:  # noqa: BLE001
+                self.events.put(("voices_failed", str(exc)))
+            else:
+                self.events.put(("voices_loaded", voices))
+            finally:
+                if client:
+                    client.close()
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_voices_loaded(self, voices: List[Any]) -> None:
+        self.account_voices = voices
+        self.list_voices.delete(0, END)
+        for voice in voices:
+            self.list_voices.insert(END, voice.label())
+
+        # Восстанавливаем прежний выбор: список мог обновиться, но отмеченное
+        # человеком терять нельзя.
+        chosen = set(self.settings.selected_voice_ids)
+        for index, voice in enumerate(voices):
+            if voice.voice_id in chosen:
+                self.list_voices.selection_set(index)
+
+        own = sum(1 for v in voices if v.is_custom)
+        self.lbl_voices_hint.configure(
+            text=f"Найдено голосов: {len(voices)}, из них своих: {own}", style="Hint.TLabel"
+        )
+        self._refresh_estimate()
+
+    def _select_own_voices(self) -> None:
+        self.list_voices.selection_clear(0, END)
+        for index, voice in enumerate(self.account_voices):
+            if voice.is_custom:
+                self.list_voices.selection_set(index)
+        self._on_voice_selection()
+
+    def _on_voice_selection(self) -> None:
+        self._schedule_save()
+        self._refresh_estimate()
+
+    def _selected_voice_ids(self) -> List[str]:
+        return [
+            self.account_voices[i].voice_id
+            for i in self.list_voices.curselection()
+            if i < len(self.account_voices)
+        ]
+
     def _refresh_proxy_hint(self) -> None:
         """Показать, во что превратился введённый адрес.
 
@@ -803,7 +943,8 @@ class App:
         except Exception:  # noqa: BLE001 - виджеты могли ещё не создаться
             return
 
-        if not settings.prompts_dir or not settings.texts_dir:
+        needs_prompts = settings.voice_source == SOURCE_DESIGN
+        if not settings.texts_dir or (needs_prompts and not settings.prompts_dir):
             self.lbl_estimate.configure(text="Укажите папки, чтобы увидеть оценку")
             return
 
@@ -817,13 +958,18 @@ class App:
         cheap = "flash" in model or "turbo" in model
         credits = plan["total_credits_flash"] if cheap else plan["total_credits_multilingual"]
 
+        if needs_prompts:
+            head = f"Найдено: промптов {plan['prompts']} (будет создано голосов {plan['voices']})"
+            tail = f", из них {_fmt(plan['design_credits'])} на создание голосов."
+        else:
+            head = f"Голосов выбрано: {plan['voices']}"
+            tail = ". Голоса уже созданы, кредиты на них не тратятся."
+
         self.lbl_estimate.configure(
             text=(
-                f"Найдено: промптов {plan['prompts']} (будет создано голосов {plan['voices']}), "
-                f"текстов {plan['texts']}, кусков {plan['chunks']}, "
+                f"{head}, текстов {plan['texts']}, кусков {plan['chunks']}, "
                 f"символов {_fmt(plan['characters'])}.\n"
-                f"Ориентировочный расход: около {_fmt(credits)} кредитов, "
-                f"из них {_fmt(plan['design_credits'])} на создание голосов."
+                f"Ориентировочный расход: около {_fmt(credits)} кредитов{tail}"
             )
         )
 
@@ -1066,6 +1212,12 @@ class App:
             self._on_verified(event[1], event[2])
         elif kind == "probe_done":
             self._on_probe_done(event[1])
+        elif kind == "voices_loaded":
+            self._on_voices_loaded(event[1])
+        elif kind == "voices_failed":
+            self.lbl_voices_hint.configure(
+                text=f"Список голосов получить не удалось: {event[1][:120]}", style="Bad.TLabel"
+            )
         elif kind == "proxy_scheme":
             self._on_proxy_scheme(event[1], event[2])
         elif kind == "probe_failed":
@@ -1211,8 +1363,12 @@ def _validate(settings: Settings) -> List[str]:
     problems: List[str] = []
     if not settings.resolved_api_key():
         problems.append("не указан API-ключ")
-    if not settings.prompts_dir or not Path(settings.prompts_dir).is_dir():
+    if settings.voice_source == SOURCE_DESIGN and (
+        not settings.prompts_dir or not Path(settings.prompts_dir).is_dir()
+    ):
         problems.append("не выбрана папка с промптами голосов")
+    if settings.voice_source == SOURCE_ACCOUNT and not settings.selected_voice_ids:
+        problems.append("не отмечен ни один голос из личного кабинета")
     if not settings.texts_dir or not Path(settings.texts_dir).is_dir():
         problems.append("не выбрана папка с текстами")
     if not settings.output_dir:
@@ -1225,6 +1381,13 @@ def _mode_from_label(label: str) -> str:
         if value == label:
             return key
     return MODE_ROUND_ROBIN
+
+
+def _source_from_label(label: str) -> str:
+    for key, value in VOICE_SOURCES.items():
+        if value == label:
+            return key
+    return SOURCE_DESIGN
 
 
 def _safe_int(variable: IntVar, fallback: int) -> int:

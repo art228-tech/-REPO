@@ -13,10 +13,11 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 from . import audio as audio_utils
 from .api_client import ElevenLabsClient, ModelInfo, Subscription
 from .chunker import Chunk, split_text
-from .config import MODE_ALL_VOICES, Settings
+from .config import MODE_ALL_VOICES, SOURCE_ACCOUNT, SOURCE_DESIGN, Settings
 from .errors import (
     Cancelled,
     ElevenLabsError,
+    PlanLimitation,
     ProxyFailure,
     QuotaExceeded,
     ValidationFailed,
@@ -207,6 +208,10 @@ class Runner:
             self.stats.stopped_reason = str(exc)
             log.error("Проверка перед запуском не пройдена: %s", exc)
             raise
+        except PlanLimitation as exc:
+            outcome = "plan_limit"
+            self.stats.stopped_reason = str(exc)
+            log.error("%s", exc)
         except ProxyFailure as exc:
             outcome = "proxy_error"
             self.stats.stopped_reason = str(exc)
@@ -241,7 +246,7 @@ class Runner:
 
         if not settings.resolved_api_key():
             raise PreflightError("Не указан API-ключ")
-        if not prompts_dir.is_dir():
+        if settings.voice_source == SOURCE_DESIGN and not prompts_dir.is_dir():
             raise PreflightError(f"Папка с промптами голосов не найдена: {prompts_dir}")
         if not texts_dir.is_dir():
             raise PreflightError(f"Папка с текстами не найдена: {texts_dir}")
@@ -253,7 +258,8 @@ class Runner:
         except OSError as exc:
             raise PreflightError(f"Не удалось создать папку результатов: {exc}") from exc
 
-        prompts = self._load_prompts(prompts_dir)
+        from_account = settings.voice_source == SOURCE_ACCOUNT
+        prompts = [] if from_account else self._load_prompts(prompts_dir)
         texts = self._load_texts(texts_dir)
 
         self._client = ElevenLabsClient(
@@ -271,7 +277,10 @@ class Runner:
         # Пересчитываем нарезку под реальный лимит выбранной модели.
         self._rechunk(texts)
 
-        voices = self._prepare_voices(prompts, output_dir)
+        if from_account:
+            voices = self._voices_from_account()
+        else:
+            voices = self._prepare_voices(prompts, output_dir)
         if not voices:
             raise PreflightError("Не удалось подготовить ни одного голоса")
 
@@ -435,6 +444,47 @@ class Runner:
                 self._requests_since_sync = 0
 
     # ------------------------------------------------------------------
+    def _voices_from_account(self) -> List[VoiceRef]:
+        """Взять готовые голоса из личного кабинета вместо создания новых.
+
+        Единственный рабочий путь на бесплатном тарифе: слоты для голосов там
+        есть, но заполняются только через сайт, а создание через API отклоняют.
+        """
+        assert self._client is not None
+        available = self._client.account_voices()
+        if not available:
+            raise PreflightError(
+                "В аккаунте нет ни одного голоса. Создайте их на сайте ElevenLabs: "
+                "Voices — My Voices — Add a new voice — Voice Design."
+            )
+
+        wanted = self.settings.selected_voice_ids
+        if wanted:
+            by_id = {v.voice_id: v for v in available}
+            chosen = [by_id[v] for v in wanted if v in by_id]
+            missing = [v for v in wanted if v not in by_id]
+            if missing:
+                log.warning("Выбранные голоса пропали из аккаунта и пропущены: %s", ", ".join(missing))
+        else:
+            # Ничего не отмечено — берём свои созданные, а не всю библиотеку.
+            chosen = [v for v in available if v.is_custom] or available
+            log.info("Голоса не выбраны, беру все свои: %d шт.", len(chosen))
+
+        if not chosen:
+            raise PreflightError(
+                "Ни один из выбранных голосов не найден в аккаунте. "
+                "Обновите список голосов в настройках и отметьте нужные."
+            )
+
+        chosen = chosen[: self.settings.max_voices]
+        log.info("Использую голоса из аккаунта: %s", ", ".join(v.name for v in chosen))
+        self.stats.voices_reused = len(chosen)
+
+        return [
+            VoiceRef(voice_id=v.voice_id, name=v.name, prompt_file="(из аккаунта)", reused=True)
+            for v in chosen
+        ]
+
     def _prepare_voices(self, prompts: Sequence[PromptSpec], output_dir: Path) -> List[VoiceRef]:
         assert self._client is not None
         settings = self.settings
@@ -858,7 +908,12 @@ def estimate_plan(settings: Settings) -> Dict[str, object]:
     prompt_files = list_txt_files(prompts_dir) if prompts_dir else []
     text_files = list_txt_files(texts_dir) if texts_dir else []
 
-    voices = min(len(prompt_files), settings.max_voices)
+    from_account = settings.voice_source == SOURCE_ACCOUNT
+    if from_account:
+        # Голоса уже существуют: их количество известно из выбранных в настройках.
+        voices = min(len(settings.selected_voice_ids) or settings.max_voices, settings.max_voices)
+    else:
+        voices = min(len(prompt_files), settings.max_voices)
     total_chars = 0
     total_chunks = 0
     for path in text_files:
@@ -874,7 +929,10 @@ def estimate_plan(settings: Settings) -> Dict[str, object]:
         total_chars *= voices
         total_chunks *= voices
 
-    design_cost = 0 if settings.auto_generate_preview else len(settings.preview_text) * max(0, voices)
+    if from_account or settings.auto_generate_preview:
+        design_cost = 0
+    else:
+        design_cost = len(settings.preview_text) * max(0, voices)
 
     return {
         "prompts": len(prompt_files),

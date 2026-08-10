@@ -87,6 +87,12 @@ class ScopeError(ElevenLabsError):
     fatal = True
 
 
+class PlanLimitation(ElevenLabsError):
+    """Возможность есть у сервиса, но не на текущем тарифе."""
+
+    fatal = True
+
+
 class QuotaExceeded(ElevenLabsError):
     """Кредиты на аккаунте закончились."""
 
