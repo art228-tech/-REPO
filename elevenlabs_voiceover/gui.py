@@ -6,6 +6,7 @@ import queue
 import subprocess
 import sys
 import threading
+import tkinter as tk
 import webbrowser
 from pathlib import Path
 from tkinter import (
@@ -28,7 +29,7 @@ from tkinter import (
 )
 from typing import Any, List, Optional
 
-from . import diagnostics
+from . import clipboard, diagnostics
 from .api_client import ModelInfo, verify_key
 from .audio import find_ffmpeg
 from .config import (
@@ -127,6 +128,23 @@ class App:
         self._build_work_tab(self.tab_work)
         self._build_settings_tab(_scrollable(self.tab_settings))
         self._build_log_tab(self.tab_log)
+        self._enable_clipboard()
+
+    def _enable_clipboard(self) -> None:
+        """Оживить работу с буфером во всех полях окна.
+
+        Обходим дерево виджетов, а не перечисляем поля руками: иначе про
+        очередное добавленное поле легко забыть, и оно снова окажется без
+        вставки по правой кнопке.
+        """
+        clipboard.install_shortcuts(self.root)
+
+        for widget in _all_widgets(self.root):
+            if isinstance(widget, tk.Entry):
+                clipboard.attach_context_menu(widget)
+            elif isinstance(widget, tk.Text):
+                editable = str(widget.cget("state")) != "disabled"
+                clipboard.attach_context_menu(widget, editable=editable)
 
     # ------------------------------------------------------------------
     def _build_work_tab(self, parent: ttk.Frame) -> None:
@@ -147,11 +165,22 @@ class App:
         self.entry_key = ttk.Entry(key_frame, textvariable=self.var_api_key, show="\u2022")
         self.entry_key.grid(row=0, column=0, sticky="ew")
 
+        ttk.Button(key_frame, text="Вставить", width=10, command=self._paste_key).grid(
+            row=0, column=1, padx=(6, 0)
+        )
+
         self.var_show_key = BooleanVar(value=False)
         ttk.Checkbutton(
             key_frame, text="показать", variable=self.var_show_key, command=self._toggle_key_visibility
-        ).grid(row=0, column=1, padx=(8, 0))
-        ttk.Button(key_frame, text="Проверить", command=self._verify_key).grid(row=0, column=2, padx=(8, 0))
+        ).grid(row=0, column=2, padx=(8, 0))
+        ttk.Button(key_frame, text="Проверить", command=self._verify_key).grid(row=0, column=3, padx=(8, 0))
+        row += 1
+
+        ttk.Label(
+            parent,
+            text="Ключ можно вставить кнопкой, сочетанием Ctrl+V или правой кнопкой мыши по полю",
+            style="Hint.TLabel",
+        ).grid(row=row, column=1, columnspan=2, sticky="w")
         row += 1
 
         self.var_remember_key = BooleanVar(value=True)
@@ -559,6 +588,26 @@ class App:
     def _toggle_key_visibility(self) -> None:
         self.entry_key.configure(show="" if self.var_show_key.get() else "\u2022")
 
+    def _paste_key(self) -> None:
+        """Положить ключ из буфера в поле, заменив прежнее значение."""
+        text = clipboard.clipboard_text(self.root)
+        if not text:
+            messagebox.showinfo(
+                APP_TITLE,
+                "В буфере обмена пусто.\n\nСкопируйте ключ на странице ElevenLabs "
+                "и нажмите «Вставить» ещё раз.",
+                parent=self.root,
+            )
+            return
+
+        self.var_api_key.set(text)
+        self.entry_key.icursor(END)
+        # Показываем вставленное: так сразу видно, что попал именно ключ,
+        # а не случайно скопированный до него текст.
+        self.var_show_key.set(True)
+        self._toggle_key_visibility()
+        log.info("Ключ вставлен из буфера обмена, длина %d символов", len(text))
+
     def _pick_folder(self, variable: StringVar) -> None:
         initial = variable.get() or str(Path.home())
         chosen = filedialog.askdirectory(initialdir=initial, parent=self.root)
@@ -864,6 +913,13 @@ class App:
 
 
 # ----------------------------------------------------------------------
+def _all_widgets(root: tk.Misc):
+    """Обойти дерево виджетов сверху вниз."""
+    yield root
+    for child in root.winfo_children():
+        yield from _all_widgets(child)
+
+
 def _scrollable(parent: ttk.Frame) -> ttk.Frame:
     """Обернуть вкладку в прокручиваемую область.
 

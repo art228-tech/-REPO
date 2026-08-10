@@ -26,17 +26,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pytest ruff
 
+      # Часть тестов работает с настоящими виджетами, поэтому графическое
+      # окружение нужно до запуска тестов, а не после.
+      - name: Установить графическое окружение
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk tk8.6 xvfb
+
       - name: Линтер
         run: ruff check .
 
+      - name: Убедиться, что tkinter доступен
+        run: python -c "import tkinter; print('tkinter', tkinter.TkVersion)"
+
       - name: Тесты
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -m pytest tests/
+
+      - name: Тесты
+        if: runner.os == 'Windows'
         run: python -m pytest tests/
 
       - name: Проверить, что окно строится
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-tk xvfb
           xvfb-run -a python -c "
           import tkinter
           from elevenlabs_voiceover.gui import App
