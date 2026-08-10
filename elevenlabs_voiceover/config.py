@@ -83,6 +83,10 @@ class Settings:
     request_timeout: int = 180
     max_retries: int = 5
 
+    # --- сеть ---
+    proxy_url: str = ""
+    ignore_system_proxy: bool = False
+
     # --- вывод ---
     keep_chunks: bool = False
     use_ffmpeg: bool = True
@@ -126,6 +130,7 @@ class Settings:
         self.preview_text = preview
 
         self.language_code = (self.language_code or "").strip()
+        self.proxy_url = normalize_proxy_url(self.proxy_url)
 
     # ------------------------------------------------------------------
     def voice_settings_payload(self) -> Dict[str, Any]:
@@ -194,6 +199,33 @@ class Settings:
         settings = cls.from_dict(data)
         register_secret(settings.api_key)
         return settings
+
+
+#: Схемы прокси, которые понимает requests. socks5h отдаёт разрешение имён
+#: самому прокси — это важно там, где домен ломают ещё на уровне DNS.
+PROXY_SCHEMES = ("http", "https", "socks5", "socks5h", "socks4")
+
+
+def normalize_proxy_url(value: str) -> str:
+    """Привести адрес прокси к виду, который примет requests.
+
+    Человек обычно пишет просто «127.0.0.1:1080», без схемы. Молча уронить
+    запуск из-за этого нельзя, поэтому недостающую схему подставляем сами.
+    """
+    text = (value or "").strip()
+    if not text:
+        return ""
+
+    if "://" not in text:
+        text = f"http://{text}"
+
+    scheme, _, rest = text.partition("://")
+    scheme = scheme.lower()
+    if scheme not in PROXY_SCHEMES or not rest.strip("/"):
+        log.warning("Адрес прокси %r не разобран, пропускаю его", value)
+        return ""
+
+    return f"{scheme}://{rest}"
 
 
 def _clamp_int(value: Any, low: int, high: int, default: int) -> int:

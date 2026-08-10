@@ -252,6 +252,8 @@ class Runner:
             timeout=settings.request_timeout,
             max_retries=settings.max_retries,
             cancel_event=self.cancel,
+            proxy_url=settings.proxy_url,
+            ignore_system_proxy=settings.ignore_system_proxy,
         )
 
         self._sync_subscription(initial=True)

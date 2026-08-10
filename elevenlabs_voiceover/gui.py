@@ -30,7 +30,7 @@ from tkinter import (
 from typing import Any, List, Optional
 
 from . import clipboard, diagnostics
-from .api_client import ModelInfo, decoder_support, probe_connection, safe_proxy_summary, verify_key
+from .api_client import ModelInfo, decoder_support, describe_route, probe_connection, verify_key
 from .audio import find_ffmpeg
 from .config import (
     DEFAULT_GUIDANCE,
@@ -426,6 +426,8 @@ class App:
         )
         row += 1
 
+        row = self._separator(canvas_frame, row, "Файлы на выходе")
+
         self.var_keep_chunks = BooleanVar(value=False)
         ttk.Checkbutton(canvas_frame, text="Не удалять промежуточные куски после склейки",
                         variable=self.var_keep_chunks).grid(
@@ -442,6 +444,30 @@ class App:
 
         self.lbl_ffmpeg = ttk.Label(canvas_frame, text="", style="Hint.TLabel")
         self.lbl_ffmpeg.grid(row=row, column=1, columnspan=2, sticky="w")
+        row += 1
+
+        row = self._separator(canvas_frame, row, "Сеть")
+
+        ttk.Label(canvas_frame, text="Прокси:").grid(row=row, column=0, sticky="w", pady=3)
+        self.var_proxy = StringVar(value="")
+        ttk.Entry(canvas_frame, textvariable=self.var_proxy).grid(
+            row=row, column=1, columnspan=2, sticky="ew", pady=3
+        )
+        row += 1
+        ttk.Label(
+            canvas_frame,
+            text="Пусто — как настроено в Windows. Иначе, например, socks5h://127.0.0.1:1080 "
+                 "или http://127.0.0.1:8080. Пригодится, если соединение с ElevenLabs рвётся: "
+                 "многие VPN поднимают у себя такой адрес.",
+            style="Hint.TLabel", justify=LEFT, wraplength=700,
+        ).grid(row=row, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        row += 1
+
+        self.var_ignore_system_proxy = BooleanVar(value=False)
+        ttk.Checkbutton(canvas_frame, text="Не использовать системный прокси Windows",
+                        variable=self.var_ignore_system_proxy).grid(
+            row=row, column=1, columnspan=2, sticky="w", pady=3
+        )
 
     def _separator(self, parent: ttk.Frame, row: int, title: str) -> int:
         ttk.Separator(parent, orient="horizontal").grid(
@@ -555,6 +581,8 @@ class App:
         self.var_timeout.set(s.request_timeout)
         self.var_keep_chunks.set(s.keep_chunks)
         self.var_use_ffmpeg.set(s.use_ffmpeg)
+        self.var_proxy.set(s.proxy_url)
+        self.var_ignore_system_proxy.set(s.ignore_system_proxy)
 
     def _widgets_to_settings(self) -> Settings:
         s = self.settings
@@ -589,6 +617,8 @@ class App:
         s.request_timeout = _safe_int(self.var_timeout, s.request_timeout)
         s.keep_chunks = bool(self.var_keep_chunks.get())
         s.use_ffmpeg = bool(self.var_use_ffmpeg.get())
+        s.proxy_url = self.var_proxy.get().strip()
+        s.ignore_system_proxy = bool(self.var_ignore_system_proxy.get())
 
         s.normalize()
         register_secret(s.api_key)
@@ -667,7 +697,12 @@ class App:
 
         def work() -> None:
             try:
-                subscription, models = verify_key(key, timeout=settings.request_timeout)
+                subscription, models = verify_key(
+                    key,
+                    timeout=settings.request_timeout,
+                    proxy_url=settings.proxy_url,
+                    ignore_system_proxy=settings.ignore_system_proxy,
+                )
             except ElevenLabsError as exc:
                 self.events.put(("verify_failed", str(exc)))
             except Exception as exc:  # noqa: BLE001
@@ -797,7 +832,12 @@ class App:
 
         def work() -> None:
             try:
-                results = probe_connection(settings.resolved_api_key(), timeout=settings.request_timeout)
+                results = probe_connection(
+                    settings.resolved_api_key(),
+                    timeout=settings.request_timeout,
+                    proxy_url=settings.proxy_url,
+                    ignore_system_proxy=settings.ignore_system_proxy,
+                )
             except Exception as exc:
                 log.exception("Проверка соединения упала")
                 self.events.put(("probe_failed", str(exc)))
@@ -812,9 +852,10 @@ class App:
 
         broken = [r for r in results if r.error or not r.json_ok]
         report = "\n\n".join(r.line() for r in results)
+        settings = self.settings
         tail = (
             f"\n\nСжатие, доступное программе: {decoder_support()}"
-            f"\nПрокси: {safe_proxy_summary() or 'не настроен'}"
+            f"\nПуть в сеть: {describe_route(settings.proxy_url, settings.ignore_system_proxy)}"
         )
 
         if not broken:

@@ -109,6 +109,8 @@ class ElevenLabsClient:
         max_retries: int = 5,
         cancel_event: Optional[threading.Event] = None,
         base_url: str = BASE_URL,
+        proxy_url: str = "",
+        ignore_system_proxy: bool = False,
     ) -> None:
         key = (api_key or "").strip()
         if not key:
@@ -129,11 +131,9 @@ class ElevenLabsClient:
                 "Accept": "*/*",
             }
         )
+        apply_proxy(self._session, proxy_url, ignore_system_proxy)
 
-        # Прокси — самая частая причина подменённых ответов, и без записи в лог
-        # понять это по отчёту невозможно.
-        proxy = safe_proxy_summary()
-        log.debug("Соединение с %s%s", self._base_url, f", прокси: {proxy}" if proxy else ", без прокси")
+        log.debug("Соединение с %s, %s", self._base_url, describe_route(proxy_url, ignore_system_proxy))
 
     # ------------------------------------------------------------------
     def close(self) -> None:
@@ -189,11 +189,13 @@ class ElevenLabsClient:
                     timeout=(15, self._timeout),
                 )
             except requests.exceptions.Timeout as exc:
-                error: ElevenLabsError = NetworkError(f"Таймаут запроса: {exc}", endpoint=path)
+                error: ElevenLabsError = NetworkError(
+                    f"Таймаут запроса: {_explain_network_error(exc)}", endpoint=path
+                )
             except requests.exceptions.ConnectionError as exc:
-                error = NetworkError(f"Нет соединения с API: {exc}", endpoint=path)
+                error = NetworkError(f"Нет связи с API: {_explain_network_error(exc)}", endpoint=path)
             except requests.exceptions.RequestException as exc:
-                error = NetworkError(f"Ошибка запроса: {exc}", endpoint=path)
+                error = NetworkError(f"Ошибка запроса: {_explain_network_error(exc)}", endpoint=path)
             else:
                 elapsed = time.monotonic() - started
                 size = len(response.content or b"")
@@ -488,6 +490,42 @@ class ElevenLabsClient:
 _HTML_MARKERS = (b"<!doctype html", b"<html", b"<head", b"<body", b"<!--")
 
 
+def hide_credentials(url: str) -> str:
+    """Убрать логин и пароль из адреса прокси перед записью в лог."""
+    try:
+        split = urlsplit(url if "://" in url else f"//{url}")
+    except ValueError:
+        return "(адрес не разобран)"
+    host = split.hostname or "?"
+    port = f":{split.port}" if split.port else ""
+    scheme = f"{split.scheme}://" if split.scheme else ""
+    return f"{scheme}{host}{port}"
+
+
+def apply_proxy(session: requests.Session, proxy_url: str = "", ignore_system_proxy: bool = False) -> None:
+    """Настроить, каким путём сессия пойдёт в сеть."""
+    if ignore_system_proxy:
+        # Сломанный или устаревший системный прокси — частая причина обрывов,
+        # и обойти его должно быть возможно, не трогая настройки Windows.
+        session.trust_env = False
+
+    proxy = (proxy_url or "").strip()
+    if proxy:
+        session.proxies = {"http": proxy, "https": proxy}
+        session.trust_env = False
+
+
+def describe_route(proxy_url: str = "", ignore_system_proxy: bool = False) -> str:
+    """Человекочитаемое описание пути в сеть — для лога и отчёта."""
+    proxy = (proxy_url or "").strip()
+    if proxy:
+        return f"через свой прокси {hide_credentials(proxy)}"
+    if ignore_system_proxy:
+        return "напрямую, системный прокси отключён"
+    system = safe_proxy_summary()
+    return f"через системный прокси ({system})" if system else "напрямую"
+
+
 def safe_proxy_summary() -> str:
     """Прокси, через которые пойдут запросы, без логинов и паролей."""
     try:
@@ -594,7 +632,13 @@ def decoder_support() -> str:
     return ", ".join(available)
 
 
-def probe_connection(api_key: str = "", timeout: int = 30, base_url: str = BASE_URL) -> List[ProbeResult]:
+def probe_connection(
+    api_key: str = "",
+    timeout: int = 30,
+    base_url: str = BASE_URL,
+    proxy_url: str = "",
+    ignore_system_proxy: bool = False,
+) -> List[ProbeResult]:
     """Постучаться в API и записать всё, что вернулось.
 
     Нужна, когда обычный запрос падает на разборе ответа: здесь видно и код,
@@ -610,8 +654,10 @@ def probe_connection(api_key: str = "", timeout: int = 30, base_url: str = BASE_
         checks.append(("Сведения о подписке", "/v1/user/subscription", True))
 
     log.info("Проверка соединения. Поддерживаемое сжатие: %s", decoder_support())
-    proxy = safe_proxy_summary()
-    log.info("Прокси: %s", proxy or "не настроен")
+    log.info("Путь в сеть: %s", describe_route(proxy_url, ignore_system_proxy))
+
+    session = requests.Session()
+    apply_proxy(session, proxy_url, ignore_system_proxy)
 
     results: List[ProbeResult] = []
     for label, path, with_key in checks:
@@ -623,9 +669,9 @@ def probe_connection(api_key: str = "", timeout: int = 30, base_url: str = BASE_
 
         started = time.monotonic()
         try:
-            response = requests.get(url, headers=headers, timeout=(15, timeout))
+            response = session.get(url, headers=headers, timeout=(15, timeout))
         except requests.exceptions.RequestException as exc:
-            result.error = str(exc)
+            result.error = _explain_network_error(exc)
         else:
             body = response.content or b""
             result.status = response.status_code
@@ -647,7 +693,41 @@ def probe_connection(api_key: str = "", timeout: int = 30, base_url: str = BASE_
         log.info("%s", result.line())
         results.append(result)
 
+    session.close()
     return results
+
+
+#: Признаки того, что соединение рвут снаружи, а не сервер отказал.
+_BLOCKED_MARKERS = (
+    "connection reset",
+    "connection aborted",
+    "connectionreseterror",
+    "remotedisconnected",
+    "eof occurred",
+    "unexpected_eof",
+    "record layer failure",
+    "10054",
+)
+
+
+def _explain_network_error(exc: Exception) -> str:
+    """Перевести сетевую ошибку в формулировку, по которой понятно, что делать."""
+    text = str(exc)
+    lowered = text.lower()
+
+    if any(marker in lowered for marker in _BLOCKED_MARKERS):
+        return (
+            "соединение разорвано на полпути. Так выглядит фильтрация трафика: запрос до "
+            "ElevenLabs не доходит, хотя интернет работает. Помогает VPN или прокси, "
+            f"указанный в настройках. Исходная ошибка: {text[:200]}"
+        )
+    if "timed out" in lowered or "timeout" in lowered:
+        return f"ответа не дождались за отведённое время. Исходная ошибка: {text[:200]}"
+    if "name or service not known" in lowered or "getaddrinfo" in lowered or "nodename" in lowered:
+        return f"имя api.elevenlabs.io не разрешается в адрес — похоже на проблему с DNS. {text[:200]}"
+    if "proxy" in lowered or "socks" in lowered:
+        return f"не удалось пройти через прокси. Проверьте его адрес в настройках. {text[:200]}"
+    return text[:300]
 
 
 def _parse_error_body(response: requests.Response) -> Tuple[Optional[str], str, Any]:
@@ -698,9 +778,18 @@ def verify_key(
     *,
     timeout: int = 60,
     cancel_event: Optional[threading.Event] = None,
+    proxy_url: str = "",
+    ignore_system_proxy: bool = False,
 ) -> Tuple[Subscription, List[ModelInfo]]:
     """Быстрая проверка ключа: подписка плюс список доступных моделей."""
-    with ElevenLabsClient(api_key, timeout=timeout, max_retries=2, cancel_event=cancel_event) as client:
+    with ElevenLabsClient(
+        api_key,
+        timeout=timeout,
+        max_retries=2,
+        cancel_event=cancel_event,
+        proxy_url=proxy_url,
+        ignore_system_proxy=ignore_system_proxy,
+    ) as client:
         subscription = client.get_subscription()
         try:
             models = client.list_models()

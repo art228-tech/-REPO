@@ -488,12 +488,24 @@ def test_decoder_support_always_lists_gzip():
     assert "deflate" in decoder_support()
 
 
+def fake_session_get(monkeypatch, handler):
+    """Подменить Session.get, которым пользуется проверка соединения."""
+    calls = []
+
+    def get(self, url, **kwargs):
+        calls.append((url, kwargs))
+        return handler(url, **kwargs)
+
+    monkeypatch.setattr(requests.Session, "get", get)
+    return calls
+
+
 def test_probe_reports_healthy_api(monkeypatch):
     from elevenlabs_voiceover import api_client
 
-    monkeypatch.setattr(
-        api_client.requests, "get",
-        lambda url, **kwargs: response(200, {"models": []}, headers={"Content-Type": "application/json"}),
+    fake_session_get(
+        monkeypatch,
+        lambda url, **kw: response(200, {"models": []}, headers={"Content-Type": "application/json"}),
     )
 
     results = api_client.probe_connection("sk_test_key_1234567890")
@@ -506,20 +518,17 @@ def test_probe_reports_healthy_api(monkeypatch):
 def test_probe_without_key_checks_only_public_endpoint(monkeypatch):
     from elevenlabs_voiceover import api_client
 
-    monkeypatch.setattr(api_client.requests, "get", lambda url, **kwargs: response(200, {"ok": True}))
-
-    results = api_client.probe_connection("")
-
-    assert len(results) == 1
+    fake_session_get(monkeypatch, lambda url, **kw: response(200, {"ok": True}))
+    assert len(api_client.probe_connection("")) == 1
 
 
 def test_probe_exposes_non_json_body(monkeypatch):
     from elevenlabs_voiceover import api_client
 
     page = b"<!DOCTYPE html><html>stub page</html>"
-    monkeypatch.setattr(
-        api_client.requests, "get",
-        lambda url, **kwargs: response(200, content=page, headers={"Content-Type": "text/html"}),
+    fake_session_get(
+        monkeypatch,
+        lambda url, **kw: response(200, content=page, headers={"Content-Type": "text/html"}),
     )
 
     results = api_client.probe_connection("sk_test_key_1234567890")
@@ -533,46 +542,70 @@ def test_probe_exposes_non_json_body(monkeypatch):
 def test_probe_survives_network_failure(monkeypatch):
     from elevenlabs_voiceover import api_client
 
-    def boom(url, **kwargs):
+    def boom(url, **kw):
         raise requests.exceptions.ConnectionError("сеть недоступна")
 
-    monkeypatch.setattr(api_client.requests, "get", boom)
-
+    fake_session_get(monkeypatch, boom)
     results = api_client.probe_connection("sk_test_key_1234567890")
 
     assert all(r.error for r in results)
     assert "не удалось" in results[0].line()
 
 
+def test_probe_names_filtering_on_reset(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    def reset(url, **kw):
+        raise requests.exceptions.ConnectionError(
+            "('Connection aborted.', ConnectionResetError(10054, 'Соединение разорвано'))"
+        )
+
+    fake_session_get(monkeypatch, reset)
+    results = api_client.probe_connection("")
+
+    assert "фильтрация трафика" in results[0].error
+
+
 def test_probe_sends_key_only_where_needed(monkeypatch):
     from elevenlabs_voiceover import api_client
 
-    seen = []
-
-    def capture(url, **kwargs):
-        seen.append((url, "xi-api-key" in kwargs.get("headers", {})))
-        return response(200, {"ok": True})
-
-    monkeypatch.setattr(api_client.requests, "get", capture)
+    calls = fake_session_get(monkeypatch, lambda url, **kw: response(200, {"ok": True}))
     api_client.probe_connection("sk_test_key_1234567890")
 
-    assert seen[0][1] is False
-    assert seen[1][1] is True
-    assert seen[2][0].endswith("/v1/user/subscription")
+    assert "xi-api-key" not in calls[0][1]["headers"]
+    assert "xi-api-key" in calls[1][1]["headers"]
+    assert calls[2][0].endswith("/v1/user/subscription")
 
 
 def test_probe_does_not_leak_key_into_snippet(monkeypatch):
     from elevenlabs_voiceover import api_client
 
     echoed = b"<html>xi-api-key: sk_test_key_1234567890</html>"
-    monkeypatch.setattr(
-        api_client.requests, "get",
-        lambda url, **kwargs: response(200, content=echoed, headers={"Content-Type": "text/html"}),
+    fake_session_get(
+        monkeypatch,
+        lambda url, **kw: response(200, content=echoed, headers={"Content-Type": "text/html"}),
     )
 
     results = api_client.probe_connection("sk_test_key_1234567890")
 
     assert all("sk_test_key_1234567890" not in r.snippet for r in results)
+
+
+def test_probe_uses_configured_proxy(monkeypatch):
+    from elevenlabs_voiceover import api_client
+
+    seen = {}
+
+    def get(self, url, **kwargs):
+        seen["proxies"] = dict(self.proxies)
+        seen["trust_env"] = self.trust_env
+        return response(200, {"ok": True})
+
+    monkeypatch.setattr(requests.Session, "get", get)
+    api_client.probe_connection("", proxy_url="socks5h://127.0.0.1:1080")
+
+    assert seen["proxies"]["https"] == "socks5h://127.0.0.1:1080"
+    assert seen["trust_env"] is False
 
 
 def test_proxy_summary_hides_credentials(monkeypatch):
