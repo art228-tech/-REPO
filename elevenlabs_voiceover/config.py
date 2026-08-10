@@ -29,6 +29,13 @@ VOICE_MODES = {
 VOICE_PREVIEW_MIN_CHARS = 100
 VOICE_PREVIEW_MAX_CHARS = 1000
 
+#: Насколько строго Voice Design держится промпта. Шкала 0–100, в API по
+#: умолчанию 5. Значение сохранено как у ElevenLabs, чтобы результат совпадал
+#: с их веб-интерфейсом, хотя в примерах документации используют 25–40.
+DEFAULT_GUIDANCE = 5.0
+GUIDANCE_MIN = 0.0
+GUIDANCE_MAX = 100.0
+
 #: Короткий нейтральный preview. Voice Design списывает кредиты по длине этого
 #: текста, поэтому по умолчанию берём минимально допустимую длину.
 DEFAULT_PREVIEW_TEXT = (
@@ -55,7 +62,7 @@ class Settings:
     voice_design_model: str = "eleven_multilingual_ttv_v2"
     preview_text: str = DEFAULT_PREVIEW_TEXT
     auto_generate_preview: bool = False
-    guidance_scale: float = 5.0
+    guidance_scale: float = DEFAULT_GUIDANCE
 
     # --- озвучка ---
     model_id: str = "eleven_flash_v2_5"
@@ -104,7 +111,9 @@ class Settings:
         self.similarity_boost = _clamp_float(self.similarity_boost, 0.0, 1.0, 0.75)
         self.style = _clamp_float(self.style, 0.0, 1.0, 0.0)
         self.speed = _clamp_float(self.speed, 0.25, 4.0, 1.0)
-        self.guidance_scale = _clamp_float(self.guidance_scale, 0.0, 100.0, 5.0)
+        self.guidance_scale = _clamp_float(
+            self.guidance_scale, GUIDANCE_MIN, GUIDANCE_MAX, DEFAULT_GUIDANCE
+        )
 
         preview = (self.preview_text or "").strip()
         if not preview:

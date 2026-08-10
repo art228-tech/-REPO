@@ -33,6 +33,7 @@ from . import clipboard, diagnostics
 from .api_client import ModelInfo, verify_key
 from .audio import find_ffmpeg
 from .config import (
+    DEFAULT_GUIDANCE,
     MODE_ALL_VOICES,
     MODE_ROUND_ROBIN,
     VOICE_MODES,
@@ -357,11 +358,19 @@ class App:
         row += 1
 
         ttk.Label(canvas_frame, text="Точность промпта:").grid(row=row, column=0, sticky="w", pady=3)
-        self.var_guidance = DoubleVar(value=5.0)
-        ttk.Spinbox(canvas_frame, from_=0.0, to=100.0, increment=0.5, width=10,
+        self.var_guidance = DoubleVar(value=DEFAULT_GUIDANCE)
+        ttk.Spinbox(canvas_frame, from_=0.0, to=100.0, increment=5.0, width=10,
                     textvariable=self.var_guidance).grid(row=row, column=1, sticky="w", pady=3)
-        ttk.Label(canvas_frame, text="Выше — строже по промпту, но звук искусственнее",
+        ttk.Label(canvas_frame, text="Шкала 0–100. Выше — строже по промпту, но звук искусственнее",
                   style="Hint.TLabel").grid(row=row, column=2, sticky="w", padx=(8, 0))
+        row += 1
+        ttk.Label(
+            canvas_frame,
+            text=f"По умолчанию в API стоит {DEFAULT_GUIDANCE:g} — это очень творческий край шкалы. "
+                 "В примерах ElevenLabs используют 25–40: начните оттуда, если голос "
+                 "получается непохожим на описание.",
+            style="Hint.TLabel", justify=LEFT, wraplength=700,
+        ).grid(row=row, column=1, columnspan=2, sticky="w", pady=(0, 6))
         row += 1
 
         self.var_auto_preview = BooleanVar(value=False)

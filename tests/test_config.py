@@ -1,7 +1,10 @@
 import json
 
 from elevenlabs_voiceover.config import (
+    DEFAULT_GUIDANCE,
     DEFAULT_PREVIEW_TEXT,
+    GUIDANCE_MAX,
+    GUIDANCE_MIN,
     MODE_ALL_VOICES,
     MODE_ROUND_ROBIN,
     VOICE_PREVIEW_MAX_CHARS,
@@ -116,6 +119,24 @@ def test_api_key_from_environment(monkeypatch):
 def test_explicit_key_wins_over_environment(monkeypatch):
     monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_from_env_123456")
     assert Settings(api_key="sk_explicit_123456").resolved_api_key() == "sk_explicit_123456"
+
+
+def test_guidance_default_matches_elevenlabs():
+    # В API у guidance_scale значение по умолчанию 5 на шкале 0–100.
+    assert DEFAULT_GUIDANCE == 5.0
+    assert (GUIDANCE_MIN, GUIDANCE_MAX) == (0.0, 100.0)
+    assert Settings().guidance_scale == 5.0
+
+
+def test_guidance_accepts_documented_example_values():
+    # В примерах документации ElevenLabs используются 25–40.
+    for value in (25.0, 30.0, 35.0, 40.0):
+        assert Settings(guidance_scale=value).guidance_scale == value
+
+
+def test_guidance_is_clamped_to_scale():
+    assert Settings(guidance_scale=500).guidance_scale == GUIDANCE_MAX
+    assert Settings(guidance_scale=-10).guidance_scale == GUIDANCE_MIN
 
 
 def test_voice_settings_payload_shape():
