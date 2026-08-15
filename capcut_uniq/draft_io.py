@@ -75,13 +75,20 @@ class Draft:
         path = folder / CONTENT_NAME
         if not path.exists():
             raise TemplateError(f"В папке {folder.name} нет файла {CONTENT_NAME}")
-        raw = path.read_text(encoding="utf-8")
+        unreadable = TemplateError(
+            f"{folder.name}: {CONTENT_NAME} не является текстовым JSON. "
+            "Похоже, версия CapCut шифрует черновики — такая не подходит."
+        )
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise unreadable from exc
         if not raw.lstrip().startswith("{"):
-            raise TemplateError(
-                f"{folder.name}: {CONTENT_NAME} не является текстовым JSON. "
-                "Похоже, версия CapCut шифрует черновики — такая не подходит."
-            )
-        return cls(folder, json.loads(raw))
+            raise unreadable
+        try:
+            return cls(folder, json.loads(raw))
+        except ValueError as exc:
+            raise TemplateError(f"{folder.name}: {CONTENT_NAME} повреждён — {exc}") from exc
 
     def save(self) -> list[Path]:
         """Записывает таймлайн во все живые файлы и убирает устаревшие копии."""

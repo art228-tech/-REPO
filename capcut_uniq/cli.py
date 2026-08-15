@@ -29,6 +29,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
+    sub.add_parser("gui", help="открыть окно программы")
+
     doctor = sub.add_parser("doctor", help="проверить окружение")
     _add_common(doctor)
 
@@ -78,6 +80,19 @@ def _config_from(args) -> Config:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "gui":
+        try:
+            from .gui import main as gui_main
+        except ImportError:
+            print(
+                "Не удалось открыть окно: в этой сборке Python нет tkinter.\n"
+                "На Windows он входит в стандартный установщик — переустанови Python "
+                "с python.org, отметив «tcl/tk and IDLE».\n"
+                "Пока можно работать из консоли: python main.py run --help"
+            )
+            return 2
+        return gui_main()
+
     config = _config_from(args)
     log_path = logging_setup.setup(config.log_dir, verbose=getattr(args, "verbose", False))
 

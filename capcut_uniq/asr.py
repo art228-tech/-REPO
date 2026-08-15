@@ -54,8 +54,8 @@ class Transcript:
             return ends
         if self.marks:
             return list(self.marks)
-        # Знаков нет вовсе — считаем границей любую заметную паузу.
-        return [end for _, end in self.gaps(0.45)]
+        # Знаков нет вовсе — считаем границей момент, где речь смолкла.
+        return [start for start, _ in self.gaps(0.45)]
 
     def gaps(self, min_gap: float) -> list[tuple[float, float]]:
         """Паузы между словами длиннее заданной: список (начало, конец)."""
@@ -150,8 +150,9 @@ def pick_cut_point(
         return lower, f"первое предложение кончилось на {first:.3f}с, растянуто до нижнего предела"
 
     # Предложение затянулось за верхнюю границу (или его вовсе не нашли) —
-    # ищем внутри коридора самую заметную паузу, чтобы стык не резал слово.
-    candidates = [(end - start, end) for start, end in transcript.gaps(0.08) if lower <= end <= upper]
+    # ищем внутри коридора самую заметную паузу. Стык ставим туда, где речь
+    # смолкла, как это сделано в исходных шаблонах.
+    candidates = [(end - start, start) for start, end in transcript.gaps(0.08) if lower <= start <= upper]
     candidates += [(0.0, end) for end in ends if lower <= end <= upper]
     if candidates:
         _, chosen = max(candidates)
