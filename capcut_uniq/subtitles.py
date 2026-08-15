@@ -1,0 +1,232 @@
+"""Сборка субтитров в формате CapCut.
+
+Оформление не воспроизводится, а наследуется: берём текстовый шаблон, текстовый
+материал и анимацию прямо из исходного проекта и клонируем их под каждую новую
+реплику. Меняются только текст, тайминги и размеры текстового блока.
+
+Связь объектов в черновике такая:
+    сегмент → text_template → text_info_resources[0].text_material_id → text
+Анимация субтитра лежит в extra_material_refs внутри text_info_resources.
+"""
+from __future__ import annotations
+
+import copy
+import json
+import re
+import time
+
+from .config import Timing
+from .draft_io import Draft, new_capcut_id
+from .logging_setup import get_logger
+from .plan import Cue
+from .profile import TemplateProfile
+from .units import s2ms, s2us
+from .asr import Transcript
+
+log = get_logger("subtitles")
+
+TRAILING_PUNCT = re.compile(r"[.,!?;:…«»\"()]+$")
+LEADING_PUNCT = re.compile(r"^[«\"(]+")
+
+
+def clean_word(text: str) -> str:
+    """CapCut в автосубтитрах не показывает знаки препинания — убираем и мы."""
+    return LEADING_PUNCT.sub("", TRAILING_PUNCT.sub("", text)).strip()
+
+
+def build_cues(transcript: Transcript, timing: Timing) -> list[Cue]:
+    """Разбивает распознанную речь на реплики: по паузам и по длине строки."""
+    if not transcript.has_words:
+        return []
+
+    # Порог, после которого строку уже можно закрыть на любой заметной паузе.
+    # Без него длинные фразы рвутся ровно по счётчику символов и реплика может
+    # закончиться на предлоге — в исходных шаблонах такого нет.
+    comfortable = int(timing.subtitle_max_chars * 0.6)
+
+    groups: list[list] = [[]]
+    for previous, word in zip([None, *transcript.words], transcript.words):
+        current = groups[-1]
+        gap = (word.start - previous.end) if previous else 0.0
+        pending = " ".join(clean_word(w.text) for w in current)
+        length = len(pending) + 1 + len(clean_word(word.text))
+        too_long = length > timing.subtitle_max_chars
+        previous_text = previous.text.strip() if previous else ""
+        sentence_break = bool(re.search(r"[.!?…]$", previous_text))
+        # Запятая — мягкая граница: рвём по ней, только если строка уже набрала
+        # заметную длину. Так же ведут себя автосубтитры самого CapCut.
+        comma_break = bool(re.search(r"[,;:]$", previous_text)) and len(pending) >= comfortable
+        natural_break = gap >= 0.15 and len(pending) >= comfortable
+
+        if current and (gap >= timing.subtitle_gap_s or too_long or sentence_break
+                        or comma_break or natural_break):
+            groups.append([word])
+        else:
+            current.append(word)
+
+    cues: list[Cue] = []
+    for group in groups:
+        words = [(clean_word(w.text), w.start, w.end) for w in group]
+        words = [(text, start, end) for text, start, end in words if text]
+        if not words:
+            continue
+        start = words[0][1]
+        end = words[-1][2]
+        text = " ".join(text for text, _, _ in words)
+        cues.append(Cue(
+            text=text,
+            start_us=s2us(start),
+            duration_us=max(1, s2us(end - start)),
+            words=[(text, s2ms(w_start - start), s2ms(w_end - start)) for text, w_start, w_end in words],
+        ))
+
+    log.debug("собрано реплик: %d", len(cues))
+    return cues
+
+
+def _word_arrays(cue: Cue) -> dict:
+    """Массивы для поля ``words``: между словами стоят пробелы нулевой длины."""
+    starts: list[int] = []
+    ends: list[int] = []
+    tokens: list[str] = []
+    for index, (text, start_ms, end_ms) in enumerate(cue.words):
+        if index:
+            previous_end = ends[-1]
+            starts.append(previous_end)
+            ends.append(previous_end)
+            tokens.append(" ")
+        starts.append(start_ms)
+        ends.append(end_ms)
+        tokens.append(text)
+    return {"start_time": starts, "end_time": ends, "text": tokens}
+
+
+def _size_for(style_metrics: list[tuple[int, float, float]], length: int) -> tuple[float, float]:
+    """Размер текстового блока: берём ближайший по длине из шаблона.
+
+    CapCut пересчитывает эти значения при открытии проекта, поэтому точность
+    здесь нужна только чтобы превью не дёргалось на первом кадре.
+    """
+    usable = [m for m in style_metrics if m[1] > 0]
+    if not usable:
+        return 574.0, 120.0
+    closest = min(usable, key=lambda m: abs(m[0] - length))
+    return closest[1], closest[2]
+
+
+def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue]) -> int:
+    """Заменяет дорожку субтитров на новую. Возвращает число реплик."""
+    style = profile.subtitles
+    if style is None:
+        return 0
+
+    materials = draft.materials
+    templates = materials.setdefault("text_templates", [])
+    texts = materials.setdefault("texts", [])
+    animations = materials.setdefault("material_animations", [])
+
+    base_template = next((t for t in templates if t.get("id") == style.template_material_id), None)
+    base_text = next((t for t in texts if t.get("id") == style.text_material_id), None)
+    if base_template is None or base_text is None:
+        log.warning("В шаблоне не нашлось эталонного субтитра, дорожка оставлена как есть")
+        return 0
+
+    base_animation = next((a for a in animations if a.get("id") == style.animation_id), None)
+    track = draft.tracks[style.track]
+    base_segment = copy.deepcopy(track["segments"][0])
+
+    stale = _collect_stale_ids(draft, track)
+    materials["text_templates"] = [t for t in templates if t.get("id") not in stale]
+    materials["texts"] = [t for t in texts if t.get("id") not in stale]
+    materials["material_animations"] = [a for a in animations if a.get("id") not in stale]
+
+    group_id = f"ru-RU_{int(time.time() * 1000)}"
+    segments: list[dict] = []
+
+    for position, cue in enumerate(cues):
+        text_material = copy.deepcopy(base_text)
+        text_id = new_capcut_id()
+        text_material["id"] = text_id
+        text_material["name"] = new_capcut_id()
+        text_material["recognize_text"] = cue.text
+        text_material["group_id"] = group_id
+        text_material["words"] = _word_arrays(cue)
+        text_material["current_words"] = {"start_time": [], "end_time": [], "text": []}
+
+        body = json.loads(text_material.get("content") or "{}")
+        body["text"] = cue.text
+        for entry in body.get("styles") or []:
+            entry["range"] = [0, len(cue.text)]
+        text_material["content"] = json.dumps(body, ensure_ascii=False)
+
+        animation_id = None
+        if base_animation is not None:
+            animation = copy.deepcopy(base_animation)
+            animation_id = new_capcut_id()
+            animation["id"] = animation_id
+            for item in animation.get("animations") or []:
+                item["duration"] = cue.duration_us
+                item["start"] = 0
+            materials["material_animations"].append(animation)
+
+        template = copy.deepcopy(base_template)
+        template_id = new_capcut_id()
+        template["id"] = template_id
+        width, height = _size_for(style.metrics, len(cue.text))
+        for resource in template.get("text_info_resources") or []:
+            resource["text_material_id"] = text_id
+            resource["extra_material_refs"] = [animation_id] if animation_id else []
+            attach = resource.setdefault("attach_info", {})
+            attach["start_time"] = 0
+            attach["duration"] = cue.duration_us
+            attach["original_size_width"] = width
+            attach["original_size_height"] = height
+        materials["text_templates"].append(template)
+        materials["texts"].append(text_material)
+
+        segment = copy.deepcopy(base_segment)
+        segment["id"] = new_capcut_id()
+        segment["material_id"] = template_id
+        segment["target_timerange"] = {"start": cue.start_us, "duration": cue.duration_us}
+        segment["extra_material_refs"] = [animation_id] if animation_id else []
+        segment["render_index"] = style.render_index + position
+        segments.append(segment)
+
+    track["segments"] = segments
+    log.debug("дорожка субтитров пересобрана: %d реплик", len(segments))
+    return len(segments)
+
+
+def _collect_stale_ids(draft: Draft, track: dict) -> set[str]:
+    """Идентификаторы объектов, которые обслуживали старые субтитры."""
+    index = draft.material_index()
+    stale: set[str] = set()
+    for segment in track.get("segments") or []:
+        template_id = segment.get("material_id")
+        if not template_id:
+            continue
+        stale.add(template_id)
+        stale.update(segment.get("extra_material_refs") or [])
+        entry = index.get(template_id)
+        if not entry:
+            continue
+        for resource in entry[1].get("text_info_resources") or []:
+            if resource.get("text_material_id"):
+                stale.add(resource["text_material_id"])
+            stale.update(resource.get("extra_material_refs") or [])
+    return stale
+
+
+def clear(draft: Draft, profile: TemplateProfile) -> int:
+    """Полностью убирает субтитры — режим, когда пользователь делает их сам."""
+    style = profile.subtitles
+    if style is None:
+        return 0
+    track = draft.tracks[style.track]
+    stale = _collect_stale_ids(draft, track)
+    removed = len(track.get("segments") or [])
+    track["segments"] = []
+    for section in ("text_templates", "texts", "material_animations"):
+        items = draft.materials.get(section) or []
+        draft.materials[section] = [item for item in items if item.get("id") not in stale]
+    return removed
