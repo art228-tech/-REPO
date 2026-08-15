@@ -55,6 +55,19 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--asr-model", default="small", help="модель распознавания: tiny, base, small, medium")
     _add_common(run)
 
+    cut = sub.add_parser("split", help="нарезать длинное видео на клипы (на сборку не влияет)")
+    cut.add_argument("source", type=Path, help="исходное видео")
+    cut.add_argument("--out", type=Path, default=None, help="куда складывать клипы")
+    cut.add_argument("--pattern", default="4 15",
+                     help="длины фрагментов: одно число или чередование, например «4 15»")
+    cut.add_argument("--trim-start", type=float, default=0.0, help="отрезать с начала, с")
+    cut.add_argument("--trim-end", type=float, default=0.0, help="отрезать с конца, с")
+    cut.add_argument("--keep-tail", action="store_true", help="оставить неполный остаток в конце")
+    cut.add_argument("--copy", action="store_true",
+                     help="не перекодировать: быстрее, но длина прыгает по опорным кадрам")
+    cut.add_argument("--dry-run", action="store_true", help="только показать, что получится")
+    _add_common(cut)
+
     return parser
 
 
@@ -103,6 +116,8 @@ def main(argv: list[str] | None = None) -> int:
             return _templates(config, args.names)
         if args.command == "check":
             return _check(args.folder)
+        if args.command == "split":
+            return _split(args)
         if args.command == "run":
             report = batch.run(config)
             print()
@@ -168,6 +183,39 @@ def _check(folder: Path) -> int:
     report = validate.check(folder)
     print(report.describe())
     return 0 if report.ok else 1
+
+
+def _split(args) -> int:
+    from . import ffmpeg, splitter
+
+    pattern = splitter.parse_pattern(args.pattern)
+    target = args.out or (args.source.parent / "клипы")
+
+    if args.dry_run:
+        duration = ffmpeg.probe(args.source).duration_s
+        pieces, tail = splitter.plan_cuts(
+            duration, pattern, args.trim_start, args.trim_end, args.keep_tail
+        )
+        print(f"Видео: {duration:.2f}с, после обрезки {duration - args.trim_start - args.trim_end:.2f}с")
+        print(f"Получится клипов: {len(pieces)}")
+        for piece in pieces:
+            print(f"  {piece.index:3d}  {piece.start_s:8.3f} → {piece.start_s + piece.duration_s:8.3f}"
+                  f"  ({piece.duration_s:.3f}с)")
+        if tail > 0:
+            print(f"Остаток {tail:.2f}с будет отброшен")
+        print(f"Папка: {target}")
+        return 0
+
+    def progress(done: int, total: int, message: str) -> None:
+        print(f"  [{done}/{total}] {message}")
+
+    report = splitter.split(
+        args.source, target, pattern, args.trim_start, args.trim_end,
+        keep_tail=args.keep_tail, reencode=not args.copy, progress=progress,
+    )
+    print()
+    print(report.summary())
+    return 0
 
 
 if __name__ == "__main__":
