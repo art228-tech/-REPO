@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -16,6 +17,34 @@ from .errors import ToolMissing
 from .logging_setup import get_logger
 
 log = get_logger("ffmpeg")
+
+
+def _use_bundled_ffmpeg() -> None:
+    """Подхватывает FFmpeg, положенный рядом с программой в папку tools.
+
+    Установщик кладёт его туда, чтобы не менять системные настройки и не
+    требовать прав администратора. Раз FFmpeg лежит локально, найти его должна
+    сама программа, а не переменная PATH пользователя.
+    """
+    root = Path(__file__).resolve().parents[1]
+    tools = root / "tools"
+    candidates = [tools / "ffmpeg" / "bin", tools / "ffmpeg"]
+    if tools.is_dir():
+        for item in sorted(tools.iterdir()):
+            if item.is_dir() and "ffmpeg" in item.name.lower():
+                candidates.extend([item / "bin", item])
+
+    for folder in candidates:
+        if not folder.is_dir():
+            continue
+        if (folder / "ffmpeg.exe").exists() or (folder / "ffmpeg").exists():
+            current = os.environ.get("PATH", "")
+            if str(folder) not in current:
+                os.environ["PATH"] = f"{folder}{os.pathsep}{current}"
+            return
+
+
+_use_bundled_ffmpeg()
 
 _SILENCE_START = re.compile(r"silence_start:\s*(-?[\d.]+)")
 _SILENCE_END = re.compile(r"silence_end:\s*(-?[\d.]+)")
