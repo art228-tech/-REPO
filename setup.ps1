@@ -203,10 +203,27 @@ function Install-Ffmpeg {
         Stop-WithMessage @('В скачанном архиве нет ffmpeg.exe — попробуй удалить папку .cache и запустить заново.')
     }
 
+    # Берём только два нужных файла. В сборке лежит ещё ffplay.exe на сотню
+    # мегабайт, а он нам не нужен вообще.
     $bin = Join-Path $Tools 'ffmpeg\bin'
     New-Item -ItemType Directory -Path $bin -Force | Out-Null
-    Copy-Item (Join-Path $exe.DirectoryName '*.exe') $bin -Force
+    foreach ($name in @('ffmpeg.exe', 'ffprobe.exe')) {
+        Copy-Item (Join-Path $exe.DirectoryName $name) $bin -Force
+    }
     Remove-Item $temp -Recurse -Force
+}
+
+function Remove-Downloads {
+    # Скачанные установщики нужны были только на время установки.
+    if (-not (Test-Path $Cache)) { return }
+    try {
+        $freed = (Get-ChildItem $Cache -Recurse -File -ErrorAction SilentlyContinue |
+            Measure-Object -Property Length -Sum).Sum
+        Remove-Item $Cache -Recurse -Force
+        if ($freed -gt 1MB) {
+            Write-Ok ("Убрал скачанные установщики, освободилось {0:N0} МБ" -f ($freed / 1MB))
+        }
+    } catch { }
 }
 
 # --- Работа -----------------------------------------------------------------
@@ -328,6 +345,8 @@ if (-not (Test-Path $modelMark)) {
 } else {
     Write-Ok '[5/5] Модель распознавания на месте'
 }
+
+Remove-Downloads
 
 Write-Host ''
 Write-Host '============================================================'
