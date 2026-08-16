@@ -65,7 +65,10 @@ class Timing:
 
 @dataclass
 class Config:
-    clips_dir: Path
+    clips_dir: Path | list[Path]
+    """Одна папка с клипами или несколько — например когда короткие и длинные
+    разложены нарезкой по разным папкам."""
+
     voice_dir: Path
     templates: list[str] = field(default_factory=list)
     count: int = 1
@@ -85,6 +88,13 @@ class Config:
     timing: Timing = field(default_factory=Timing)
 
     @property
+    def clip_folders(self) -> list[Path]:
+        value = self.clips_dir
+        if isinstance(value, (str, Path)):
+            return [Path(value)]
+        return [Path(item) for item in value]
+
+    @property
     def log_dir(self) -> Path:
         return self.work_dir / "logs"
 
@@ -94,7 +104,8 @@ class Config:
 
     def to_json(self) -> str:
         data = asdict(self)
-        for key in ("clips_dir", "voice_dir", "drafts_dir", "work_dir"):
+        data["clips_dir"] = [str(item) for item in self.clip_folders]
+        for key in ("voice_dir", "drafts_dir", "work_dir"):
             data[key] = str(data[key])
         return json.dumps(data, ensure_ascii=False, indent=2)
 
@@ -103,7 +114,11 @@ class Config:
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
         ranges = Ranges(**raw.pop("ranges", {}) or {})
         timing = Timing(**raw.pop("timing", {}) or {})
-        for key in ("clips_dir", "voice_dir", "drafts_dir", "work_dir"):
+        if isinstance(raw.get("clips_dir"), list):
+            raw["clips_dir"] = [Path(item) for item in raw["clips_dir"]]
+        elif raw.get("clips_dir"):
+            raw["clips_dir"] = Path(raw["clips_dir"])
+        for key in ("voice_dir", "drafts_dir", "work_dir"):
             if raw.get(key):
                 raw[key] = Path(raw[key])
         return cls(ranges=ranges, timing=timing, **raw)

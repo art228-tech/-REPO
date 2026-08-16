@@ -27,20 +27,33 @@ class Clip:
 
 
 class Pool:
-    """Список файлов с длительностями и учётом уже использованных."""
+    """Список файлов с длительностями и учётом уже использованных.
 
-    def __init__(self, folder: Path, suffixes: set[str], kind: str):
-        self.folder = Path(folder)
+    Папок может быть несколько: нарезка умеет раскладывать короткие и длинные
+    клипы по разным папкам, и тогда конвейер берёт материал из всех сразу.
+    """
+
+    def __init__(self, folders, suffixes: set[str], kind: str):
+        if isinstance(folders, (str, Path)):
+            folders = [folders]
+        self.folders = [Path(item) for item in folders]
         self.kind = kind
-        if not self.folder.is_dir():
-            raise AssetShortage(f"Папка с материалами не найдена: {self.folder}")
 
-        files = sorted(
-            path for path in self.folder.iterdir()
-            if path.is_file() and path.suffix.lower() in suffixes
-        )
+        missing = [folder for folder in self.folders if not folder.is_dir()]
+        if missing:
+            raise AssetShortage(
+                "Папка с материалами не найдена: " + ", ".join(str(item) for item in missing)
+            )
+
+        files: list[Path] = []
+        for folder in self.folders:
+            files.extend(sorted(
+                path for path in folder.iterdir()
+                if path.is_file() and path.suffix.lower() in suffixes
+            ))
         if not files:
-            raise AssetShortage(f"В папке {self.folder} нет подходящих файлов ({kind})")
+            where = ", ".join(str(item) for item in self.folders)
+            raise AssetShortage(f"В папке {where} нет подходящих файлов ({kind})")
 
         self.items: list[Clip] = []
         for path in files:
@@ -51,7 +64,11 @@ class Pool:
                 continue
             self.items.append(Clip(path=path, duration_s=info.duration_s))
 
-        log.info("%s: найдено %d файлов в %s", kind, len(self.items), self.folder)
+        log.info("%s: найдено %d файлов в %s", kind, len(self.items),
+                 ", ".join(str(item) for item in self.folders))
+
+    def _where(self) -> str:
+        return ", ".join(str(item) for item in self.folders)
 
     def __len__(self) -> int:
         return len(self.items)
@@ -69,7 +86,7 @@ class Pool:
             longest = max((item.duration_s for item in self.items), default=0.0)
             raise AssetShortage(
                 f"Нет клипа длиной хотя бы {needed_s:.2f}с — самый длинный из оставшихся {longest:.2f}с. "
-                f"Добавь файлы в {self.folder}"
+                f"Добавь файлы в {self._where()}"
             )
         chosen = min(candidates, key=lambda item: item.duration_s)
         self.items.remove(chosen)
@@ -77,7 +94,7 @@ class Pool:
 
     def take_next(self) -> Clip:
         if not self.items:
-            raise AssetShortage(f"Закончились файлы в {self.folder} ({self.kind})")
+            raise AssetShortage(f"Закончились файлы в {self._where()} ({self.kind})")
         return self.items.pop(0)
 
 

@@ -186,6 +186,7 @@ class BatchTab(ttk.Frame):
         self.app = app
 
         self.clips_dir = tk.StringVar()
+        self.clips_dir2 = tk.StringVar()
         self.voice_dir = tk.StringVar()
         self.drafts_dir = tk.StringVar(value=str(_default_drafts_dir()))
         self.count = tk.IntVar(value=10)
@@ -198,12 +199,16 @@ class BatchTab(ttk.Frame):
 
         self.columnconfigure(1, weight=1)
         folder_row(self, 0, "Папка с клипами", self.clips_dir)
-        folder_row(self, 1, "Папка с озвучками", self.voice_dir)
-        folder_row(self, 2, "Папка черновиков CapCut", self.drafts_dir, self._reload)
+        folder_row(self, 1, "И вторая, если надо", self.clips_dir2)
+        ttk.Label(self, foreground="#666",
+                  text="вторая нужна, когда короткие и длинные клипы разложены по разным папкам").grid(
+            row=2, column=1, sticky="w", padx=PAD)
+        folder_row(self, 3, "Папка с озвучками", self.voice_dir)
+        folder_row(self, 4, "Папка черновиков CapCut", self.drafts_dir, self._reload)
 
-        ttk.Label(self, text="Шаблоны").grid(row=3, column=0, sticky="nw", pady=(PAD, 0))
+        ttk.Label(self, text="Шаблоны").grid(row=5, column=0, sticky="nw", pady=(PAD, 0))
         holder = ttk.Frame(self)
-        holder.grid(row=3, column=1, columnspan=2, sticky="ew", pady=(PAD, 0))
+        holder.grid(row=5, column=1, columnspan=2, sticky="ew", pady=(PAD, 0))
         holder.columnconfigure(0, weight=1)
         self.templates = tk.Listbox(holder, selectmode="extended", height=6, exportselection=False)
         self.templates.grid(row=0, column=0, sticky="ew")
@@ -215,7 +220,7 @@ class BatchTab(ttk.Frame):
             row=1, column=0, columnspan=2, sticky="w")
 
         options = ttk.Frame(self)
-        options.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
+        options.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
         ttk.Label(options, text="Сколько роликов").pack(side="left")
         ttk.Spinbox(options, from_=1, to=999, width=6, textvariable=self.count).pack(side="left", padx=(4, PAD))
         ttk.Label(options, text="Кадров/с").pack(side="left")
@@ -230,13 +235,13 @@ class BatchTab(ttk.Frame):
                      values=("tiny", "base", "small", "medium")).pack(side="left", padx=(4, PAD))
 
         checks = ttk.Frame(self)
-        checks.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        checks.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(4, 0))
         ttk.Checkbutton(checks, text="Собирать субтитры", variable=self.make_subtitles).pack(side="left")
         ttk.Checkbutton(checks, text="Убирать использованные материалы",
                         variable=self.consume).pack(side="left", padx=(PAD, 0))
 
         actions = ttk.Frame(self)
-        actions.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
+        actions.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
         start = ttk.Button(actions, text="Собрать", command=self._start)
         start.pack(side="left")
         check = ttk.Button(actions, text="Проверить окружение", command=self._doctor)
@@ -259,14 +264,18 @@ class BatchTab(ttk.Frame):
         chosen = [self.templates.get(i) for i in self.templates.curselection()]
         if not chosen:
             raise PipelineError("Не выбран ни один шаблон")
-        if not Path(self.clips_dir.get()).is_dir():
+        folders = [Path(value) for value in (self.clips_dir.get().strip(), self.clips_dir2.get().strip()) if value]
+        if not folders:
             raise PipelineError("Не указана папка с клипами")
+        for folder in folders:
+            if not folder.is_dir():
+                raise PipelineError(f"Папка с клипами не найдена: {folder}")
         if not Path(self.voice_dir.get()).is_dir():
             raise PipelineError("Не указана папка с озвучками")
 
         seed_text = self.seed.get().strip()
         return Config(
-            clips_dir=Path(self.clips_dir.get()),
+            clips_dir=folders,
             voice_dir=Path(self.voice_dir.get()),
             drafts_dir=Path(self.drafts_dir.get()),
             templates=chosen,
@@ -313,12 +322,14 @@ class SplitTab(ttk.Frame):
         self.app = app
 
         self.source = tk.StringVar()
-        self.output_dir = tk.StringVar()
+        self.single_dir = tk.StringVar()
         self.trim_start = tk.StringVar(value="0")
         self.trim_end = tk.StringVar(value="0")
         self.pattern = tk.StringVar(value="4 15")
+        self.per_length = tk.BooleanVar(value=True)
         self.keep_tail = tk.BooleanVar(value=False)
         self.reencode = tk.BooleanVar(value=True)
+        self.length_dirs: dict[float, tk.StringVar] = {}
 
         self.columnconfigure(1, weight=1)
 
@@ -326,37 +337,86 @@ class SplitTab(ttk.Frame):
         ttk.Entry(self, textvariable=self.source).grid(row=0, column=1, sticky="ew", padx=PAD, pady=2)
         ttk.Button(self, text="Выбрать…", command=self._pick_file).grid(row=0, column=2, pady=2)
 
-        folder_row(self, 1, "Куда складывать клипы", self.output_dir)
+        pattern_row = ttk.Frame(self)
+        pattern_row.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
+        ttk.Label(pattern_row, text="Длины фрагментов, с").pack(side="left")
+        ttk.Entry(pattern_row, width=14, textvariable=self.pattern).pack(side="left", padx=(4, PAD))
+        ttk.Label(pattern_row, foreground="#666",
+                  text="одно число — все куски одинаковые; «4 15» — чередование 4, 15, 4, 15 до конца").pack(side="left")
+
+        ttk.Checkbutton(self, text="Раскладывать по разным папкам: каждой длине своя",
+                        variable=self.per_length).grid(row=2, column=0, columnspan=3,
+                                                       sticky="w", pady=(PAD, 0))
+
+        self.targets = ttk.Frame(self)
+        self.targets.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        self.targets.columnconfigure(1, weight=1)
 
         trims = ttk.Frame(self)
-        trims.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
+        trims.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
         ttk.Label(trims, text="Отрезать с начала, с").pack(side="left")
         ttk.Entry(trims, width=7, textvariable=self.trim_start).pack(side="left", padx=(4, PAD))
         ttk.Label(trims, text="с конца, с").pack(side="left")
         ttk.Entry(trims, width=7, textvariable=self.trim_end).pack(side="left", padx=(4, PAD))
 
-        pattern_row = ttk.Frame(self)
-        pattern_row.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
-        ttk.Label(pattern_row, text="Длины фрагментов, с").pack(side="left")
-        ttk.Entry(pattern_row, width=18, textvariable=self.pattern).pack(side="left", padx=(4, PAD))
-        ttk.Label(pattern_row, foreground="#666",
-                  text="одно число — все куски одинаковые; «4 15» — чередование 4, 15, 4, 15 и так до конца").pack(side="left")
-
         checks = ttk.Frame(self)
-        checks.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
+        checks.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
         ttk.Checkbutton(checks, text="Оставить неполный остаток в конце",
                         variable=self.keep_tail).pack(side="left")
         ttk.Checkbutton(checks, text="Перекодировать (точная длина, но медленнее)",
                         variable=self.reencode).pack(side="left", padx=(PAD, 0))
 
         actions = ttk.Frame(self)
-        actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
+        actions.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
         preview = ttk.Button(actions, text="Посчитать", command=self._preview)
         preview.pack(side="left")
         start = ttk.Button(actions, text="Нарезать", command=self._start)
         start.pack(side="left", padx=PAD)
         app.register(preview)
         app.register(start)
+
+        self.pattern.trace_add("write", self._rebuild_targets)
+        self.per_length.trace_add("write", self._rebuild_targets)
+        self._rebuild_targets()
+
+    # --- папки вывода ----------------------------------------------------------
+
+    def _base_dir(self) -> Path:
+        source = self.source.get().strip()
+        if source:
+            return Path(source).parent / "клипы"
+        return Path.home() / "клипы"
+
+    def _suggest(self, length: float) -> str:
+        return str(self._base_dir() / f"{length:g}s")
+
+    def _rebuild_targets(self, *_) -> None:
+        """Перестраивает строки выбора папок под текущую схему длин."""
+        for child in self.targets.winfo_children():
+            child.destroy()
+
+        if not self.per_length.get():
+            if not self.single_dir.get():
+                self.single_dir.set(str(self._base_dir()))
+            folder_row(self.targets, 0, "Куда складывать клипы", self.single_dir)
+            return
+
+        try:
+            lengths = splitter.pattern_lengths(splitter.parse_pattern(self.pattern.get()))
+        except PipelineError:
+            ttk.Label(self.targets, foreground="#a05000",
+                      text="Задай схему длин, и здесь появятся папки под каждую").grid(
+                row=0, column=0, columnspan=3, sticky="w")
+            return
+
+        for row, length in enumerate(lengths):
+            variable = self.length_dirs.get(length)
+            if variable is None:
+                variable = tk.StringVar(value=self._suggest(length))
+                self.length_dirs[length] = variable
+            elif not variable.get():
+                variable.set(self._suggest(length))
+            folder_row(self.targets, row, f"Клипы по {length:g} с", variable)
 
     def _pick_file(self) -> None:
         picked = filedialog.askopenfilename(
@@ -366,15 +426,33 @@ class SplitTab(ttk.Frame):
         if not picked:
             return
         self.source.set(picked)
-        if not self.output_dir.get():
-            self.output_dir.set(str(Path(picked).parent / "клипы"))
+        # Пустые поля заполняем подсказкой рядом с выбранным видео.
+        if not self.single_dir.get():
+            self.single_dir.set(str(self._base_dir()))
+        for length, variable in self.length_dirs.items():
+            if not variable.get():
+                variable.set(self._suggest(length))
+        self._rebuild_targets()
 
     def _values(self):
         source = Path(self.source.get())
         if not source.is_file():
             raise PipelineError("Не выбрано видео")
-        target = Path(self.output_dir.get() or (source.parent / "клипы"))
         pattern = splitter.parse_pattern(self.pattern.get())
+
+        if self.per_length.get():
+            folders: dict[float, Path] = {}
+            for length in splitter.pattern_lengths(pattern):
+                value = (self.length_dirs.get(length).get() if self.length_dirs.get(length) else "").strip()
+                if not value:
+                    raise PipelineError(f"Не указана папка для клипов по {length:g} с")
+                folders[length] = Path(value)
+            targets = folders
+        else:
+            value = self.single_dir.get().strip()
+            if not value:
+                raise PipelineError("Не указана папка, куда складывать клипы")
+            targets = Path(value)
 
         def number(text: str, label: str) -> float:
             text = text.strip().replace(",", ".") or "0"
@@ -386,12 +464,13 @@ class SplitTab(ttk.Frame):
                 raise PipelineError(f"{label} не может быть отрицательной")
             return value
 
-        return source, target, pattern, number(self.trim_start.get(), "Обрезка с начала"), \
+        return source, targets, pattern, number(self.trim_start.get(), "Обрезка с начала"), \
             number(self.trim_end.get(), "Обрезка с конца")
 
     def _preview(self) -> None:
         try:
-            source, target, pattern, start, end = self._values()
+            source, folders, pattern, start, end = self._values()
+            resolved = splitter.resolve_targets(pattern, folders)
             from . import ffmpeg as ff
 
             duration = ff.probe(source).duration_s
@@ -400,35 +479,40 @@ class SplitTab(ttk.Frame):
             messagebox.showerror("Нарезка", str(exc))
             return
 
-        lengths: dict[float, int] = {}
+        counts: dict[float, int] = {}
         for piece in pieces:
-            lengths[round(piece.requested_s, 3)] = lengths.get(round(piece.requested_s, 3), 0) + 1
-        parts = ", ".join(f"{count} шт по {length:g}с" for length, count in sorted(lengths.items()))
+            counts[splitter.key(piece.requested_s)] = counts.get(splitter.key(piece.requested_s), 0) + 1
 
-        text = (
-            f"Видео: {duration:.2f}с\n"
-            f"После обрезки: {duration - start - end:.2f}с\n\n"
-            f"Получится клипов: {len(pieces)}\n{parts}\n"
-        )
+        lines = [
+            f"Видео: {duration:.2f}с",
+            f"После обрезки: {duration - start - end:.2f}с",
+            "",
+            f"Получится клипов: {len(pieces)}",
+        ]
+        for length in sorted(counts):
+            lines.append(f"  по {length:g}с — {counts[length]} шт")
+            lines.append(f"     {resolved[length]}")
         if tail > 0:
-            text += f"\nОстаток {tail:.2f}с будет отброшен"
-        text += f"\n\nПапка: {target}"
-        messagebox.showinfo("Что получится", text)
+            lines.append("")
+            lines.append(f"Остаток {tail:.2f}с будет отброшен")
+        messagebox.showinfo("Что получится", "\n".join(lines))
 
     def _start(self) -> None:
         try:
-            source, target, pattern, start, end = self._values()
+            source, folders, pattern, start, end = self._values()
+            resolved = splitter.resolve_targets(pattern, folders)
         except PipelineError as exc:
             messagebox.showerror("Нарезка", str(exc))
             return
 
         keep_tail = bool(self.keep_tail.get())
         reencode = bool(self.reencode.get())
-        log_dir = target.parent / "capcut_uniq_data" / "logs"
+        anchor = sorted(resolved.values())[0]
+        log_dir = anchor.parent / "capcut_uniq_data" / "logs"
 
         def work() -> None:
             report = splitter.split(
-                source, target, pattern, start, end,
+                source, folders, pattern, start, end,
                 keep_tail=keep_tail, reencode=reencode,
                 progress=self.app.progress_callback,
             )

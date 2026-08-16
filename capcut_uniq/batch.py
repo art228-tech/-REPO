@@ -96,7 +96,7 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
     profiles = discover_templates(config)
     log.info("Шаблонов в ротации: %d — %s", len(profiles), ", ".join(p.name for p in profiles))
 
-    clips = assets.Pool(config.clips_dir, assets.VIDEO_SUFFIXES, "клипы")
+    clips = assets.Pool(config.clip_folders, assets.VIDEO_SUFFIXES, "клипы")
     voices = assets.Pool(config.voice_dir, assets.AUDIO_SUFFIXES, "озвучки")
     clips.shuffle(rng)
     voices.shuffle(rng)

@@ -10,7 +10,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Mapping
 
 from . import ffmpeg
 from .errors import PipelineError
@@ -19,6 +19,11 @@ from .logging_setup import get_logger
 log = get_logger("splitter")
 
 Progress = Callable[[int, int, str], None]
+
+
+def key(length: float) -> float:
+    """Округлённая длина — ей адресуется папка вывода."""
+    return round(float(length), 3)
 
 
 @dataclass
@@ -36,21 +41,67 @@ class Piece:
 @dataclass
 class SplitReport:
     source: Path
-    output_dir: Path
+    targets: dict[float, Path] = field(default_factory=dict)
     pieces: list[Piece] = field(default_factory=list)
     files: list[Path] = field(default_factory=list)
     skipped_tail_s: float = 0.0
 
     def summary(self) -> str:
-        lengths: dict[float, int] = {}
+        counts: dict[float, int] = {}
         for piece in self.pieces:
-            lengths[round(piece.requested_s, 3)] = lengths.get(round(piece.requested_s, 3), 0) + 1
-        parts = ", ".join(f"{count} шт по {length:g}с" for length, count in sorted(lengths.items()))
-        lines = [f"Нарезано {len(self.files)} клипов из {self.source.name}: {parts}"]
+            counts[key(piece.requested_s)] = counts.get(key(piece.requested_s), 0) + 1
+
+        lines = [f"Нарезано {len(self.files)} клипов из {self.source.name}"]
+        for length in sorted(counts):
+            folder = self.targets.get(length)
+            lines.append(f"  по {length:g}с — {counts[length]} шт → {folder}")
         if self.skipped_tail_s > 0:
             lines.append(f"Остаток {self.skipped_tail_s:.2f}с отброшен — на целый фрагмент не хватило")
-        lines.append(f"Папка: {self.output_dir}")
         return "\n".join(lines)
+
+
+def pattern_lengths(pattern: list[float]) -> list[float]:
+    """Различные длины в порядке первого появления в схеме."""
+    result: list[float] = []
+    for value in pattern:
+        rounded = key(value)
+        if rounded not in result:
+            result.append(rounded)
+    return result
+
+
+def resolve_targets(pattern: list[float], folders) -> dict[float, Path]:
+    """Сопоставляет длины фрагментов папкам вывода.
+
+    Одна папка — всё складывается вместе. Несколько — по числу различных длин,
+    в том же порядке, в каком они идут в схеме: для «4 15» первая папка
+    достаётся четырёхсекундным, вторая — пятнадцатисекундным.
+    """
+    lengths = pattern_lengths(pattern)
+
+    if isinstance(folders, Mapping):
+        missing = [length for length in lengths if key(length) not in {key(k) for k in folders}]
+        if missing:
+            raise PipelineError(
+                "Не указана папка для фрагментов длиной "
+                + ", ".join(f"{value:g}с" for value in missing)
+            )
+        return {key(length): Path(folders[length]) for length in lengths}
+
+    if isinstance(folders, (str, Path)):
+        folders = [folders]
+    folders = [Path(item) for item in folders if str(item).strip()]
+
+    if not folders:
+        raise PipelineError("Не указана папка, куда складывать клипы")
+    if len(folders) == 1:
+        return {key(length): folders[0] for length in lengths}
+    if len(folders) != len(lengths):
+        raise PipelineError(
+            f"В схеме {len(lengths)} разных длин, а папок указано {len(folders)}. "
+            "Укажи либо одну общую папку, либо по одной на каждую длину."
+        )
+    return {key(length): folder for length, folder in zip(lengths, folders)}
 
 
 def parse_pattern(text: str) -> list[float]:
@@ -115,7 +166,7 @@ def plan_cuts(
 
 def split(
     source: Path,
-    output_dir: Path,
+    folders,
     pattern: list[float],
     trim_start_s: float = 0.0,
     trim_end_s: float = 0.0,
@@ -124,31 +175,35 @@ def split(
     crf: int = 20,
     progress: Progress | None = None,
 ) -> SplitReport:
-    """Режет видео и складывает клипы в указанную папку."""
+    """Режет видео и раскладывает клипы по папкам согласно длинам."""
     ffmpeg.require_tools()
     source = Path(source)
     if not source.is_file():
         raise PipelineError(f"Файл не найден: {source}")
+
+    targets = resolve_targets(pattern, folders)
 
     info = ffmpeg.probe(source)
     pieces, tail = plan_cuts(info.duration_s, pattern, trim_start_s, trim_end_s, keep_tail)
     if not pieces:
         raise PipelineError("Не получилось ни одного фрагмента — уменьши длину или обрезку")
 
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    report = SplitReport(source=source, output_dir=output_dir, pieces=pieces, skipped_tail_s=tail)
+    for folder in set(targets.values()):
+        folder.mkdir(parents=True, exist_ok=True)
+    report = SplitReport(source=source, targets=targets, pieces=pieces, skipped_tail_s=tail)
 
     log.info(
         "Режу %s (%.2fс): %d фрагментов по схеме %s, обрезка %g/%g с",
         source.name, info.duration_s, len(pieces),
         "+".join(f"{value:g}" for value in pattern), trim_start_s, trim_end_s,
     )
+    for length in sorted(targets):
+        log.debug("  фрагменты по %g с → %s", length, targets[length])
 
     total = len(pieces)
     for position, piece in enumerate(pieces, start=1):
         name = f"{source.stem}_{piece.index:03d}_{piece.requested_s:g}s{source.suffix.lower() or '.mp4'}"
-        destination = output_dir / name
+        destination = targets[key(piece.requested_s)] / name
         if progress:
             progress(position, total, f"фрагмент {position} из {total}: {name}")
 

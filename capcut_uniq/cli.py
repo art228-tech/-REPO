@@ -43,7 +43,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(check)
 
     run = sub.add_parser("run", help="собрать партию роликов")
-    run.add_argument("--clips", type=Path, required=True, help="папка с нарезанными клипами")
+    run.add_argument("--clips", type=Path, nargs="+", required=True,
+                 help="папка с клипами; можно несколько, если короткие и длинные разложены отдельно")
     run.add_argument("--voice", type=Path, required=True, help="папка с озвучками")
     run.add_argument("--templates", nargs="+", required=True, help="шаблоны для ротации")
     run.add_argument("--count", type=int, default=1, help="сколько роликов собрать")
@@ -57,7 +58,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     cut = sub.add_parser("split", help="нарезать длинное видео на клипы (на сборку не влияет)")
     cut.add_argument("source", type=Path, help="исходное видео")
-    cut.add_argument("--out", type=Path, default=None, help="куда складывать клипы")
+    cut.add_argument("--out", type=Path, nargs="+", default=None,
+                     help="куда складывать клипы: одна общая папка или по одной "
+                          "на каждую длину из схемы, в том же порядке")
     cut.add_argument("--pattern", default="4 15",
                      help="длины фрагментов: одно число или чередование, например «4 15»")
     cut.add_argument("--trim-start", type=float, default=0.0, help="отрезать с начала, с")
@@ -73,7 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _config_from(args) -> Config:
     config = Config(
-        clips_dir=getattr(args, "clips", Path(".")),
+        clips_dir=getattr(args, "clips", None) or Path("."),
         voice_dir=getattr(args, "voice", Path(".")),
         templates=list(getattr(args, "templates", []) or []),
         count=getattr(args, "count", 1),
@@ -189,7 +192,8 @@ def _split(args) -> int:
     from . import ffmpeg, splitter
 
     pattern = splitter.parse_pattern(args.pattern)
-    target = args.out or (args.source.parent / "клипы")
+    folders = args.out or [args.source.parent / "клипы"]
+    targets = splitter.resolve_targets(pattern, folders)
 
     if args.dry_run:
         duration = ffmpeg.probe(args.source).duration_s
@@ -200,17 +204,16 @@ def _split(args) -> int:
         print(f"Получится клипов: {len(pieces)}")
         for piece in pieces:
             print(f"  {piece.index:3d}  {piece.start_s:8.3f} → {piece.start_s + piece.duration_s:8.3f}"
-                  f"  ({piece.duration_s:.3f}с)")
+                  f"  ({piece.duration_s:.3f}с)  → {targets[splitter.key(piece.requested_s)]}")
         if tail > 0:
             print(f"Остаток {tail:.2f}с будет отброшен")
-        print(f"Папка: {target}")
         return 0
 
     def progress(done: int, total: int, message: str) -> None:
         print(f"  [{done}/{total}] {message}")
 
     report = splitter.split(
-        args.source, target, pattern, args.trim_start, args.trim_end,
+        args.source, folders, pattern, args.trim_start, args.trim_end,
         keep_tail=args.keep_tail, reencode=not args.copy, progress=progress,
     )
     print()
