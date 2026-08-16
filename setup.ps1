@@ -14,6 +14,13 @@ $ProgressPreference = 'SilentlyContinue'
 
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
+# Windows PowerShell 5.1 по умолчанию договаривается о старом TLS, и часть
+# сайтов такое соединение уже не принимает.
+try {
+    [Net.ServicePointManager]::SecurityProtocol =
+        [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+} catch { }
+
 $Root = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $Venv = Join-Path $Root '.venv'
 $Tools = Join-Path $Root 'tools'
@@ -26,6 +33,37 @@ function Write-Ok($text) { Write-Host "  $text" -ForegroundColor Green }
 function Write-Warn($text) { Write-Host "  $text" -ForegroundColor Yellow }
 function Write-Bad($text) { Write-Host "  $text" -ForegroundColor Red }
 
+# Внешние программы часто пишут предупреждения в поток ошибок. При строгом
+# режиме и перенаправлении PowerShell превращает такое предупреждение в
+# неустранимую ошибку и обрывает скрипт, хотя команда отработала нормально.
+# Поэтому все вызовы идут через эти две обёртки с мягким режимом.
+
+function Invoke-NativeCapture([string]$exe, [string[]]$arguments) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $lines = & $exe @arguments 2>&1 | ForEach-Object { "$_" }
+        $code = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+        return [pscustomobject]@{ Code = $code; Lines = @($lines) }
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
+function Invoke-NativeLive([string]$exe, [string[]]$arguments) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        # Вывод уходит сразу на экран через Write-Host, а не в поток функции:
+        # иначе он смешался бы с возвращаемым кодом завершения.
+        & $exe @arguments 2>&1 | ForEach-Object { Write-Host "$_" }
+        $code = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+        return $code
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
 function Stop-WithMessage($lines) {
     Write-Host ''
     foreach ($line in $lines) { Write-Bad $line }
@@ -36,21 +74,22 @@ function Stop-WithMessage($lines) {
 
 # --- Python -----------------------------------------------------------------
 
-function Invoke-Python($python, [string[]]$arguments) {
+function Get-PythonArgs($python, [string[]]$arguments) {
     # Расщепление работает только через переменную: @(...) передал бы массив
     # одним аргументом, и python получил бы мусор вместо ключей.
     $callArgs = @()
     if ($python.Prefix) { $callArgs += $python.Prefix }
-    $callArgs += $arguments
-    & $python.Exe @callArgs
+    return $callArgs + $arguments
 }
 
 function Test-PythonCommand($exe, $prefix) {
     try {
         $candidate = @{ Exe = $exe; Prefix = $prefix }
-        $out = Invoke-Python $candidate @('-c', 'import sys;print(sys.version_info[0]*100+sys.version_info[1])') 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $out) { return $null }
-        if ([int]($out | Select-Object -First 1) -lt 310) { return $null }
+        $call = Get-PythonArgs $candidate @('-c', 'import sys;print(sys.version_info[0]*100+sys.version_info[1])')
+        $result = Invoke-NativeCapture $candidate.Exe $call
+        if ($result.Code -ne 0) { return $null }
+        $number = $result.Lines | Where-Object { $_ -match '^\d+$' } | Select-Object -First 1
+        if (-not $number -or [int]$number -lt 310) { return $null }
         return $candidate
     } catch { return $null }
 }
@@ -87,10 +126,10 @@ function Find-Python {
 function Install-Python {
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         Write-Step 'Пробую через встроенный установщик Windows...'
-        try {
-            & winget install --exact --id Python.Python.3.12 --source winget `
-                --accept-source-agreements --accept-package-agreements --silent | Out-Null
-        } catch { }
+        Invoke-NativeCapture 'winget' @(
+            'install', '--exact', '--id', 'Python.Python.3.12', '--source', 'winget',
+            '--accept-source-agreements', '--accept-package-agreements', '--silent'
+        ) | Out-Null
         if (Find-Python) { return }
     }
 
@@ -194,15 +233,12 @@ if (-not $python) {
     )
 }
 
-$version = (Invoke-Python $python @('-c', 'import sys;print(sys.version.split()[0])') | Select-Object -First 1)
+$versionCall = Get-PythonArgs $python @('-c', 'import sys;print(sys.version.split()[0])')
+$version = (Invoke-NativeCapture $python.Exe $versionCall).Lines | Select-Object -First 1
 Write-Ok "[1/5] Python $version"
 
-$hasTk = $true
-try {
-    Invoke-Python $python @('-c', 'import tkinter') 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) { $hasTk = $false }
-} catch { $hasTk = $false }
-if (-not $hasTk) {
+$tkCall = Get-PythonArgs $python @('-c', 'import tkinter')
+if ((Invoke-NativeCapture $python.Exe $tkCall).Code -ne 0) {
     Write-Warn 'В этом Python нет tkinter, поэтому окно не откроется.'
     Write-Warn 'Переустанови Python с python.org, отметив "tcl/tk and IDLE".'
     Write-Warn 'Пока можно работать из консоли: run.bat run --help'
@@ -220,7 +256,8 @@ Write-Ok '[2/5] FFmpeg на месте'
 $venvPython = Join-Path $Venv 'Scripts\python.exe'
 if (-not (Test-Path $venvPython)) {
     Write-Step '[3/5] Создаю окружение Python...'
-    Invoke-Python $python @('-m', 'venv', $Venv)
+    $venvCall = Get-PythonArgs $python @('-m', 'venv', $Venv)
+    Invoke-NativeLive $python.Exe $venvCall | Out-Null
     if (-not (Test-Path $venvPython)) {
         Stop-WithMessage @(
             'Не удалось создать окружение Python.',
@@ -230,32 +267,67 @@ if (-not (Test-Path $venvPython)) {
 }
 Write-Ok '[3/5] Окружение готово'
 
+# Отметка ставится только после того, как пакет реально импортировался: при
+# нестабильном интернете pip может отчитаться об успехе, поставив половину.
+function Test-Dependencies {
+    return (Invoke-NativeCapture $venvPython @('-c', 'import faster_whisper')).Code -eq 0
+}
+
 $depsMark = Join-Path $Venv '.deps_ok'
 if (-not (Test-Path $depsMark)) {
     Write-Step '[4/5] Ставлю зависимости. Скачается около 300 МБ, это самый долгий шаг...'
-    & $venvPython -m pip install --upgrade pip --quiet --disable-pip-version-check
-    & $venvPython -m pip install --quiet --disable-pip-version-check -r (Join-Path $Root 'requirements.txt')
-    if ($LASTEXITCODE -ne 0) {
+    Invoke-NativeLive $venvPython @(
+        '-m', 'pip', 'install', '--upgrade', 'pip', '--disable-pip-version-check', '--quiet'
+    ) | Out-Null
+
+    # Соединение может обрываться, поэтому пробуем несколько раз: pip
+    # докачивает по своему кэшу и с каждой попыткой продвигается дальше.
+    $code = 1
+    foreach ($attempt in 1..3) {
+        if ($attempt -gt 1) { Write-Step "Соединение оборвалось, попытка $attempt из 3..." }
+        $code = Invoke-NativeLive $venvPython @(
+            '-m', 'pip', 'install', '--disable-pip-version-check',
+            '--retries', '10', '--timeout', '60',
+            '-r', (Join-Path $Root 'requirements.txt')
+        )
+        if ($code -eq 0 -and (Test-Dependencies)) { break }
+    }
+
+    if (-not (Test-Dependencies)) {
+        $hint = if ($code -ne 0) { "pip завершился с кодом $code." } else { 'pip отчитался об успехе, но пакет не импортируется.' }
         Stop-WithMessage @(
-            'Не удалось поставить зависимости. Обычно это интернет или антивирус.',
-            'Запусти run.bat заново - скачивание продолжится с того же места.'
+            'Не удалось поставить зависимости.',
+            $hint,
+            'Если выше были ошибки прокси или SSL - значит соединение обрывается.',
+            'Запусти run.bat заново: уже скачанное сохранилось, установка продолжится.',
+            'Если обрывается постоянно, попробуй другую сеть или отключи VPN и прокси.'
         )
     }
     New-Item -ItemType File -Path $depsMark -Force | Out-Null
 }
 Write-Ok '[4/5] Зависимости на месте'
 
+# Скачивание модели - шаг необязательный: если не выйдет, программа возьмёт её
+# сама при первом ролике. Поэтому здесь ничего не должно обрывать запуск.
 $modelMark = Join-Path $Venv '.model_ok'
 if (-not (Test-Path $modelMark)) {
     Write-Step '[5/5] Скачиваю модель распознавания речи, около 250 МБ...'
-    & $venvPython -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')" 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        New-Item -ItemType File -Path $modelMark -Force | Out-Null
-    } else {
-        Write-Warn 'Заранее скачать не получилось - программа возьмёт её при первом ролике.'
+    try {
+        $model = Invoke-NativeCapture $venvPython @(
+            '-c', "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"
+        )
+        if ($model.Code -eq 0) {
+            New-Item -ItemType File -Path $modelMark -Force | Out-Null
+            Write-Ok '[5/5] Модель распознавания на месте'
+        } else {
+            Write-Warn '[5/5] Модель заранее скачать не вышло - программа возьмёт её при первом ролике.'
+        }
+    } catch {
+        Write-Warn '[5/5] Модель заранее скачать не вышло - программа возьмёт её при первом ролике.'
     }
+} else {
+    Write-Ok '[5/5] Модель распознавания на месте'
 }
-Write-Ok '[5/5] Модель распознавания на месте'
 
 Write-Host ''
 Write-Host '============================================================'
@@ -263,11 +335,9 @@ Write-Host '   Всё готово, открываю программу'
 Write-Host '============================================================'
 Write-Host ''
 
-$ErrorActionPreference = 'Continue'
 $launch = @((Join-Path $Root 'main.py'))
 if ($AppArgs) { $launch += $AppArgs }
-& $venvPython @launch
-$code = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+$code = Invoke-NativeLive $venvPython $launch
 
 if ($code -ne 0) {
     Write-Host ''
