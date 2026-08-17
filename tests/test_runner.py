@@ -579,6 +579,98 @@ def test_estimate_flash_is_half_of_multilingual(workspace):
     assert plan["total_credits_flash"] - plan["design_credits"] == pytest.approx(body / 2, abs=1)
 
 
+def test_result_lands_next_to_source_text(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 3)
+
+    settings = make_settings(workspace, max_voices=1, save_next_to_texts=True)
+    stats = run_with(monkeypatch, settings, store, FakeClient())
+
+    assert stats.texts_done == 3
+    produced = sorted(p.name for p in workspace["texts"].glob("*.mp3"))
+    assert produced == ["текст1.mp3", "текст2.mp3", "текст3.mp3"]
+    # Отдельная папка результатов не создаётся и не нужна.
+    assert not workspace["out"].exists() if "out" in workspace else True
+
+
+def test_name_matches_source_exactly(workspace, store, monkeypatch):
+    """Имя должно совпадать с исходным символ в символ, включая пробелы и точки."""
+    write_prompts(workspace["prompts"], 1)
+    tricky = "Глава 1. Начало — часть (первая)"
+    (workspace["texts"] / f"{tricky}.txt").write_text("Короткий текст.", encoding="utf-8")
+
+    settings = make_settings(workspace, max_voices=1, save_next_to_texts=True)
+    run_with(monkeypatch, settings, store, FakeClient())
+
+    assert (workspace["texts"] / f"{tricky}.mp3").exists()
+
+
+def test_output_folder_not_required_when_saving_beside(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+
+    settings = make_settings(workspace, max_voices=1, save_next_to_texts=True, output_dir="")
+    stats = run_with(monkeypatch, settings, store, FakeClient())
+
+    assert stats.texts_done == 1
+
+
+def test_manifest_lands_with_the_texts(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+
+    settings = make_settings(workspace, max_voices=1, save_next_to_texts=True, output_dir="")
+    run_with(monkeypatch, settings, store, FakeClient())
+
+    assert (workspace["texts"] / "_manifest.csv").exists()
+
+
+def test_temporary_chunks_do_not_stay_with_the_texts(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    (workspace["texts"] / "длинный.txt").write_text(
+        " ".join(f"Фраза {i} для нарезки текста." for i in range(100)), encoding="utf-8"
+    )
+
+    settings = make_settings(
+        workspace, max_voices=1, chunk_target_chars=300, save_next_to_texts=True, output_dir=""
+    )
+    run_with(monkeypatch, settings, store, FakeClient())
+
+    assert (workspace["texts"] / "длинный.mp3").exists()
+    assert not (workspace["texts"] / "_chunks").exists()
+
+
+def test_all_voices_mode_keeps_names_apart(workspace, store, monkeypatch):
+    """Один текст всеми голосами: имена не должны столкнуться."""
+    write_prompts(workspace["prompts"], 2)
+    write_texts(workspace["texts"], 1)
+
+    settings = make_settings(
+        workspace, max_voices=2, voice_mode=MODE_ALL_VOICES,
+        save_next_to_texts=True, output_dir="",
+    )
+    stats = run_with(monkeypatch, settings, store, FakeClient())
+
+    assert stats.texts_done == 2
+    produced = sorted(p.name for p in workspace["texts"].glob("*.mp3"))
+    assert produced == ["текст1__1-голос.mp3", "текст1__2-голос.mp3"]
+
+
+def test_second_run_beside_texts_skips_finished(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+    settings = make_settings(workspace, max_voices=1, save_next_to_texts=True)
+
+    run_with(monkeypatch, settings, store, FakeClient())
+
+    second = FakeClient()
+    second.existing_voices = ["voice-1"]
+    stats = run_with(monkeypatch, settings, store, second)
+
+    assert stats.texts_skipped == 2
+    assert second.tts_calls == []
+
+
 def test_uses_voices_from_account(workspace, store, monkeypatch):
     """Обходной путь для бесплатного тарифа: голоса созданы на сайте заранее."""
     write_texts(workspace["texts"], 4)

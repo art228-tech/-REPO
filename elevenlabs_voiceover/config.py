@@ -103,6 +103,7 @@ class Settings:
     ignore_system_proxy: bool = False
 
     # --- вывод ---
+    save_next_to_texts: bool = False
     keep_chunks: bool = False
     use_ffmpeg: bool = True
 

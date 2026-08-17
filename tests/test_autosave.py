@@ -127,12 +127,46 @@ def test_every_variable_is_watched(app):
     assert unwatched == []
 
 
+def test_save_beside_flag_is_saved(app):
+    app.var_save_beside.set(True)
+    flush(app)
+    assert reload_settings().save_next_to_texts is True
+
+
+def test_save_beside_hides_output_folder(app):
+    caption = app.folder_rows["output"][0]
+
+    app.var_save_beside.set(True)
+    app._on_save_beside_changed()
+    app.root.update_idletasks()
+    assert not caption.winfo_ismapped()
+
+    app.var_save_beside.set(False)
+    app._on_save_beside_changed()
+    app.root.update_idletasks()
+    assert caption.winfo_manager()
+
+
+def test_save_beside_explains_result(app):
+    app.var_save_beside.set(True)
+    app._on_save_beside_changed()
+
+    hint = app.lbl_beside.cget("text")
+    assert "текст1.mp3" in hint.replace("текст1" + ".mp3", "текст1.mp3")
+
+
 def test_voice_source_is_saved(app):
     from elevenlabs_voiceover.config import SOURCE_ACCOUNT, VOICE_SOURCES
 
     app.var_voice_source.set(VOICE_SOURCES[SOURCE_ACCOUNT])
     flush(app)
     assert reload_settings().voice_source == SOURCE_ACCOUNT
+
+
+def test_voice_list_is_hidden_at_start(app):
+    """По умолчанию источник — промпты, список голосов аккаунта не нужен."""
+    app.root.update_idletasks()
+    assert not app.frame_account_voices.winfo_ismapped()
 
 
 def test_account_mode_hides_prompts_folder(app):

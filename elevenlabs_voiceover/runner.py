@@ -250,13 +250,18 @@ class Runner:
             raise PreflightError(f"Папка с промптами голосов не найдена: {prompts_dir}")
         if not texts_dir.is_dir():
             raise PreflightError(f"Папка с текстами не найдена: {texts_dir}")
-        if not settings.output_dir:
-            raise PreflightError("Не выбрана папка для результатов")
-
-        try:
-            output_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            raise PreflightError(f"Не удалось создать папку результатов: {exc}") from exc
+        # Служебные файлы — превью голосов, промежуточные куски, манифест —
+        # кладём туда же, куда и результат, чтобы всё лежало рядом.
+        if settings.save_next_to_texts:
+            service_dir = texts_dir
+        else:
+            if not settings.output_dir:
+                raise PreflightError("Не выбрана папка для результатов")
+            try:
+                output_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                raise PreflightError(f"Не удалось создать папку результатов: {exc}") from exc
+            service_dir = output_dir
 
         from_account = settings.voice_source == SOURCE_ACCOUNT
         prompts = [] if from_account else self._load_prompts(prompts_dir)
@@ -280,11 +285,11 @@ class Runner:
         if from_account:
             voices = self._voices_from_account()
         else:
-            voices = self._prepare_voices(prompts, output_dir)
+            voices = self._prepare_voices(prompts, service_dir)
         if not voices:
             raise PreflightError("Не удалось подготовить ни одного голоса")
 
-        jobs = self._build_jobs(texts, voices, output_dir)
+        jobs = self._build_jobs(texts, voices, service_dir)
         self.stats.texts_total = len(jobs)
 
         self._total_units = max(1, sum(len(job.text.chunks) for job in jobs))
@@ -314,7 +319,7 @@ class Runner:
         finally:
             # Манифест нужен и при остановке по кредитам или по кнопке: он
             # показывает, что успело озвучиться и каким голосом.
-            self._write_manifest(jobs, output_dir)
+            self._write_manifest(jobs, service_dir)
 
     # ------------------------------------------------------------------
     def _load_prompts(self, directory: Path) -> List[PromptSpec]:
@@ -670,24 +675,35 @@ class Runner:
     # ------------------------------------------------------------------
     def _build_jobs(self, texts: Sequence[TextSpec], voices: Sequence[VoiceRef], output_dir: Path) -> List[Job]:
         jobs: List[Job] = []
-        used_names: Dict[str, int] = {}
+        used_paths: Dict[str, int] = {}
         extension = audio_utils.extension_for(self.settings.output_format)
         all_voices = self.settings.voice_mode == MODE_ALL_VOICES
+        beside = self.settings.save_next_to_texts
 
         for index, text in enumerate(texts):
             targets = voices if all_voices else [voices[index % len(voices)]]
             for voice in targets:
-                stem = audio_utils.safe_filename(text.name)
+                if beside:
+                    # Имя исходного файла уже существует на диске, значит оно
+                    # заведомо допустимо: чистить его не нужно и нельзя, иначе
+                    # оно перестанет совпадать с текстом.
+                    folder = text.path.parent
+                    stem = text.path.stem
+                else:
+                    folder = output_dir
+                    stem = audio_utils.safe_filename(text.name)
+
                 if all_voices:
                     stem = f"{stem}__{audio_utils.safe_filename(voice.name, max_length=40)}"
 
-                # Разные исходные файлы могут дать одинаковое имя после чистки.
-                count = used_names.get(stem.lower(), 0)
-                used_names[stem.lower()] = count + 1
+                # Разные исходные файлы могут дать одно и то же имя результата.
+                key = str(folder / stem).lower()
+                count = used_paths.get(key, 0)
+                used_paths[key] = count + 1
                 if count:
                     stem = f"{stem}_{count + 1}"
 
-                jobs.append(Job(text=text, voice=voice, output_path=output_dir / f"{stem}{extension}"))
+                jobs.append(Job(text=text, voice=voice, output_path=folder / f"{stem}{extension}"))
 
         return jobs
 
