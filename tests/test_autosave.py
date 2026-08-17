@@ -127,6 +127,33 @@ def test_every_variable_is_watched(app):
     assert unwatched == []
 
 
+def test_done_action_is_saved(app):
+    from elevenlabs_voiceover.config import DONE_ACTIONS, DONE_DELETE
+
+    app.var_done_action.set(DONE_ACTIONS[DONE_DELETE])
+    flush(app)
+    assert reload_settings().done_action == DONE_DELETE
+
+
+def test_deletion_is_marked_as_dangerous(app):
+    from elevenlabs_voiceover.config import DONE_ACTIONS, DONE_DELETE, DONE_KEEP
+
+    app.var_done_action.set(DONE_ACTIONS[DONE_DELETE])
+    app._refresh_done_hint()
+    assert app.lbl_done_action.cget("style") == "Bad.TLabel"
+    assert "неоткуда" in app.lbl_done_action.cget("text")
+
+    app.var_done_action.set(DONE_ACTIONS[DONE_KEEP])
+    app._refresh_done_hint()
+    assert app.lbl_done_action.cget("style") == "Hint.TLabel"
+
+
+def test_keeping_texts_is_the_default(app):
+    from elevenlabs_voiceover.config import DONE_KEEP
+
+    assert reload_settings().done_action == DONE_KEEP
+
+
 def test_save_beside_flag_is_saved(app):
     app.var_save_beside.set(True)
     flush(app)

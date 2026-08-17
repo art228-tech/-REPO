@@ -48,6 +48,11 @@ from .api_client import (
 from .audio import extension_for, find_ffmpeg
 from .config import (
     DEFAULT_GUIDANCE,
+    DONE_ACTIONS,
+    DONE_DELETE,
+    DONE_FOLDER_NAME,
+    DONE_KEEP,
+    DONE_MOVE,
     MODE_ALL_VOICES,
     MODE_ROUND_ROBIN,
     SOURCE_ACCOUNT,
@@ -119,6 +124,7 @@ class App:
         self._refresh_proxy_hint()
         self._on_save_beside_changed()
         self._on_voice_source_changed()
+        self._refresh_done_hint()
 
     # ==================================================================
     # Построение интерфейса
@@ -544,6 +550,21 @@ class App:
 
         row = self._separator(canvas_frame, row, "Файлы на выходе")
 
+        ttk.Label(canvas_frame, text="Текст после озвучки:").grid(row=row, column=0, sticky="w", pady=3)
+        self.var_done_action = StringVar(value=DONE_ACTIONS[DONE_KEEP])
+        combo_done = ttk.Combobox(
+            canvas_frame, textvariable=self.var_done_action, state="readonly",
+            values=[DONE_ACTIONS[DONE_KEEP], DONE_ACTIONS[DONE_MOVE], DONE_ACTIONS[DONE_DELETE]],
+        )
+        combo_done.grid(row=row, column=1, columnspan=2, sticky="ew", pady=3)
+        combo_done.bind("<<ComboboxSelected>>", lambda _e: self._refresh_done_hint())
+        row += 1
+
+        self.lbl_done_action = ttk.Label(canvas_frame, text="", style="Hint.TLabel",
+                                         justify=LEFT, wraplength=700)
+        self.lbl_done_action.grid(row=row, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        row += 1
+
         self.var_keep_chunks = BooleanVar(value=False)
         ttk.Checkbutton(canvas_frame, text="Не удалять промежуточные куски после склейки",
                         variable=self.var_keep_chunks).grid(
@@ -701,6 +722,7 @@ class App:
         self.var_pause.set(s.pause_between_requests)
         self.var_retries.set(s.max_retries)
         self.var_timeout.set(s.request_timeout)
+        self.var_done_action.set(DONE_ACTIONS.get(s.done_action, DONE_ACTIONS[DONE_KEEP]))
         self.var_save_beside.set(s.save_next_to_texts)
         self.var_keep_chunks.set(s.keep_chunks)
         self.var_use_ffmpeg.set(s.use_ffmpeg)
@@ -742,6 +764,7 @@ class App:
         s.pause_between_requests = _safe_float(self.var_pause, s.pause_between_requests)
         s.max_retries = _safe_int(self.var_retries, s.max_retries)
         s.request_timeout = _safe_int(self.var_timeout, s.request_timeout)
+        s.done_action = _done_from_label(self.var_done_action.get())
         s.save_next_to_texts = bool(self.var_save_beside.get())
         s.keep_chunks = bool(self.var_keep_chunks.get())
         s.use_ffmpeg = bool(self.var_use_ffmpeg.get())
@@ -801,6 +824,28 @@ class App:
 
     def _open_keys_page(self) -> None:
         webbrowser.open("https://elevenlabs.io/app/developers/api-keys")
+
+    def _refresh_done_hint(self) -> None:
+        action = _done_from_label(self.var_done_action.get())
+
+        if action == DONE_DELETE:
+            self.lbl_done_action.configure(
+                text="Исходный txt будет удалён сразу после того, как готовая озвучка окажется "
+                     "на диске. Восстановить его будет неоткуда — корзина не используется.",
+                style="Bad.TLabel",
+            )
+        elif action == DONE_MOVE:
+            self.lbl_done_action.configure(
+                text=f"Озвученные тексты переедут в подпапку «{DONE_FOLDER_NAME}» рядом с ними. "
+                     "Повторный запуск их больше не увидит, но файлы останутся при вас.",
+                style="Hint.TLabel",
+            )
+        else:
+            self.lbl_done_action.configure(
+                text="Тексты остаются на месте. Повторный запуск пропустит уже озвученные.",
+                style="Hint.TLabel",
+            )
+        self._schedule_save()
 
     def _on_save_beside_changed(self) -> None:
         """Показать или спрятать выбор папки результатов."""
@@ -1022,6 +1067,18 @@ class App:
         problems = _validate(settings)
         if problems:
             messagebox.showwarning(APP_TITLE, "Не хватает данных:\n\n• " + "\n• ".join(problems), parent=self.root)
+            return
+
+        if settings.done_action == DONE_DELETE and not messagebox.askyesno(
+            APP_TITLE,
+            "Включено удаление исходных текстов.\n\n"
+            "Каждый txt будет удалён сразу после того, как его озвучка окажется на диске. "
+            "Корзина не используется, вернуть файлы будет неоткуда.\n\n"
+            "Продолжить?",
+            icon="warning",
+            default="no",
+            parent=self.root,
+        ):
             return
 
         if settings.recreate_voices and not messagebox.askyesno(
@@ -1421,6 +1478,13 @@ def _mode_from_label(label: str) -> str:
         if value == label:
             return key
     return MODE_ROUND_ROBIN
+
+
+def _done_from_label(label: str) -> str:
+    for key, value in DONE_ACTIONS.items():
+        if value == label:
+            return key
+    return DONE_KEEP
 
 
 def _source_from_label(label: str) -> str:

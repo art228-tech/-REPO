@@ -13,7 +13,15 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 from . import audio as audio_utils
 from .api_client import ElevenLabsClient, ModelInfo, Subscription
 from .chunker import Chunk, split_text
-from .config import MODE_ALL_VOICES, SOURCE_ACCOUNT, SOURCE_DESIGN, Settings
+from .config import (
+    DONE_DELETE,
+    DONE_FOLDER_NAME,
+    DONE_KEEP,
+    MODE_ALL_VOICES,
+    SOURCE_ACCOUNT,
+    SOURCE_DESIGN,
+    Settings,
+)
 from .errors import (
     Cancelled,
     ElevenLabsError,
@@ -308,6 +316,10 @@ class Runner:
                 "Кредитов не хватит на всё задание — работа остановится, когда они закончатся"
             )
 
+        jobs_by_text: Dict[Path, List[Job]] = {}
+        for job in jobs:
+            jobs_by_text.setdefault(job.text.path, []).append(job)
+
         try:
             for job in jobs:
                 self._check_cancelled()
@@ -316,6 +328,7 @@ class Runner:
                     log.warning("Кредиты закончились, останавливаюсь до следующего файла")
                     break
                 self._process_job(job)
+                self._retire_source(job.text, jobs_by_text[job.text.path])
         finally:
             # Манифест нужен и при остановке по кредитам или по кнопке: он
             # показывает, что успело озвучиться и каким голосом.
@@ -844,6 +857,47 @@ class Runner:
 
         if not settings.keep_chunks:
             self._remove_chunks(chunks_dir)
+
+    def _retire_source(self, text: TextSpec, jobs_for_text: Sequence[Job]) -> None:
+        """Убрать исходный текст, когда все его озвучки готовы.
+
+        Проверяем именно наличие файлов на диске, а не отметки в базе: удалять
+        чужие данные можно только увидев результат своими глазами.
+        """
+        action = self.settings.done_action
+        if action == DONE_KEEP:
+            return
+
+        if not all(job.output_path.exists() and job.output_path.stat().st_size > 0
+                   for job in jobs_for_text):
+            return
+        if not text.path.exists():
+            return
+
+        try:
+            if action == DONE_DELETE:
+                text.path.unlink()
+                log.info("Исходный текст удалён: %s", text.path.name)
+            else:
+                target = self._move_target(text.path)
+                text.path.rename(target)
+                log.info("Исходный текст перенесён в «%s»: %s", DONE_FOLDER_NAME, target.name)
+        except OSError as exc:
+            log.warning("Не удалось убрать исходный текст %s: %s", text.path.name, exc)
+            self.stats.failures.append(f"{text.name}: не удалось убрать исходник — {exc}")
+
+    @staticmethod
+    def _move_target(source: Path) -> Path:
+        """Свободное имя в подпапке для озвученных текстов."""
+        folder = source.parent / DONE_FOLDER_NAME
+        folder.mkdir(parents=True, exist_ok=True)
+
+        target = folder / source.name
+        counter = 2
+        while target.exists():
+            target = folder / f"{source.stem}_{counter}{source.suffix}"
+            counter += 1
+        return target
 
     @staticmethod
     def _previous_text(chunks: Sequence[Chunk], index: int) -> Optional[str]:

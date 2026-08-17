@@ -6,6 +6,9 @@ from elevenlabs_voiceover import runner as runner_module
 from elevenlabs_voiceover.api_client import ModelInfo, Subscription, TtsResult, VoicePreview
 from elevenlabs_voiceover.chunker import Chunk
 from elevenlabs_voiceover.config import (
+    DONE_DELETE,
+    DONE_FOLDER_NAME,
+    DONE_MOVE,
     MODE_ALL_VOICES,
     MODE_ROUND_ROBIN,
     SOURCE_ACCOUNT,
@@ -579,6 +582,119 @@ def test_estimate_flash_is_half_of_multilingual(workspace):
     assert plan["total_credits_flash"] - plan["design_credits"] == pytest.approx(body / 2, abs=1)
 
 
+def test_source_texts_stay_by_default(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 3)
+
+    run_with(monkeypatch, make_settings(workspace, max_voices=1), store, FakeClient())
+
+    assert len(list(workspace["texts"].glob("*.txt"))) == 3
+
+
+def test_source_texts_are_deleted_when_asked(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 3)
+
+    settings = make_settings(workspace, max_voices=1, done_action=DONE_DELETE)
+    stats = run_with(monkeypatch, settings, store, FakeClient())
+
+    assert stats.texts_done == 3
+    assert list(workspace["texts"].glob("*.txt")) == []
+    # Результаты при этом на месте.
+    assert len(list(workspace["output"].glob("*.mp3"))) == 3
+
+
+def test_source_texts_are_moved_when_asked(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+
+    settings = make_settings(workspace, max_voices=1, done_action=DONE_MOVE)
+    run_with(monkeypatch, settings, store, FakeClient())
+
+    assert list(workspace["texts"].glob("*.txt")) == []
+    moved = sorted(p.name for p in (workspace["texts"] / DONE_FOLDER_NAME).glob("*.txt"))
+    assert moved == ["текст1.txt", "текст2.txt"]
+
+
+def test_moved_texts_are_not_picked_up_again(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+    settings = make_settings(workspace, max_voices=1, done_action=DONE_MOVE)
+
+    run_with(monkeypatch, settings, store, FakeClient())
+
+    second = FakeClient()
+    second.existing_voices = ["voice-1"]
+    with pytest.raises(PreflightError, match="нет ни одного"):
+        run_with(monkeypatch, settings, store, second)
+
+
+def test_move_does_not_overwrite_existing_file(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+    done = workspace["texts"] / DONE_FOLDER_NAME
+    done.mkdir()
+    (done / "текст1.txt").write_text("прошлый прогон", encoding="utf-8")
+
+    settings = make_settings(workspace, max_voices=1, done_action=DONE_MOVE)
+    run_with(monkeypatch, settings, store, FakeClient())
+
+    assert (done / "текст1.txt").read_text(encoding="utf-8") == "прошлый прогон"
+    assert (done / "текст1_2.txt").exists()
+
+
+def test_source_survives_failed_voiceover(workspace, store, monkeypatch):
+    """Текст нельзя трогать, если озвучка не получилась."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+
+    client = FakeClient(credits=1, limit=10000)
+    settings = make_settings(workspace, max_voices=1, done_action=DONE_DELETE)
+    run_with(monkeypatch, settings, store, client)
+
+    # Кредитов не хватило даже на первый текст — исходники должны остаться.
+    assert len(list(workspace["texts"].glob("*.txt"))) == 2
+
+
+def test_source_removed_only_after_all_voices(workspace, store, monkeypatch):
+    """В режиме «всеми голосами» текст нужен до последней озвучки."""
+    write_prompts(workspace["prompts"], 3)
+    write_texts(workspace["texts"], 1)
+
+    settings = make_settings(
+        workspace, max_voices=3, voice_mode=MODE_ALL_VOICES, done_action=DONE_DELETE
+    )
+    stats = run_with(monkeypatch, settings, store, FakeClient())
+
+    assert stats.texts_done == 3
+    assert list(workspace["texts"].glob("*.txt")) == []
+    assert len(list(workspace["output"].glob("*.mp3"))) == 3
+
+
+def test_delete_works_together_with_saving_beside(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+
+    settings = make_settings(
+        workspace, max_voices=1, save_next_to_texts=True, done_action=DONE_DELETE, output_dir=""
+    )
+    run_with(monkeypatch, settings, store, FakeClient())
+
+    assert list(workspace["texts"].glob("*.txt")) == []
+    assert sorted(p.name for p in workspace["texts"].glob("*.mp3")) == ["текст1.mp3", "текст2.mp3"]
+
+
+def test_broken_done_action_falls_back_to_keeping(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+
+    settings = make_settings(workspace, max_voices=1, done_action="что-то своё")
+    assert settings.done_action == "keep"
+
+    run_with(monkeypatch, settings, store, FakeClient())
+    assert len(list(workspace["texts"].glob("*.txt"))) == 1
+
+
 def test_result_lands_next_to_source_text(workspace, store, monkeypatch):
     write_prompts(workspace["prompts"], 1)
     write_texts(workspace["texts"], 3)
@@ -589,8 +705,8 @@ def test_result_lands_next_to_source_text(workspace, store, monkeypatch):
     assert stats.texts_done == 3
     produced = sorted(p.name for p in workspace["texts"].glob("*.mp3"))
     assert produced == ["текст1.mp3", "текст2.mp3", "текст3.mp3"]
-    # Отдельная папка результатов не создаётся и не нужна.
-    assert not workspace["out"].exists() if "out" in workspace else True
+    # Отдельная папка результатов не задействована.
+    assert list(workspace["output"].glob("*.mp3")) == []
 
 
 def test_name_matches_source_exactly(workspace, store, monkeypatch):

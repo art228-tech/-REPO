@@ -26,6 +26,20 @@ VOICE_MODES = {
     MODE_ALL_VOICES: "Каждый текст всеми голосами",
 }
 
+#: Что делать с исходным текстом после того, как он озвучен.
+DONE_KEEP = "keep"
+DONE_MOVE = "move"
+DONE_DELETE = "delete"
+
+#: Подпапка, куда переносятся озвученные тексты.
+DONE_FOLDER_NAME = "озвучено"
+
+DONE_ACTIONS = {
+    DONE_KEEP: "Оставлять на месте",
+    DONE_MOVE: f"Переносить в подпапку «{DONE_FOLDER_NAME}»",
+    DONE_DELETE: "Удалять безвозвратно",
+}
+
 #: Голоса создаются программой по промптам через Voice Design.
 SOURCE_DESIGN = "design"
 #: Голоса уже созданы в личном кабинете, программа только выбирает из них.
@@ -103,6 +117,7 @@ class Settings:
     ignore_system_proxy: bool = False
 
     # --- вывод ---
+    done_action: str = DONE_KEEP
     save_next_to_texts: bool = False
     keep_chunks: bool = False
     use_ffmpeg: bool = True
@@ -122,6 +137,10 @@ class Settings:
             self.voice_mode = MODE_ROUND_ROBIN
         if self.voice_source not in VOICE_SOURCES:
             self.voice_source = SOURCE_DESIGN
+        if self.done_action not in DONE_ACTIONS:
+            # Неизвестное значение трактуем как «ничего не трогать»: потеря
+            # исходников из-за опечатки в конфиге недопустима.
+            self.done_action = DONE_KEEP
 
         if isinstance(self.selected_voice_ids, str):
             self.selected_voice_ids = [self.selected_voice_ids]
