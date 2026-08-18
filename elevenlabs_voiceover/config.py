@@ -22,8 +22,8 @@ MODE_ROUND_ROBIN = "round_robin"
 MODE_ALL_VOICES = "all_voices"
 
 VOICE_MODES = {
-    MODE_ROUND_ROBIN: "По кругу: текст 1 — голос 1, текст 2 — голос 2, ...",
-    MODE_ALL_VOICES: "Каждый текст всеми голосами",
+    MODE_ROUND_ROBIN: "Один файл на текст, голоса чередуются по кругу",
+    MODE_ALL_VOICES: "Несколько файлов на текст — по одному на каждый голос",
 }
 
 #: Что делать с исходным текстом после того, как он озвучен.

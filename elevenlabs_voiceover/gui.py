@@ -131,8 +131,8 @@ class App:
     # ==================================================================
     def _build_ui(self) -> None:
         self.root.title(APP_TITLE)
-        self.root.geometry("980x760")
-        self.root.minsize(860, 640)
+        self.root.geometry("1000x820")
+        self.root.minsize(860, 600)
 
         style = ttk.Style()
         if "vista" in style.theme_names():
@@ -152,14 +152,16 @@ class App:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=BOTH, expand=True, padx=10, pady=(10, 0), side="top")
 
-        self.tab_work = ttk.Frame(self.notebook, padding=12)
+        self.tab_work = ttk.Frame(self.notebook)
         self.tab_settings = ttk.Frame(self.notebook)
         self.tab_log = ttk.Frame(self.notebook, padding=12)
         self.notebook.add(self.tab_work, text="  Работа  ")
         self.notebook.add(self.tab_settings, text="  Настройки  ")
         self.notebook.add(self.tab_log, text="  Журнал  ")
 
-        self._build_work_tab(self.tab_work)
+        # Обе вкладки прокручиваемые: настроек много, и на ноутбучном экране
+        # нижние строки иначе уезжают за край.
+        self._build_work_tab(_scrollable(self.tab_work))
         self._build_settings_tab(_scrollable(self.tab_settings))
         self._build_log_tab(self.tab_log)
         self._enable_clipboard()
@@ -352,6 +354,11 @@ class App:
         )
         combo_mode.grid(row=row, column=1, columnspan=2, sticky="ew", pady=3)
         combo_mode.bind("<<ComboboxSelected>>", lambda _e: self._refresh_estimate())
+        row += 1
+
+        self.lbl_voice_mode = ttk.Label(parent, text="", style="Hint.TLabel",
+                                        justify=LEFT, wraplength=620)
+        self.lbl_voice_mode.grid(row=row, column=1, columnspan=2, sticky="w", pady=(0, 4))
         row += 1
 
         self.var_recreate = BooleanVar(value=False)
@@ -1052,11 +1059,35 @@ class App:
 
         self.lbl_estimate.configure(
             text=(
-                f"{head}, текстов {plan['texts']}, кусков {plan['chunks']}, "
+                f"{head}, текстов {plan['texts']}, "
+                f"файлов на выходе {_fmt(plan['outputs'])}, "
                 f"символов {_fmt(plan['characters'])}.\n"
                 f"Ориентировочный расход: около {_fmt(credits)} кредитов{tail}"
             )
         )
+        self._refresh_voice_mode_hint(plan)
+
+    def _refresh_voice_mode_hint(self, plan: dict) -> None:
+        """Показать, сколько файлов даст выбранный режим раздачи голосов.
+
+        Названия режимов путают: «всеми голосами» легко прочесть как «задействуй
+        мои голоса», а не «сделай по файлу на каждый». Цифры снимают вопрос.
+        """
+        texts = int(plan.get("texts") or 0)
+        voices = max(1, int(plan.get("voices") or 1))
+
+        if _mode_from_label(self.var_voice_mode.get()) == MODE_ALL_VOICES:
+            self.lbl_voice_mode.configure(
+                text=f"Каждый текст будет озвучен всеми голосами: {texts} текстов дадут "
+                     f"{_fmt(texts * voices)} файлов, и расход кредитов вырастет во столько же раз.",
+                style="Bad.TLabel" if voices > 1 else "Hint.TLabel",
+            )
+        else:
+            self.lbl_voice_mode.configure(
+                text=f"Один текст — один файл: {texts} текстов дадут {_fmt(texts)} файлов. "
+                     "Голоса чередуются по очереди.",
+                style="Hint.TLabel",
+            )
 
     # ------------------------------------------------------------------
     def _start(self) -> None:

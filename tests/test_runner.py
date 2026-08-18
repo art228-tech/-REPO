@@ -563,6 +563,20 @@ def test_estimate_counts_files_and_characters(workspace):
     assert plan["design_credits"] > 0
 
 
+def test_estimate_counts_output_files(workspace):
+    """Число файлов на выходе — то, что человек и хочет увидеть до запуска."""
+    write_prompts(workspace["prompts"], 3)
+    write_texts(workspace["texts"], 10)
+
+    one_each = estimate_plan(make_settings(workspace, max_voices=3))
+    assert one_each["texts"] == 10
+    assert one_each["outputs"] == 10
+
+    every_voice = estimate_plan(make_settings(workspace, max_voices=3, voice_mode=MODE_ALL_VOICES))
+    assert every_voice["texts"] == 10
+    assert every_voice["outputs"] == 30
+
+
 def test_estimate_accounts_for_all_voices_mode(workspace):
     write_prompts(workspace["prompts"], 2)
     write_texts(workspace["texts"], 3)

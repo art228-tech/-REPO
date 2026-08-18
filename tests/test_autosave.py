@@ -127,6 +127,36 @@ def test_every_variable_is_watched(app):
     assert unwatched == []
 
 
+def test_voice_mode_hint_shows_file_count(app, tmp_path):
+    """Режим раздачи голосов должен объяснять себя числами, а не названием."""
+    from elevenlabs_voiceover.config import MODE_ALL_VOICES, MODE_ROUND_ROBIN, VOICE_MODES
+
+    texts = tmp_path / "тексты"
+    texts.mkdir()
+    for i in range(4):
+        (texts / f"{i}.txt").write_text("Короткий текст для проверки.", encoding="utf-8")
+
+    prompts = tmp_path / "промпты"
+    prompts.mkdir()
+    for i in range(3):
+        (prompts / f"{i}.txt").write_text("Native Russian. Спокойный голос.", encoding="utf-8")
+
+    app.var_prompts_dir.set(str(prompts))
+    app.var_texts_dir.set(str(texts))
+    app.var_max_voices.set(3)
+
+    app.var_voice_mode.set(VOICE_MODES[MODE_ROUND_ROBIN])
+    app._refresh_estimate()
+    assert "4 файлов" in app.lbl_voice_mode.cget("text")
+
+    app.var_voice_mode.set(VOICE_MODES[MODE_ALL_VOICES])
+    app._refresh_estimate()
+    hint = app.lbl_voice_mode.cget("text")
+    assert "12 файлов" in hint
+    # Умножение файлов и расхода — то, о чём надо предупредить заметно.
+    assert app.lbl_voice_mode.cget("style") == "Bad.TLabel"
+
+
 def test_done_action_is_saved(app):
     from elevenlabs_voiceover.config import DONE_ACTIONS, DONE_DELETE
 

@@ -995,9 +995,11 @@ def estimate_plan(settings: Settings) -> Dict[str, object]:
         total_chunks += len(chunks)
         total_chars += sum(c.characters for c in chunks)
 
+    outputs = len(text_files)
     if settings.voice_mode == MODE_ALL_VOICES and voices:
         total_chars *= voices
         total_chunks *= voices
+        outputs *= voices
 
     if from_account or settings.auto_generate_preview:
         design_cost = 0
@@ -1008,6 +1010,7 @@ def estimate_plan(settings: Settings) -> Dict[str, object]:
         "prompts": len(prompt_files),
         "voices": voices,
         "texts": len(text_files),
+        "outputs": outputs,
         "chunks": total_chunks,
         "characters": total_chars,
         "design_credits": design_cost,
