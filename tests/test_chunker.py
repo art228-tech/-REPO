@@ -15,6 +15,51 @@ def test_normalize_unifies_line_endings():
     assert normalize_text("а\r\nб\rв") == "а\nб\nв"
 
 
+def test_line_breaks_are_kept_by_default():
+    # Модель делает паузу на переносе, поэтому по умолчанию их не трогаем.
+    assert normalize_text("Раз.\nДва.") == "Раз.\nДва."
+
+
+def test_soft_mode_removes_breaks_inside_paragraph():
+    from elevenlabs_voiceover.chunker import LINE_BREAKS_SOFT
+
+    source = "Раз.\nДва.\nТри.\n\nНовый абзац.\nЕго продолжение."
+    assert normalize_text(source, LINE_BREAKS_SOFT) == "Раз. Два. Три.\n\nНовый абзац. Его продолжение."
+
+
+def test_all_mode_makes_one_paragraph():
+    from elevenlabs_voiceover.chunker import LINE_BREAKS_ALL
+
+    source = "Раз.\nДва.\n\nТри."
+    assert normalize_text(source, LINE_BREAKS_ALL) == "Раз. Два. Три."
+
+
+def test_soft_mode_does_not_glue_words():
+    from elevenlabs_voiceover.chunker import LINE_BREAKS_SOFT
+
+    assert normalize_text("конец\nначало", LINE_BREAKS_SOFT) == "конец начало"
+
+
+def test_unknown_mode_behaves_as_keep():
+    assert normalize_text("Раз.\nДва.", "что-то своё") == "Раз.\nДва."
+
+
+def test_count_line_breaks_ignores_paragraph_gaps():
+    from elevenlabs_voiceover.chunker import count_line_breaks
+
+    # Три одиночных переноса внутри абзацев, пустая строка не в счёт.
+    assert count_line_breaks("а\nб\nв\n\nг\nд") == 3
+    assert count_line_breaks("а\n\nб") == 0
+    assert count_line_breaks("") == 0
+
+
+def test_split_text_honours_line_break_mode():
+    from elevenlabs_voiceover.chunker import LINE_BREAKS_SOFT
+
+    chunks = split_text("Раз.\nДва.\nТри.", 500, line_breaks=LINE_BREAKS_SOFT)
+    assert chunks[0].text == "Раз. Два. Три."
+
+
 def test_normalize_collapses_blank_lines():
     assert normalize_text("а\n\n\n\n\nб") == "а\n\nб"
 

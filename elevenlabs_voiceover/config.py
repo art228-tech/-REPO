@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
+from .chunker import LINE_BREAK_MODES, LINE_BREAKS_KEEP
 from .logging_setup import get_logger, register_secret
 from .paths import config_path
 
@@ -98,6 +99,7 @@ class Settings:
     output_format: str = "mp3_44100_128"
     chunk_target_chars: int = 2500
     language_code: str = ""
+    line_breaks: str = LINE_BREAKS_KEEP
 
     # --- параметры голоса ---
     stability: float = 0.5
@@ -137,6 +139,8 @@ class Settings:
             self.voice_mode = MODE_ROUND_ROBIN
         if self.voice_source not in VOICE_SOURCES:
             self.voice_source = SOURCE_DESIGN
+        if self.line_breaks not in LINE_BREAK_MODES:
+            self.line_breaks = LINE_BREAKS_KEEP
         if self.done_action not in DONE_ACTIONS:
             # Неизвестное значение трактуем как «ничего не трогать»: потеря
             # исходников из-за опечатки в конфиге недопустима.

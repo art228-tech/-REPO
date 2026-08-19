@@ -49,11 +49,38 @@ class Chunk:
         return len(self.text)
 
 
-def normalize_text(raw: str) -> str:
+#: Переносы строк отдаются модели как есть — она делает на них паузу.
+LINE_BREAKS_KEEP = "keep"
+#: Переносы внутри абзаца превращаются в пробел, пустая строка остаётся.
+LINE_BREAKS_SOFT = "soft"
+#: Весь текст сводится в один сплошной абзац.
+LINE_BREAKS_ALL = "all"
+
+LINE_BREAK_MODES = {
+    LINE_BREAKS_KEEP: "Оставлять как есть — на них будет пауза",
+    LINE_BREAKS_SOFT: "Убирать внутри абзаца, пустую строку оставлять",
+    LINE_BREAKS_ALL: "Убирать все, читать сплошным текстом",
+}
+
+#: Метка, которой временно подменяются границы абзацев при чистке.
+_PARAGRAPH_MARK = "\x00"
+
+
+def count_line_breaks(raw: str) -> int:
+    """Сколько переносов строк внутри абзацев — именно они дают паузы."""
+    if not raw:
+        return 0
+    text = raw.replace("\r\n", "\n").replace("\r", "\n")
+    text = _PARAGRAPH_SPLIT.sub(_PARAGRAPH_MARK, text)
+    return text.count("\n")
+
+
+def normalize_text(raw: str, line_breaks: str = LINE_BREAKS_KEEP) -> str:
     """Убрать BOM, невидимые символы и лишние пробелы.
 
     Каждый лишний символ — это списанный кредит, поэтому чистка тут не
-    косметика, а экономия.
+    косметика, а экономия. Переносы строк трогаем только по просьбе: модель
+    делает на них паузу, и для одних текстов это нужно, для других мешает.
     """
     if not raw:
         return ""
@@ -66,6 +93,14 @@ def normalize_text(raw: str) -> str:
     text = "".join(
         ch for ch in text if ch in "\n\t" or not unicodedata.category(ch).startswith("C")
     )
+
+    if line_breaks == LINE_BREAKS_ALL:
+        text = re.sub(r"\n+", " ", text)
+    elif line_breaks == LINE_BREAKS_SOFT:
+        # Границы абзацев прячем, чтобы уцелели, остальные переносы — в пробел.
+        text = _PARAGRAPH_SPLIT.sub(_PARAGRAPH_MARK, text)
+        text = text.replace("\n", " ")
+        text = text.replace(_PARAGRAPH_MARK, "\n\n")
 
     text = _WHITESPACE_RUN.sub(" ", text)
     text = _TRAILING_SPACES.sub(r"\1", text)
@@ -205,12 +240,17 @@ def _atomize(text: str, limit: int) -> List[tuple]:
     return atoms
 
 
-def split_text(text: str, target_chars: int, max_chars: int = 0) -> List[Chunk]:
+def split_text(
+    text: str,
+    target_chars: int,
+    max_chars: int = 0,
+    line_breaks: str = LINE_BREAKS_KEEP,
+) -> List[Chunk]:
     """Разбить текст на куски не длиннее лимита, стараясь попасть в target.
 
     target_chars — желаемый размер куска, max_chars — жёсткий предел модели.
     """
-    normalized = normalize_text(text)
+    normalized = normalize_text(text, line_breaks)
     if not normalized:
         return []
 

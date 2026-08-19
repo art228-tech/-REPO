@@ -46,6 +46,12 @@ from .api_client import (
     verify_key,
 )
 from .audio import extension_for, find_ffmpeg, format_duration
+from .chunker import (
+    LINE_BREAK_MODES,
+    LINE_BREAKS_ALL,
+    LINE_BREAKS_KEEP,
+    LINE_BREAKS_SOFT,
+)
 from .config import (
     DEFAULT_GUIDANCE,
     DONE_ACTIONS,
@@ -455,6 +461,24 @@ class App:
                   style="Hint.TLabel").grid(row=row, column=2, sticky="w", padx=(8, 0))
         row += 1
 
+        ttk.Label(canvas_frame, text="Переносы строк:").grid(row=row, column=0, sticky="w", pady=3)
+        self.var_line_breaks = StringVar(value=LINE_BREAK_MODES[LINE_BREAKS_KEEP])
+        combo_breaks = ttk.Combobox(
+            canvas_frame, textvariable=self.var_line_breaks, state="readonly",
+            values=[LINE_BREAK_MODES[m] for m in (LINE_BREAKS_KEEP, LINE_BREAKS_SOFT, LINE_BREAKS_ALL)],
+        )
+        combo_breaks.grid(row=row, column=1, columnspan=2, sticky="ew", pady=3)
+        combo_breaks.bind("<<ComboboxSelected>>", lambda _e: self._refresh_estimate())
+        row += 1
+
+        ttk.Label(
+            canvas_frame,
+            text="ElevenLabs делает паузу на каждом переносе строки. Если текст разбит на "
+                 "строки, а читать нужно слитно — уберите их здесь.",
+            style="Hint.TLabel", justify=LEFT, wraplength=700,
+        ).grid(row=row, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        row += 1
+
         row = self._separator(canvas_frame, row, "Параметры голоса")
 
         self.var_stability = DoubleVar(value=0.5)
@@ -712,6 +736,9 @@ class App:
         self.var_output_format.set(s.output_format)
         self.var_chunk.set(s.chunk_target_chars)
         self.var_language.set(s.language_code)
+        self.var_line_breaks.set(
+            LINE_BREAK_MODES.get(s.line_breaks, LINE_BREAK_MODES[LINE_BREAKS_KEEP])
+        )
 
         self.var_stability.set(s.stability)
         self.var_similarity.set(s.similarity_boost)
@@ -755,6 +782,7 @@ class App:
         s.output_format = self.var_output_format.get().strip() or s.output_format
         s.chunk_target_chars = _safe_int(self.var_chunk, s.chunk_target_chars)
         s.language_code = self.var_language.get().strip()
+        s.line_breaks = _breaks_from_label(self.var_line_breaks.get())
 
         s.stability = _safe_float(self.var_stability, s.stability)
         s.similarity_boost = _safe_float(self.var_similarity, s.similarity_boost)
@@ -1057,12 +1085,21 @@ class App:
             head = f"Голосов выбрано: {plan['voices']}"
             tail = ". Голоса уже созданы, кредиты на них не тратятся."
 
+        breaks = int(plan.get("line_breaks") or 0)
+        breaks_note = ""
+        if breaks and _breaks_from_label(self.var_line_breaks.get()) == LINE_BREAKS_KEEP:
+            breaks_note = (
+                f"\nВ текстах {_fmt(breaks)} переносов строк — на каждом будет пауза. "
+                "Если читать нужно слитно, поменяйте «Переносы строк» в настройках."
+            )
+
         self.lbl_estimate.configure(
             text=(
                 f"{head}, текстов {plan['texts']}, "
                 f"файлов на выходе {_fmt(plan['outputs'])}, "
                 f"символов {_fmt(plan['characters'])}.\n"
                 f"Ориентировочный расход: около {_fmt(credits)} кредитов{tail}"
+                f"{breaks_note}"
             )
         )
         self._refresh_voice_mode_hint(plan)
@@ -1510,6 +1547,13 @@ def _mode_from_label(label: str) -> str:
         if value == label:
             return key
     return MODE_ROUND_ROBIN
+
+
+def _breaks_from_label(label: str) -> str:
+    for key, value in LINE_BREAK_MODES.items():
+        if value == label:
+            return key
+    return LINE_BREAKS_KEEP
 
 
 def _done_from_label(label: str) -> str:

@@ -325,6 +325,51 @@ def test_voice_previews_are_saved(workspace, store, monkeypatch):
     assert len(previews) == 6  # два голоса по три варианта
 
 
+def test_line_breaks_reach_the_api_by_default(workspace, store, monkeypatch):
+    """Переносы дают паузу, и по умолчанию мы их сохраняем."""
+    write_prompts(workspace["prompts"], 1)
+    (workspace["texts"] / "речь.txt").write_text("Раз.\nДва.\nТри.", encoding="utf-8")
+    client = FakeClient()
+
+    run_with(monkeypatch, make_settings(workspace, max_voices=1), store, client)
+
+    assert client.tts_calls[0][1] == "Раз.\nДва.\nТри."
+
+
+def test_line_breaks_can_be_removed(workspace, store, monkeypatch):
+    from elevenlabs_voiceover.chunker import LINE_BREAKS_SOFT
+
+    write_prompts(workspace["prompts"], 1)
+    (workspace["texts"] / "речь.txt").write_text("Раз.\nДва.\nТри.", encoding="utf-8")
+    client = FakeClient()
+
+    settings = make_settings(workspace, max_voices=1, line_breaks=LINE_BREAKS_SOFT)
+    run_with(monkeypatch, settings, store, client)
+
+    assert client.tts_calls[0][1] == "Раз. Два. Три."
+
+
+def test_estimate_counts_line_breaks(workspace):
+    (workspace["texts"] / "речь.txt").write_text("Раз.\nДва.\n\nТри.\nЧетыре.", encoding="utf-8")
+    write_prompts(workspace["prompts"], 1)
+
+    plan = estimate_plan(make_settings(workspace, max_voices=1))
+    assert plan["line_breaks"] == 2
+
+
+def test_manifest_records_pace(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+
+    run_with(monkeypatch, make_settings(workspace, max_voices=1), store, FakeClient())
+
+    manifest = (workspace["output"] / "_manifest.csv").read_text(encoding="utf-8-sig")
+    rows = [line.split(";") for line in manifest.strip().splitlines()]
+    column = rows[0].index("Символов в секунду")
+
+    assert all(row[column] for row in rows[1:])
+
+
 def test_manifest_records_duration(workspace, store, monkeypatch):
     write_prompts(workspace["prompts"], 1)
     write_texts(workspace["texts"], 2)

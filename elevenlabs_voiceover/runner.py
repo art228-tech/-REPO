@@ -12,7 +12,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import audio as audio_utils
 from .api_client import ElevenLabsClient, ModelInfo, Subscription
-from .chunker import Chunk, split_text
+from .chunker import Chunk, count_line_breaks, split_text
 from .config import (
     DONE_DELETE,
     DONE_FOLDER_NAME,
@@ -123,6 +123,17 @@ class PreflightError(Exception):
 
 
 # ----------------------------------------------------------------------
+def _pace(characters: int, seconds: Optional[float]) -> Optional[float]:
+    """Темп речи в символах за секунду.
+
+    Число, по которому голоса сравниваются между собой: длина текста сама по
+    себе ничего не говорит о том, быстро ли его прочитали.
+    """
+    if not seconds or seconds <= 0 or characters <= 0:
+        return None
+    return characters / seconds
+
+
 def read_text_file(path: Path) -> str:
     """Прочитать txt, самостоятельно определив кодировку.
 
@@ -371,7 +382,9 @@ class Runner:
         texts: List[TextSpec] = []
         for path in files:
             content = read_text_file(path)
-            chunks = split_text(content, self.settings.chunk_target_chars)
+            chunks = split_text(
+                content, self.settings.chunk_target_chars, line_breaks=self.settings.line_breaks
+            )
             if not chunks:
                 log.warning("Текст %s пустой, пропускаю", path.name)
                 continue
@@ -391,7 +404,10 @@ class Runner:
             max_chars,
         )
         for spec in texts:
-            spec.chunks = split_text(spec.text, self.settings.chunk_target_chars, max_chars)
+            spec.chunks = split_text(
+                spec.text, self.settings.chunk_target_chars, max_chars,
+                line_breaks=self.settings.line_breaks,
+            )
 
     # ------------------------------------------------------------------
     def _resolve_model(self) -> None:
@@ -860,12 +876,14 @@ class Runner:
         if job.duration:
             self.stats.seconds_produced += job.duration
 
+        pace = _pace(job.text.characters, job.duration)
         log.info(
-            "Готово: %s (голос «%s», %d символов, %s)",
+            "Готово: %s (голос «%s», %d символов, %s%s)",
             job.output_path.name,
             job.voice.name,
             job.text.characters,
             audio_utils.format_duration(job.duration) or "длительность не определена",
+            f", {pace:.1f} симв/с" if pace else "",
         )
 
         if not settings.keep_chunks:
@@ -975,7 +993,7 @@ class Runner:
                 writer = csv.writer(handle, delimiter=";")
                 writer.writerow(
                     ["Файл результата", "Исходный текст", "Голос", "Промпт голоса",
-                     "Символов", "Длительность", "Секунд", "Готов"]
+                     "Символов", "Длительность", "Секунд", "Символов в секунду", "Готов"]
                 )
                 for job in jobs:
                     ready = job.output_path.exists()
@@ -983,6 +1001,7 @@ class Runner:
                     # берём её с диска, файл уже готов с прошлого прогона.
                     if ready and job.duration is None:
                         job.duration = self._measure(job.output_path)
+                    pace = _pace(job.text.characters, job.duration)
                     writer.writerow(
                         [
                             job.output_path.name,
@@ -992,6 +1011,7 @@ class Runner:
                             job.text.characters,
                             audio_utils.format_duration(job.duration),
                             f"{job.duration:.1f}".replace(".", ",") if job.duration else "",
+                            f"{pace:.1f}".replace(".", ",") if pace else "",
                             "да" if ready else "нет",
                         ]
                     )
@@ -1020,12 +1040,14 @@ def estimate_plan(settings: Settings) -> Dict[str, object]:
         voices = min(len(prompt_files), settings.max_voices)
     total_chars = 0
     total_chunks = 0
+    line_breaks = 0
     for path in text_files:
         try:
             content = read_text_file(path)
         except OSError:
             continue
-        chunks = split_text(content, settings.chunk_target_chars)
+        chunks = split_text(content, settings.chunk_target_chars, line_breaks=settings.line_breaks)
+        line_breaks += count_line_breaks(content)
         total_chunks += len(chunks)
         total_chars += sum(c.characters for c in chunks)
 
@@ -1045,6 +1067,7 @@ def estimate_plan(settings: Settings) -> Dict[str, object]:
         "voices": voices,
         "texts": len(text_files),
         "outputs": outputs,
+        "line_breaks": line_breaks,
         "chunks": total_chunks,
         "characters": total_chars,
         "design_credits": design_cost,
