@@ -14,7 +14,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import List, NamedTuple, Optional, Sequence
 
 from .logging_setup import get_logger
 from .paths import app_root
@@ -44,6 +44,12 @@ def format_family(output_format: str) -> str:
 
 def extension_for(output_format: str) -> str:
     return _EXTENSIONS.get(format_family(output_format), ".bin")
+
+
+def format_family_of_path(path: Path) -> str:
+    """Определить формат по расширению файла."""
+    suffix = path.suffix.lower().lstrip(".")
+    return suffix if suffix in _EXTENSIONS else ""
 
 
 def find_ffmpeg() -> Optional[str]:
@@ -127,6 +133,61 @@ _SAMPLE_RATES = {
 }
 
 
+class _Frame(NamedTuple):
+    """Разобранный заголовок одного кадра MPEG."""
+
+    length: int
+    samples: int
+    sample_rate: int
+    side_info: int
+
+
+def _read_frame(data: bytes, pos: int = 0) -> Optional[_Frame]:
+    """Разобрать заголовок кадра по смещению. None, если это не кадр."""
+    if pos + 4 > len(data):
+        return None
+    if data[pos] != 0xFF or (data[pos + 1] & 0xE0) != 0xE0:
+        return None
+
+    version_bits = (data[pos + 1] >> 3) & 0x03
+    layer_bits = (data[pos + 1] >> 1) & 0x03
+    if version_bits == 1 or layer_bits != 1:  # только MPEG Layer III
+        return None
+
+    bitrate_index = (data[pos + 2] >> 4) & 0x0F
+    rate_index = (data[pos + 2] >> 2) & 0x03
+    padding = (data[pos + 2] >> 1) & 0x01
+    channel_mode = (data[pos + 3] >> 6) & 0x03
+
+    if bitrate_index in (0, 15) or rate_index == 3:
+        return None
+
+    bitrates = _BITRATES_V1 if version_bits == 3 else _BITRATES_V2
+    bitrate = bitrates[bitrate_index] * 1000
+    sample_rate = _SAMPLE_RATES[version_bits][rate_index]
+    if not bitrate or not sample_rate:
+        return None
+
+    samples = 1152 if version_bits == 3 else 576
+    length = (samples // 8) * bitrate // sample_rate + padding
+    if length <= 4:
+        return None
+
+    mono = channel_mode == 3
+    if version_bits == 3:
+        side_info = 17 if mono else 32
+    else:
+        side_info = 9 if mono else 17
+
+    return _Frame(length=length, samples=samples, sample_rate=sample_rate, side_info=side_info)
+
+
+def _is_service_frame(data: bytes, pos: int, frame: _Frame) -> bool:
+    """Кадр Xing/Info: описывает файл целиком, звука не содержит."""
+    tag_at = pos + 4 + frame.side_info
+    return data[tag_at : tag_at + 4] in (b"Xing", b"Info")
+
+
 def strip_xing_header(data: bytes) -> bytes:
     """Убрать служебный кадр Xing/Info в начале потока.
 
@@ -137,46 +198,50 @@ def strip_xing_header(data: bytes) -> bytes:
     Проще выкинуть их все: у потока с постоянным битрейтом длительность и без
     них считается по размеру верно.
     """
-    if len(data) < 40 or data[0] != 0xFF or (data[1] & 0xE0) != 0xE0:
+    frame = _read_frame(data)
+    if frame is None or frame.length > len(data):
         return data
-
-    version_bits = (data[1] >> 3) & 0x03
-    layer_bits = (data[1] >> 1) & 0x03
-    if version_bits == 1 or layer_bits != 1:  # только MPEG Layer III
+    if not _is_service_frame(data, 0, frame):
         return data
+    return data[frame.length :]
 
-    bitrate_index = (data[2] >> 4) & 0x0F
-    rate_index = (data[2] >> 2) & 0x03
-    padding = (data[2] >> 1) & 0x01
-    channel_mode = (data[3] >> 6) & 0x03
 
-    bitrates = _BITRATES_V1 if version_bits == 3 else _BITRATES_V2
-    if bitrate_index in (0, 15) or rate_index == 3:
-        return data
+def mp3_duration(data: bytes) -> Optional[float]:
+    """Длительность записи в секундах, посчитанная по кадрам.
 
-    bitrate = bitrates[bitrate_index] * 1000
-    sample_rate = _SAMPLE_RATES[version_bits][rate_index]
-    if not bitrate or not sample_rate:
-        return data
+    Считаем сами, а не через ffmpeg: его может не быть на машине, а знать,
+    сколько получилось звука, полезно всегда.
+    """
+    payload = strip_id3(data)
+    seconds = 0.0
+    frames = 0
+    position = 0
+    limit = len(payload)
 
-    samples_per_frame = 1152 if version_bits == 3 else 576
-    frame_length = (samples_per_frame // 8) * bitrate // sample_rate + padding
-    if frame_length <= 4 or frame_length > len(data):
-        return data
+    while position + 4 <= limit:
+        frame = _read_frame(payload, position)
+        if frame is None:
+            # Рассинхронизация: ищем начало следующего кадра побайтно.
+            position += 1
+            continue
+        if not (frames == 0 and _is_service_frame(payload, position, frame)):
+            seconds += frame.samples / frame.sample_rate
+            frames += 1
+        position += frame.length
 
-    mono = channel_mode == 3
-    if version_bits == 3:
-        side_info = 17 if mono else 32
-    else:
-        side_info = 9 if mono else 17
+    return seconds if frames else None
 
-    tag_at = 4 + side_info
-    if tag_at + 4 > len(data):
-        return data
-    if data[tag_at : tag_at + 4] not in (b"Xing", b"Info"):
-        return data
 
-    return data[frame_length:]
+def format_duration(seconds: Optional[float]) -> str:
+    """Длительность в виде 1:23 или 1:02:03."""
+    if seconds is None or seconds < 0:
+        return ""
+    total = round(seconds)
+    hours, rest = divmod(total, 3600)
+    minutes, secs = divmod(rest, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
 
 
 # ----------------------------------------------------------------------

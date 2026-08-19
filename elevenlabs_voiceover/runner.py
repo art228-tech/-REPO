@@ -81,6 +81,7 @@ class Job:
     text: TextSpec
     voice: VoiceRef
     output_path: Path
+    duration: Optional[float] = None
 
 
 @dataclass
@@ -95,6 +96,7 @@ class RunStats:
     chunks_reused: int = 0
     characters_spent: int = 0
     credits_estimated: float = 0.0
+    seconds_produced: float = 0.0
     stopped_reason: str = ""
     failures: List[str] = field(default_factory=list)
 
@@ -110,6 +112,7 @@ class RunStats:
             "chunks_reused": self.chunks_reused,
             "characters_spent": self.characters_spent,
             "credits_estimated": round(self.credits_estimated, 1),
+            "audio_duration": audio_utils.format_duration(self.seconds_produced),
             "stopped_reason": self.stopped_reason,
             "failures": self.failures[:50],
         }
@@ -853,10 +856,31 @@ class Runner:
             characters=job.text.characters,
         )
         self.stats.texts_done += 1
-        log.info("Готово: %s (голос «%s», %d символов)", job.output_path.name, job.voice.name, job.text.characters)
+        job.duration = self._measure(job.output_path)
+        if job.duration:
+            self.stats.seconds_produced += job.duration
+
+        log.info(
+            "Готово: %s (голос «%s», %d символов, %s)",
+            job.output_path.name,
+            job.voice.name,
+            job.text.characters,
+            audio_utils.format_duration(job.duration) or "длительность не определена",
+        )
 
         if not settings.keep_chunks:
             self._remove_chunks(chunks_dir)
+
+    @staticmethod
+    def _measure(path: Path) -> Optional[float]:
+        """Длительность готовой записи. Неудача измерения работе не мешает."""
+        if audio_utils.format_family_of_path(path) != "mp3":
+            return None
+        try:
+            return audio_utils.mp3_duration(path.read_bytes())
+        except OSError as exc:
+            log.debug("Не удалось измерить длительность %s: %s", path.name, exc)
+            return None
 
     def _retire_source(self, text: TextSpec, jobs_for_text: Sequence[Job]) -> None:
         """Убрать исходный текст, когда все его озвучки готовы.
@@ -949,8 +973,16 @@ class Runner:
         try:
             with manifest.open("w", encoding="utf-8-sig", newline="") as handle:
                 writer = csv.writer(handle, delimiter=";")
-                writer.writerow(["Файл результата", "Исходный текст", "Голос", "Промпт голоса", "Символов", "Готов"])
+                writer.writerow(
+                    ["Файл результата", "Исходный текст", "Голос", "Промпт голоса",
+                     "Символов", "Длительность", "Секунд", "Готов"]
+                )
                 for job in jobs:
+                    ready = job.output_path.exists()
+                    # У пропущенных заданий длительность ещё не измерена:
+                    # берём её с диска, файл уже готов с прошлого прогона.
+                    if ready and job.duration is None:
+                        job.duration = self._measure(job.output_path)
                     writer.writerow(
                         [
                             job.output_path.name,
@@ -958,7 +990,9 @@ class Runner:
                             job.voice.name,
                             job.voice.prompt_file,
                             job.text.characters,
-                            "да" if job.output_path.exists() else "нет",
+                            audio_utils.format_duration(job.duration),
+                            f"{job.duration:.1f}".replace(".", ",") if job.duration else "",
+                            "да" if ready else "нет",
                         ]
                     )
             log.info("Список готовых файлов записан в %s", manifest.name)

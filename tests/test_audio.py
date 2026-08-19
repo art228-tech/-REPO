@@ -1,3 +1,6 @@
+import shutil
+import subprocess
+
 import pytest
 
 from elevenlabs_voiceover.audio import (
@@ -146,6 +149,80 @@ def test_layer_other_than_three_is_untouched():
     frame = bytearray(mpeg_frame(xing=True))
     frame[1] = 0xFD  # Layer II
     assert strip_xing_header(bytes(frame)) == bytes(frame)
+
+
+def test_duration_of_single_frame():
+    from elevenlabs_voiceover.audio import mp3_duration
+
+    # Кадр MPEG1 Layer III содержит 1152 отсчёта при 44100 Гц.
+    assert mp3_duration(mpeg_frame()) == pytest.approx(1152 / 44100)
+
+
+def test_duration_adds_up_over_frames():
+    from elevenlabs_voiceover.audio import mp3_duration
+
+    assert mp3_duration(mpeg_frame() * 10) == pytest.approx(10 * 1152 / 44100)
+
+
+def test_duration_ignores_service_frame():
+    from elevenlabs_voiceover.audio import mp3_duration
+
+    audio = mpeg_frame() * 5
+    assert mp3_duration(mpeg_frame(xing=True) + audio) == pytest.approx(mp3_duration(audio))
+
+
+def test_duration_ignores_id3_tags():
+    from elevenlabs_voiceover.audio import mp3_duration
+
+    audio = mpeg_frame() * 3
+    assert mp3_duration(id3v2() + audio + id3v1()) == pytest.approx(mp3_duration(audio))
+
+
+def test_duration_of_non_mpeg_data():
+    from elevenlabs_voiceover.audio import mp3_duration
+
+    assert mp3_duration("это не звук".encode() * 50) is None
+    assert mp3_duration(b"") is None
+
+
+def test_duration_survives_damaged_bytes():
+    from elevenlabs_voiceover.audio import mp3_duration
+
+    # Мусор между кадрами не должен ни ронять разбор, ни съедать звук.
+    damaged = mpeg_frame() + b"\x00\x11\x22" + mpeg_frame()
+    assert mp3_duration(damaged) == pytest.approx(2 * 1152 / 44100)
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"),
+    [(None, ""), (-1, ""), (0, "0:00"), (7.4, "0:07"), (65, "1:05"), (600, "10:00"), (3725, "1:02:05")],
+)
+def test_duration_formatting(seconds, expected):
+    from elevenlabs_voiceover.audio import format_duration
+
+    assert format_duration(seconds) == expected
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
+                    reason="нужен ffmpeg для сверки")
+@pytest.mark.parametrize("wanted", [0.5, 2, 9.25])
+def test_duration_matches_ffprobe(tmp_path, wanted):
+    """Свой расчёт должен совпадать с эталонным измерением."""
+    from elevenlabs_voiceover.audio import mp3_duration
+
+    path = tmp_path / "sample.mp3"
+    subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+         "-i", "anullsrc=r=44100:cl=mono", "-t", str(wanted), "-b:a", "128k", str(path)],
+        check=True,
+    )
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=nw=1:nk=1", str(path)],
+        capture_output=True, text=True, check=True,
+    )
+
+    assert mp3_duration(path.read_bytes()) == pytest.approx(float(probe.stdout), abs=0.03)
 
 
 def test_concat_drops_xing_from_every_part(tmp_path):

@@ -45,7 +45,7 @@ from .api_client import (
     swap_proxy_scheme,
     verify_key,
 )
-from .audio import extension_for, find_ffmpeg
+from .audio import extension_for, find_ffmpeg, format_duration
 from .config import (
     DEFAULT_GUIDANCE,
     DONE_ACTIONS,
@@ -1398,6 +1398,7 @@ class App:
             f"С ошибками: {stats.texts_failed}\n"
             f"Голосов создано: {stats.voices_created}, использовано готовых: {stats.voices_reused}\n"
             f"Озвучено символов: {_fmt(stats.characters_spent)}\n"
+            f"Получено звука: {format_duration(stats.seconds_produced) or '—'}\n"
             f"Потрачено кредитов (оценка): {_fmt(stats.credits_estimated)}"
         )
 

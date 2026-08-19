@@ -325,6 +325,31 @@ def test_voice_previews_are_saved(workspace, store, monkeypatch):
     assert len(previews) == 6  # два голоса по три варианта
 
 
+def test_manifest_records_duration(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+
+    stats = run_with(monkeypatch, make_settings(workspace, max_voices=1), store, FakeClient())
+
+    manifest = (workspace["output"] / "_manifest.csv").read_text(encoding="utf-8-sig")
+    rows = [line.split(";") for line in manifest.strip().splitlines()]
+    column = rows[0].index("Длительность")
+
+    # Поддельный клиент отдаёт настоящие кадры MPEG, длительность измерима.
+    assert all(row[column] for row in rows[1:])
+    assert stats.seconds_produced > 0
+
+
+def test_duration_is_reported_in_stats(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 3)
+
+    stats = run_with(monkeypatch, make_settings(workspace, max_voices=1), store, FakeClient())
+
+    assert "audio_duration" in stats.as_dict()
+    assert stats.as_dict()["audio_duration"]
+
+
 def test_manifest_records_voice_per_file(workspace, store, monkeypatch):
     write_prompts(workspace["prompts"], 2)
     write_texts(workspace["texts"], 3)
