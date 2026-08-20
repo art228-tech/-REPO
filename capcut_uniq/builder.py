@@ -43,7 +43,10 @@ def build(profile: TemplateProfile, plan: RenderPlan, config: Config, name: str)
     clone_folder(profile.folder, target, skip_files=skip)
 
     draft = Draft.load(target)
-    draft.content["id"] = new_capcut_id()
+    # Идентификатор таймлайна оставляем как в шаблоне. Раньше здесь выдавался
+    # новый, и если рядом оставался хоть один служебный файл со старым, CapCut
+    # видел два таймлайна и открывал пустой. Проекты лежат в разных папках, так
+    # что совпадение идентификатора внутри них ничему не мешает.
     draft.content["name"] = name
     draft.duration_us = plan.total_us
     draft.content["fps"] = float(config.fps)

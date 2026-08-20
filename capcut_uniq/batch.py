@@ -69,7 +69,7 @@ class BatchReport:
 
 
 def discover_templates(config: Config) -> list[profile_module.TemplateProfile]:
-    """Разбирает шаблоны, перечисленные в настройках."""
+    """Разбирает шаблоны и проверяет их пригодность до начала работы."""
     names = config.templates or []
     if not names:
         raise PipelineError("Не выбран ни один шаблон")
@@ -82,7 +82,39 @@ def discover_templates(config: Config) -> list[profile_module.TemplateProfile]:
         if not folder.is_dir():
             raise PipelineError(f"Шаблон не найден: {folder}")
         profiles.append(profile_module.analyse(folder))
+
+    _check_subtitles(profiles, config)
     return profiles
+
+
+def _check_subtitles(profiles: list[profile_module.TemplateProfile], config: Config) -> None:
+    """Ловит шаблоны, в которых субтитры есть, но опознать их не удалось.
+
+    Разница принципиальная. Если субтитров в шаблоне нет вовсе — это нормально,
+    ролики просто соберутся без подписей. А если текстовые объекты есть, а
+    дорожку найти не получилось, то оформление наследовать не от чего: ролик
+    уйдёт с текстом из шаблона, то есть с чужими словами. Такое надо ловить
+    заранее, а не после сотни собранных проектов.
+    """
+    broken = [p for p in profiles if p.subtitle_diagnosis.missing_but_present]
+    if broken:
+        names = ", ".join(p.name for p in broken)
+        raise PipelineError(
+            f"В шаблонах {names} не удалось опознать дорожку субтитров, хотя текст в них есть. "
+            "Собранные ролики получили бы текст из шаблона вместо твоего. "
+            "Скорее всего шаблон пересохранён CapCut в непривычном виде — "
+            "пришли его мне, и я подстрою определитель."
+        )
+
+    for item in profiles:
+        if item.subtitle_diagnosis.absent:
+            if config.make_subtitles:
+                log.warning(
+                    "В шаблоне %s нет субтитров — ролики по нему будут без подписей",
+                    item.name,
+                )
+            else:
+                log.info("В шаблоне %s субтитров нет", item.name)
 
 
 def run(config: Config, progress: Progress | None = None) -> BatchReport:
@@ -190,6 +222,13 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
 
     name = f"{config.name_prefix}_{stamp}_{number:03d}"
     result = builder.build(profile, render_plan, config, name)
+
+    if config.make_subtitles and render_plan.cues and result.subtitle_count == 0:
+        raise PipelineError(
+            f"Реплик собрано {len(render_plan.cues)}, а в черновик не встала ни одна — "
+            f"дорожку субтитров шаблона {profile.name} не удалось пересобрать. "
+            "Ролик получился бы с текстом из шаблона, поэтому останавливаюсь."
+        )
 
     report = validate.check(result.folder)
     for warning in report.warnings:

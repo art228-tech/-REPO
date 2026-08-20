@@ -114,6 +114,26 @@ def _size_for(style_metrics: list[tuple[int, float, float]], length: int) -> tup
     return closest[1], closest[2]
 
 
+def _fill_text(base_text: dict, cue: Cue, group_id: str) -> tuple[str, dict]:
+    """Клон текстового материала с новым содержимым."""
+    material = copy.deepcopy(base_text)
+    text_id = new_capcut_id()
+    material["id"] = text_id
+    material["name"] = new_capcut_id()
+    material["recognize_text"] = cue.text
+    material["group_id"] = group_id
+    material["words"] = _word_arrays(cue)
+    material["current_words"] = {"start_time": [], "end_time": [], "text": []}
+
+    body = json.loads(material.get("content") or "{}")
+    body["text"] = cue.text
+    # Диапазон оформления считается в символах, поэтому его надо пересчитать.
+    for entry in body.get("styles") or []:
+        entry["range"] = [0, len(cue.text)]
+    material["content"] = json.dumps(body, ensure_ascii=False)
+    return text_id, material
+
+
 def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue]) -> int:
     """Заменяет дорожку субтитров на новую. Возвращает число реплик."""
     style = profile.subtitles
@@ -125,15 +145,21 @@ def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue]) -> int:
     texts = materials.setdefault("texts", [])
     animations = materials.setdefault("material_animations", [])
 
-    base_template = next((t for t in templates if t.get("id") == style.template_material_id), None)
     base_text = next((t for t in texts if t.get("id") == style.text_material_id), None)
-    if base_template is None or base_text is None:
-        log.warning("В шаблоне не нашлось эталонного субтитра, дорожка оставлена как есть")
+    base_template = None
+    if style.kind == "template":
+        base_template = next((t for t in templates if t.get("id") == style.template_material_id), None)
+        if base_template is None:
+            log.warning("В шаблоне не нашёлся эталонный текстовый шаблон, дорожка не тронута")
+            return 0
+    if base_text is None:
+        log.warning("В шаблоне не нашёлся эталонный текст субтитра, дорожка не тронута")
         return 0
 
     base_animation = next((a for a in animations if a.get("id") == style.animation_id), None)
     track = draft.tracks[style.track]
     base_segment = copy.deepcopy(track["segments"][0])
+    base_refs = [r for r in (base_segment.get("extra_material_refs") or [])]
 
     stale = _collect_stale_ids(draft, track)
     materials["text_templates"] = [t for t in templates if t.get("id") not in stale]
@@ -144,20 +170,8 @@ def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue]) -> int:
     segments: list[dict] = []
 
     for position, cue in enumerate(cues):
-        text_material = copy.deepcopy(base_text)
-        text_id = new_capcut_id()
-        text_material["id"] = text_id
-        text_material["name"] = new_capcut_id()
-        text_material["recognize_text"] = cue.text
-        text_material["group_id"] = group_id
-        text_material["words"] = _word_arrays(cue)
-        text_material["current_words"] = {"start_time": [], "end_time": [], "text": []}
-
-        body = json.loads(text_material.get("content") or "{}")
-        body["text"] = cue.text
-        for entry in body.get("styles") or []:
-            entry["range"] = [0, len(cue.text)]
-        text_material["content"] = json.dumps(body, ensure_ascii=False)
+        text_id, text_material = _fill_text(base_text, cue, group_id)
+        materials["texts"].append(text_material)
 
         animation_id = None
         if base_animation is not None:
@@ -169,31 +183,37 @@ def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue]) -> int:
                 item["start"] = 0
             materials["material_animations"].append(animation)
 
-        template = copy.deepcopy(base_template)
-        template_id = new_capcut_id()
-        template["id"] = template_id
-        width, height = _size_for(style.metrics, len(cue.text))
-        for resource in template.get("text_info_resources") or []:
-            resource["text_material_id"] = text_id
-            resource["extra_material_refs"] = [animation_id] if animation_id else []
-            attach = resource.setdefault("attach_info", {})
-            attach["start_time"] = 0
-            attach["duration"] = cue.duration_us
-            attach["original_size_width"] = width
-            attach["original_size_height"] = height
-        materials["text_templates"].append(template)
-        materials["texts"].append(text_material)
+        if style.kind == "template":
+            template = copy.deepcopy(base_template)
+            segment_material_id = new_capcut_id()
+            template["id"] = segment_material_id
+            width, height = _size_for(style.metrics, len(cue.text))
+            for resource in template.get("text_info_resources") or []:
+                resource["text_material_id"] = text_id
+                resource["extra_material_refs"] = [animation_id] if animation_id else []
+                attach = resource.setdefault("attach_info", {})
+                attach["start_time"] = 0
+                attach["duration"] = cue.duration_us
+                attach["original_size_width"] = width
+                attach["original_size_height"] = height
+            materials["text_templates"].append(template)
+        else:
+            segment_material_id = text_id
 
         segment = copy.deepcopy(base_segment)
         segment["id"] = new_capcut_id()
-        segment["material_id"] = template_id
+        segment["material_id"] = segment_material_id
         segment["target_timerange"] = {"start": cue.start_us, "duration": cue.duration_us}
-        segment["extra_material_refs"] = [animation_id] if animation_id else []
+        # Прочие ссылки сегмента сохраняем, подменяя только анимацию.
+        refs = [r for r in base_refs if r not in stale]
+        if animation_id:
+            refs.append(animation_id)
+        segment["extra_material_refs"] = refs
         segment["render_index"] = style.render_index + position
         segments.append(segment)
 
     track["segments"] = segments
-    log.debug("дорожка субтитров пересобрана: %d реплик", len(segments))
+    log.debug("дорожка субтитров пересобрана: %d реплик (устройство %s)", len(segments), style.kind)
     return len(segments)
 
 
@@ -202,12 +222,12 @@ def _collect_stale_ids(draft: Draft, track: dict) -> set[str]:
     index = draft.material_index()
     stale: set[str] = set()
     for segment in track.get("segments") or []:
-        template_id = segment.get("material_id")
-        if not template_id:
+        material_id = segment.get("material_id")
+        if not material_id:
             continue
-        stale.add(template_id)
+        stale.add(material_id)
         stale.update(segment.get("extra_material_refs") or [])
-        entry = index.get(template_id)
+        entry = index.get(material_id)
         if not entry:
             continue
         for resource in entry[1].get("text_info_resources") or []:

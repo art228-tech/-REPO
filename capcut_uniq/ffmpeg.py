@@ -19,20 +19,33 @@ from .logging_setup import get_logger
 log = get_logger("ffmpeg")
 
 
-def _use_bundled_ffmpeg() -> None:
-    """Подхватывает FFmpeg, положенный рядом с программой в папку tools.
+def _shared_dir() -> Path:
+    """Общая папка в профиле пользователя, где живёт скачанный FFmpeg.
 
-    Установщик кладёт его туда, чтобы не менять системные настройки и не
-    требовать прав администратора. Раз FFmpeg лежит локально, найти его должна
-    сама программа, а не переменная PATH пользователя.
+    Он лежит там, а не рядом с программой, чтобы переживать обновление: папку с
+    кодом можно удалить и распаковать заново, ничего не перекачивая.
     """
-    root = Path(__file__).resolve().parents[1]
-    tools = root / "tools"
-    candidates = [tools / "ffmpeg" / "bin", tools / "ffmpeg"]
-    if tools.is_dir():
-        for item in sorted(tools.iterdir()):
-            if item.is_dir() and "ffmpeg" in item.name.lower():
-                candidates.extend([item / "bin", item])
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if local_appdata:
+        return Path(local_appdata) / "capcut-uniq"
+    return Path.home() / ".local" / "share" / "capcut-uniq"
+
+
+def _use_bundled_ffmpeg() -> None:
+    """Добавляет в PATH FFmpeg, положенный установщиком.
+
+    Он ставится без прав администратора и в системные настройки не попадает,
+    поэтому найти его должна сама программа.
+    """
+    roots = [_shared_dir() / "tools", Path(__file__).resolve().parents[1] / "tools"]
+
+    candidates: list[Path] = []
+    for tools in roots:
+        candidates.extend([tools / "ffmpeg" / "bin", tools / "ffmpeg"])
+        if tools.is_dir():
+            for item in sorted(tools.iterdir()):
+                if item.is_dir() and "ffmpeg" in item.name.lower():
+                    candidates.extend([item / "bin", item])
 
     for folder in candidates:
         if not folder.is_dir():

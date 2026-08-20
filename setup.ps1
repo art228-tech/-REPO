@@ -22,9 +22,28 @@ try {
 } catch { }
 
 $Root = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
-$Venv = Join-Path $Root '.venv'
-$Tools = Join-Path $Root 'tools'
-$Cache = Join-Path $Root '.cache'
+
+# Тяжёлое хозяйство живёт не в папке программы, а в профиле пользователя. Тогда
+# папку с программой можно удалять и распаковывать заново сколько угодно -
+# FFmpeg и зависимости заново не скачиваются.
+$Shared = if ($env:LOCALAPPDATA) {
+    Join-Path $env:LOCALAPPDATA 'capcut-uniq'
+} else {
+    Join-Path $HOME '.local/share/capcut-uniq'
+}
+$Cache = Join-Path $Shared 'downloads'
+
+# Если рядом с программой уже стоит окружение от прежних версий, используем его
+# и ничего не переустанавливаем.
+$LocalVenv = Join-Path $Root '.venv'
+$Venv = if (Test-Path (Join-Path $LocalVenv 'Scripts\python.exe')) {
+    $LocalVenv
+} else {
+    Join-Path $Shared 'venv'
+}
+
+$Tools = Join-Path $Shared 'tools'
+$LocalTools = Join-Path $Root 'tools'
 $PyFallback = '3.12.10'
 $FfmpegUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
 
@@ -157,10 +176,30 @@ function Install-Python {
 
 # --- FFmpeg -----------------------------------------------------------------
 
+function Move-LocalFfmpeg {
+    # Прежние версии клали FFmpeg внутрь папки программы. Переносим его в общее
+    # место, иначе при удалении папки он скачивался бы заново.
+    $from = Join-Path $LocalTools 'ffmpeg\bin'
+    $to = Join-Path $Tools 'ffmpeg\bin'
+    if (-not (Test-Path (Join-Path $from 'ffmpeg.exe'))) { return }
+    if (Test-Path (Join-Path $to 'ffmpeg.exe')) { return }
+
+    try {
+        New-Item -ItemType Directory -Path $to -Force | Out-Null
+        Move-Item (Join-Path $from '*.exe') $to -Force
+        Remove-Item $LocalTools -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Ok 'Перенёс FFmpeg в общую папку - теперь он переживёт обновление программы'
+    } catch {
+        Write-Warn 'Не удалось перенести FFmpeg в общую папку, оставляю на месте'
+    }
+}
+
 function Get-BundledFfmpeg {
-    $bin = Join-Path $Tools 'ffmpeg\bin'
-    if ((Test-Path (Join-Path $bin 'ffmpeg.exe')) -and (Test-Path (Join-Path $bin 'ffprobe.exe'))) {
-        return $bin
+    foreach ($base in @($Tools, $LocalTools)) {
+        $bin = Join-Path $base 'ffmpeg\bin'
+        if ((Test-Path (Join-Path $bin 'ffmpeg.exe')) -and (Test-Path (Join-Path $bin 'ffprobe.exe'))) {
+            return $bin
+        }
     }
     return $null
 }
@@ -261,6 +300,7 @@ if ((Invoke-NativeCapture $python.Exe $tkCall).Code -ne 0) {
     Write-Warn 'Пока можно работать из консоли: run.bat run --help'
 }
 
+Move-LocalFfmpeg
 if (-not (Test-Ffmpeg)) {
     Write-Step '[2/5] FFmpeg не найден...'
     Install-Ffmpeg

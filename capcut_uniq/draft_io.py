@@ -161,11 +161,28 @@ class Draft:
         return f"{PLACEHOLDER_TEMPLATE.format(guid=guid)}/{subdir}/{filename}"
 
 
-def clone_folder(source: Path, target: Path, skip_files: Iterable[Path] = ()) -> None:
-    """Копирует папку проекта, пропуская заданные файлы.
+# В клон переносим только то, что есть у свежесозданного проекта. Всё прочее —
+# служебные файлы, которые десктопный CapCut создаёт сам при открытии: кеши,
+# раскладка окна, реестр таймлайнов. Если тащить их за собой, приложение находит
+# в них ссылки на прежний проект и открывает пустой таймлайн-фантом вместо
+# нашего — именно из-за этого собранные ролики не открывались.
+KEEP_FILES = frozenset({
+    CONTENT_NAME,
+    *MIRROR_NAMES,
+    META_NAME,
+    "draft.extra",
+    "draft_settings",
+    "template.tmp",
+    "cover.png",
+})
+KEEP_DIRS = frozenset({"video", "audio"})
 
-    Пропуск нужен, чтобы не тащить исходник геймплея: в шаблонах он занимает
-    почти 500 МБ, а в собранном ролике всё равно заменяется на новый клип.
+
+def clone_folder(source: Path, target: Path, skip_files: Iterable[Path] = ()) -> None:
+    """Собирает клон проекта из необходимого минимума.
+
+    ``skip_files`` — медиа, которое всё равно заменяется: исходник геймплея в
+    шаблонах занимает почти 500 МБ, тащить его в каждый ролик незачем.
     """
     source = Path(source)
     target = Path(target)
@@ -176,18 +193,28 @@ def clone_folder(source: Path, target: Path, skip_files: Iterable[Path] = ()) ->
     target.mkdir(parents=True)
 
     copied = 0
-    skipped = 0
-    for item in source.rglob("*"):
+    dropped: list[str] = []
+    for item in sorted(source.rglob("*")):
         relative = item.relative_to(source)
-        destination = target / relative
         if item.is_dir():
-            destination.mkdir(parents=True, exist_ok=True)
             continue
-        if item.resolve() in skip or item.name in STALE_NAMES:
-            skipped += 1
+
+        top = relative.parts[0]
+        allowed = (top in KEEP_DIRS) if len(relative.parts) > 1 else (item.name in KEEP_FILES)
+        if not allowed:
+            dropped.append(str(relative))
             continue
+        if item.resolve() in skip:
+            continue
+
+        destination = target / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(item, destination)
         copied += 1
 
-    log.debug("клон %s → %s: скопировано %d, пропущено %d", source.name, target.name, copied, skipped)
+    for name in KEEP_DIRS:
+        (target / name).mkdir(parents=True, exist_ok=True)
+
+    log.debug("клон %s → %s: перенесено %d файлов", source.name, target.name, copied)
+    if dropped:
+        log.debug("не переносил служебные файлы шаблона: %s", ", ".join(dropped))

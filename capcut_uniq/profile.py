@@ -61,9 +61,18 @@ class DecorSpec:
 
 @dataclass
 class SubtitleStyle:
-    """Эталонный субтитр, от которого наследуется оформление."""
+    """Эталонный субтитр, от которого наследуется оформление.
+
+    Устройство бывает двух видов, и оба надо понимать. В черновиках с телефона
+    сегмент ссылается на текстовый шаблон, а тот уже на текст. После того как
+    проект пересохранит десктопный CapCut, сегмент нередко начинает ссылаться на
+    текст напрямую — и старый определитель такую дорожку просто не видел.
+    """
 
     track: int
+    kind: str
+    """«template» — через текстовый шаблон, «text» — напрямую на текст."""
+
     template_material_id: str
     text_material_id: str
     animation_id: str | None
@@ -73,6 +82,25 @@ class SubtitleStyle:
     render_index: int
     metrics: list[tuple[int, float, float]] = field(default_factory=list)
     """Тройки (длина текста, ширина, высота) из шаблона — для подбора размеров."""
+
+
+@dataclass
+class SubtitleDiagnosis:
+    """Что удалось понять про субтитры в шаблоне."""
+
+    found: int
+    texts_in_draft: int
+    kind: str = ""
+
+    @property
+    def missing_but_present(self) -> bool:
+        """Текстовые объекты есть, а дорожку опознать не удалось — это поломка."""
+        return self.found == 0 and self.texts_in_draft > 0
+
+    @property
+    def absent(self) -> bool:
+        """Субтитров в шаблоне нет вовсе — это нормально, просто их не будет."""
+        return self.found == 0 and self.texts_in_draft == 0
 
 
 @dataclass
@@ -106,6 +134,7 @@ class TemplateProfile:
 
     subtitles: SubtitleStyle | None
     subtitle_count: int
+    subtitle_diagnosis: SubtitleDiagnosis
 
     gameplay_material_ids: list[str] = field(default_factory=list)
     voice_material_id: str = ""
@@ -134,7 +163,19 @@ class TemplateProfile:
             )
         if self.music:
             lines.append(f"  музыка: громкость {self.music_volume:.3f}")
-        lines.append(f"  субтитров в шаблоне: {self.subtitle_count}")
+
+        if self.subtitles:
+            lines.append(
+                f"  субтитров в шаблоне: {self.subtitle_count} "
+                f"(устройство: {self.subtitles.kind})"
+            )
+        elif self.subtitle_diagnosis.missing_but_present:
+            lines.append(
+                f"  СУБТИТРЫ НЕ ОПОЗНАНЫ: текстовых объектов в шаблоне "
+                f"{self.subtitle_diagnosis.texts_in_draft}, а дорожку найти не удалось"
+            )
+        else:
+            lines.append("  субтитров в шаблоне нет")
         return "\n".join(lines)
 
 
@@ -185,7 +226,6 @@ def analyse(folder: Path) -> TemplateProfile:
 
     audio_tracks = [i for i, t in enumerate(tracks) if t.get("type") == "audio"]
     video_tracks = [i for i, t in enumerate(tracks) if t.get("type") == "video"]
-    sticker_tracks = [i for i, t in enumerate(tracks) if t.get("type") == "sticker"]
 
     background_track = _pick_background(tracks, video_tracks)
     decor_track = _pick_decor(draft, tracks, video_tracks, background_track)
@@ -259,7 +299,7 @@ def analyse(folder: Path) -> TemplateProfile:
         music_source_start = int((segment.get("source_timerange") or {}).get("start") or 0)
         music_volume = float(segment.get("volume") or 0.06)
 
-    subtitles, subtitle_count = _subtitles(draft, tracks, sticker_tracks)
+    subtitles, subtitle_count, diagnosis = _subtitles(draft, tracks)
 
     gameplay_ids = [
         background_segments[0].get("material_id"),
@@ -292,6 +332,7 @@ def analyse(folder: Path) -> TemplateProfile:
         music_volume=music_volume,
         subtitles=subtitles,
         subtitle_count=subtitle_count,
+        subtitle_diagnosis=diagnosis,
         gameplay_material_ids=[mid for mid in gameplay_ids if mid],
         voice_material_id=voice_segment.get("material_id", ""),
     )
@@ -404,58 +445,101 @@ def _assign_sfx(tracks: list[dict], sfx_track: int, cut_us: int,
     return swoosh, sticker_sfx, qr_sfx
 
 
-def _subtitles(draft: Draft, tracks: list[dict], sticker_tracks: list[int]):
-    """Находит дорожку субтитров и запоминает оформление первого из них."""
-    for track_index in sticker_tracks:
-        segments = _segments(tracks[track_index])
+def _text_length(text_material: dict) -> int:
+    import json as _json
+
+    try:
+        return len(_json.loads(text_material.get("content") or "{}").get("text") or "")
+    except ValueError:
+        return 0
+
+
+def _subtitles(draft: Draft, tracks: list[dict]):
+    """Находит дорожку субтитров и запоминает оформление первого из них.
+
+    Дорожка может числиться и стикерной, и текстовой — зависит от того,
+    пересохранял ли проект десктопный CapCut. Сегмент при этом ссылается либо на
+    текстовый шаблон, либо прямо на текст. Разбираем оба случая.
+    """
+    index = draft.material_index()
+    texts_by_id = {t["id"]: t for t in draft.materials.get("texts", []) or []}
+    total_texts = len(texts_by_id)
+
+    candidates: list[tuple[int, int, str]] = []
+    for track_index, track in enumerate(tracks):
+        if track.get("type") not in ("sticker", "text"):
+            continue
+        segments = _segments(track)
         if not segments:
             continue
-        index = draft.material_index()
-        first = segments[0]
-        material = index.get(first.get("material_id"), (None, {}))[1]
-        if material.get("type") != "text_template_subtitle":
+        entry = index.get(segments[0].get("material_id"))
+        if not entry:
             continue
+        section = entry[0]
+        if section == "text_templates":
+            candidates.append((len(segments), track_index, "template"))
+        elif section == "texts":
+            candidates.append((len(segments), track_index, "text"))
 
-        resources = material.get("text_info_resources") or []
-        text_id = resources[0].get("text_material_id") if resources else None
-        animation_id = None
+    if not candidates:
+        return None, 0, SubtitleDiagnosis(found=0, texts_in_draft=total_texts)
+
+    # Если текстовых дорожек несколько, берём самую населённую — субтитры это
+    # всегда набор реплик, а не одна подпись.
+    _, track_index, kind = max(candidates)
+    segments = _segments(tracks[track_index])
+    first = segments[0]
+
+    metrics: list[tuple[int, float, float]] = []
+    text_id = ""
+    animation_id = None
+
+    if kind == "template":
+        template = index.get(first.get("material_id"), (None, {}))[1]
+        resources = template.get("text_info_resources") or []
         if resources:
+            text_id = resources[0].get("text_material_id") or ""
             refs = resources[0].get("extra_material_refs") or []
             animation_id = refs[0] if refs else None
 
-        metrics: list[tuple[int, float, float]] = []
-        texts_by_id = {t["id"]: t for t in draft.materials.get("texts", []) or []}
         for segment in segments:
-            template = index.get(segment.get("material_id"), (None, {}))[1]
-            for resource in template.get("text_info_resources") or []:
+            entry = index.get(segment.get("material_id"))
+            if not entry:
+                continue
+            for resource in entry[1].get("text_info_resources") or []:
                 text = texts_by_id.get(resource.get("text_material_id"))
-                attach = resource.get("attach_info") or {}
                 if not text:
                     continue
-                try:
-                    import json as _json
-
-                    body = _json.loads(text.get("content") or "{}").get("text") or ""
-                except ValueError:
-                    body = ""
+                attach = resource.get("attach_info") or {}
                 metrics.append((
-                    len(body),
+                    _text_length(text),
                     float(attach.get("original_size_width") or 0.0),
                     float(attach.get("original_size_height") or 0.0),
                 ))
+    else:
+        text_id = first.get("material_id", "")
+        for ref in first.get("extra_material_refs") or []:
+            entry = index.get(ref)
+            if entry and entry[0] == "material_animations":
+                animation_id = ref
+                break
+        for segment in segments:
+            text = texts_by_id.get(segment.get("material_id"))
+            if text:
+                metrics.append((_text_length(text), 0.0, 0.0))
 
-        offset_x, offset_y = _transform(first)
-        style = SubtitleStyle(
-            track=track_index,
-            template_material_id=first.get("material_id", ""),
-            text_material_id=text_id or "",
-            animation_id=animation_id,
-            scale=_scale(first),
-            offset_x=offset_x,
-            offset_y=offset_y,
-            render_index=int(first.get("render_index") or 14000),
-            metrics=metrics,
-        )
-        return style, len(segments)
-
-    return None, 0
+    offset_x, offset_y = _transform(first)
+    style = SubtitleStyle(
+        track=track_index,
+        kind=kind,
+        template_material_id=first.get("material_id", "") if kind == "template" else "",
+        text_material_id=text_id,
+        animation_id=animation_id,
+        scale=_scale(first),
+        offset_x=offset_x,
+        offset_y=offset_y,
+        render_index=int(first.get("render_index") or 14000),
+        metrics=metrics,
+    )
+    diagnosis = SubtitleDiagnosis(found=len(segments), texts_in_draft=total_texts, kind=kind)
+    return style, len(segments), diagnosis
