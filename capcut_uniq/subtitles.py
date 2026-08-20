@@ -80,8 +80,37 @@ def build_cues(transcript: Transcript, timing: Timing) -> list[Cue]:
             words=[(text, s2ms(w_start - start), s2ms(w_end - start)) for text, w_start, w_end in words],
         ))
 
+    _widen_short(cues)
     log.debug("собрано реплик: %d", len(cues))
     return cues
+
+
+# Реплика короче этого на экране не читается, а совсем короткая просто не видна.
+# В исходных шаблонах самая быстрая занимала 0.24 секунды.
+MIN_CUE_US = 300_000
+CUE_GAP_US = 40_000
+
+
+def _widen_short(cues: list[Cue]) -> None:
+    """Растягивает слишком короткие реплики, не наезжая на следующую.
+
+    Короткие берутся оттуда, где распознавание не услышало часть сценария:
+    словам не достаётся времени, и реплика выходит длиной в микросекунды —
+    на экране её попросту нет.
+    """
+    widened = 0
+    for position, cue in enumerate(cues):
+        if cue.duration_us >= MIN_CUE_US:
+            continue
+        limit = MIN_CUE_US
+        if position + 1 < len(cues):
+            available = cues[position + 1].start_us - CUE_GAP_US - cue.start_us
+            limit = min(limit, max(1, available))
+        if limit > cue.duration_us:
+            cue.duration_us = limit
+            widened += 1
+    if widened:
+        log.debug("растянуто слишком коротких реплик: %d", widened)
 
 
 def _word_arrays(cue: Cue) -> dict:

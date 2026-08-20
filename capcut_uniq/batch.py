@@ -186,7 +186,7 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
     script_path = textalign.find_script(voice.path)
     if script_path and transcript.has_words:
         script = script_path.read_text(encoding="utf-8", errors="replace")
-        transcript.words = textalign.realign(transcript.words, script)
+        transcript.words = textalign.realign(transcript.words, script, transcript.duration)
         log.info("   текст субтитров взят из сценария %s", script_path.name)
     elif script_path:
         log.warning("   сценарий %s найден, но речь не распознана — выравнивать не по чему", script_path.name)

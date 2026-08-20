@@ -73,6 +73,7 @@ def check(folder: Path) -> Report:
 
     _check_media(draft, folder, report)
     _check_subtitles(draft, index, report)
+    _check_subtitle_durations(draft, report)
     _check_keyframes(draft, report)
 
     log.debug("проверка %s: %s", folder.name, report.describe().splitlines()[0])
@@ -108,6 +109,24 @@ def _check_subtitles(draft: Draft, index: dict, report: Report) -> None:
             for ref in resource.get("extra_material_refs") or []:
                 if ref not in index:
                     report.errors.append(f"субтитр {template.get('id')}: висячая анимация {ref}")
+
+
+def _check_subtitle_durations(draft: Draft, report: Report) -> None:
+    """Слишком короткий субтитр на экране не появится."""
+    texts = {t["id"] for t in draft.materials.get("texts") or []}
+    templates = {t["id"] for t in draft.materials.get("text_templates") or []}
+    for track in draft.tracks:
+        if track.get("type") not in ("sticker", "text"):
+            continue
+        for position, segment in enumerate(track.get("segments") or []):
+            material_id = segment.get("material_id")
+            if material_id not in texts and material_id not in templates:
+                continue
+            duration = int((segment.get("target_timerange") or {}).get("duration") or 0)
+            if duration < 150_000:
+                report.errors.append(
+                    f"субтитр {position} длится {duration / 1000:.0f} мс - его не будет видно"
+                )
 
 
 def _check_keyframes(draft: Draft, report: Report) -> None:

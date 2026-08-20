@@ -40,8 +40,18 @@ def tokenize(text: str) -> list[str]:
     return [token for token in re.split(r"\s+", text.strip()) if token]
 
 
-def realign(words: list[Word], script: str) -> list[Word]:
-    """Возвращает слова сценария с временами из распознавания."""
+# Слово короче этого на экране не успевает появиться, а нулевой длины — вовсе
+# не показывается: реплика из таких слов выходит пустой.
+MIN_WORD = 0.08
+
+
+def realign(words: list[Word], script: str, duration: float = 0.0) -> list[Word]:
+    """Возвращает слова сценария с временами из распознавания.
+
+    ``duration`` — длина озвучки. Нужна для слов в конце сценария, которых
+    распознавание не услышало: без неё им не остаётся времени и реплика
+    получается нулевой длины.
+    """
     script_tokens = tokenize(script)
     if not script_tokens or not words:
         return words
@@ -50,7 +60,9 @@ def realign(words: list[Word], script: str) -> list[Word]:
     right = [normalize(word.text) for word in words]
     matcher = SequenceMatcher(None, left, right, autojunk=False)
 
+    limit = max(duration, words[-1].end)
     result: list[Word] = []
+
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         count = i2 - i1
         if count <= 0:
@@ -63,19 +75,35 @@ def realign(words: list[Word], script: str) -> list[Word]:
                 result.append(Word(token, source.start, source.end))
             continue
 
-        start, end = _span(words, j1, j2, result)
-        step = (end - start) / count if end > start else 0.0
+        start, end = _span(words, j1, j2, result, limit)
+        # Окна может не остаться совсем — тогда раздаём каждому слову минимум,
+        # пусть даже с наездом на следующее: пустая реплика хуже неточной.
+        if end - start < count * MIN_WORD:
+            end = start + count * MIN_WORD
+        step = (end - start) / count
+
         for offset in range(count):
             token_start = start + step * offset
-            token_end = start + step * (offset + 1) if step else start
-            result.append(Word(script_tokens[i1 + offset], token_start, token_end))
+            result.append(Word(script_tokens[i1 + offset], token_start, token_start + step))
 
+    _enforce_minimum(result)
     matched = sum(1 for tag, *_ in matcher.get_opcodes() if tag == "equal")
     log.debug(
         "текст сценария подставлен: %d слов, совпавших участков %d",
         len(result), matched,
     )
     return result
+
+
+def _enforce_minimum(words: list[Word]) -> None:
+    """Гарантирует, что ни одно слово не осталось нулевой длины."""
+    fixed = 0
+    for word in words:
+        if word.end - word.start < MIN_WORD:
+            word.end = word.start + MIN_WORD
+            fixed += 1
+    if fixed:
+        log.debug("растянуто до минимальной длины слов: %d", fixed)
 
 
 _PUNCT_TAIL = re.compile(r"[.!?…,;:]+$")
@@ -94,15 +122,18 @@ def _carry_punctuation(script_token: str, recognized: str) -> str:
     return script_token + tail.group(0) if tail else script_token
 
 
-def _span(words: list[Word], j1: int, j2: int, emitted: list[Word]) -> tuple[float, float]:
+def _span(words: list[Word], j1: int, j2: int, emitted: list[Word],
+          limit: float) -> tuple[float, float]:
     """Отрезок времени, на который ложится несовпавший кусок сценария."""
     if j2 > j1:
         return words[j1].start, words[j2 - 1].end
 
-    # Сценарий говорит больше, чем услышало распознавание: занимаем промежуток
-    # между соседями.
+    # Сценарий говорит больше, чем услышало распознавание. Внутри текста
+    # занимаем промежуток до следующего услышанного слова, а в самом конце —
+    # весь остаток озвучки: иначе словам не достаётся времени вообще.
     start = emitted[-1].end if emitted else (words[0].start if words else 0.0)
-    end = words[j1].start if j1 < len(words) else (words[-1].end if words else start)
-    if end < start:
-        end = start
-    return start, end
+    if j1 < len(words):
+        end = words[j1].start
+    else:
+        end = limit
+    return start, max(start, end)
