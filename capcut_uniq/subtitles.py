@@ -113,12 +113,44 @@ def _widen_short(cues: list[Cue]) -> None:
         log.debug("растянуто слишком коротких реплик: %d", widened)
 
 
+def _fit_words(cue: Cue) -> list[tuple[str, int, int]]:
+    """Подгоняет времена слов ровно под длительность реплики.
+
+    В исходных шаблонах последнее слово всегда кончается точно на краю реплики —
+    это не совпадение, а то, от чего отсчитывает анимация подписи. Если слова
+    уезжают за край или, наоборот, не добирают до него, анимация показывает
+    не всё, а то и вовсе ничего.
+    """
+    limit = max(1, cue.duration_us // 1000)
+    if not cue.words:
+        return []
+
+    last = max(end for _, _, end in cue.words)
+    if last <= 0:
+        # Времён нет вовсе — раскладываем слова ровно по реплике.
+        step = limit / len(cue.words)
+        return [
+            (text, int(round(step * position)), int(round(step * (position + 1))))
+            for position, (text, _, _) in enumerate(cue.words)
+        ]
+
+    factor = limit / last
+    fitted: list[tuple[str, int, int]] = []
+    for text, start, end in cue.words:
+        fitted.append((text, int(round(start * factor)), int(round(end * factor))))
+
+    # Округление могло сдвинуть край на миллисекунду — доводим точно.
+    text, start, _ = fitted[-1]
+    fitted[-1] = (text, min(start, limit - 1), limit)
+    return fitted
+
+
 def _word_arrays(cue: Cue) -> dict:
     """Массивы для поля ``words``: между словами стоят пробелы нулевой длины."""
     starts: list[int] = []
     ends: list[int] = []
     tokens: list[str] = []
-    for index, (text, start_ms, end_ms) in enumerate(cue.words):
+    for index, (text, start_ms, end_ms) in enumerate(_fit_words(cue)):
         if index:
             previous_end = ends[-1]
             starts.append(previous_end)

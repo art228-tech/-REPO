@@ -83,6 +83,56 @@ def test_widening_respects_a_tight_neighbour():
     assert cues[0].start_us + cues[0].duration_us <= cues[1].start_us
 
 
+def test_words_end_exactly_at_the_cue_edge():
+    """Ключевой инвариант CapCut: последнее слово кончается на краю реплики.
+
+    От него отсчитывает анимация подписи. В рабочих шаблонах он выполняется во
+    всех репликах без исключения, и при расхождении текст на экране не появлялся.
+    """
+    cue = subtitles.Cue("раз два три", 0, 1_000_000,
+                        [("раз", 0, 900), ("два", 900, 1800), ("три", 1800, 2600)])
+    arrays = subtitles._word_arrays(cue)
+
+    assert max(arrays["end_time"]) == 1000
+    assert arrays["text"] == ["раз", " ", "два", " ", "три"]
+
+
+def test_words_are_stretched_when_they_fall_short():
+    cue = subtitles.Cue("раз два", 0, 2_000_000, [("раз", 0, 100), ("два", 100, 200)])
+    arrays = subtitles._word_arrays(cue)
+    assert max(arrays["end_time"]) == 2000
+
+
+def test_words_without_times_are_spread_evenly():
+    cue = subtitles.Cue("раз два", 0, 1_000_000, [("раз", 0, 0), ("два", 0, 0)])
+    arrays = subtitles._word_arrays(cue)
+    assert max(arrays["end_time"]) == 1000
+    assert arrays["start_time"][0] == 0
+
+
+def test_word_order_never_reverses():
+    cue = subtitles.Cue("а б в", 0, 500_000,
+                        [("а", 0, 3000), ("б", 3000, 6000), ("в", 6000, 9000)])
+    arrays = subtitles._word_arrays(cue)
+    assert arrays["start_time"] == sorted(arrays["start_time"])
+    assert all(e >= s for s, e in zip(arrays["start_time"], arrays["end_time"]))
+
+
+def test_invariant_is_checked_by_validation(template_folder):
+    """Самопроверка должна ловить расхождение слов с краем реплики."""
+    from capcut_uniq import validate
+    from capcut_uniq.draft_io import Draft
+
+    draft = Draft.load(template_folder)
+    text = draft.materials["texts"][0]
+    text["words"] = {"start_time": [0], "end_time": [9_999], "text": ["слово"]}
+    draft.save()
+
+    report = validate.check(template_folder)
+    assert not report.ok
+    assert any("слова кончаются" in item for item in report.errors)
+
+
 def test_alignment_without_audio_duration_still_works():
     """Длину озвучки могли не передать — падать нельзя."""
     aligned = textalign.realign(HEARD, SCRIPT)

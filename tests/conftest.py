@@ -127,7 +127,9 @@ def make_draft(*, with_music: bool = True) -> dict:
             "id": f"TXT{index}", "type": "text", "recognize_text": text,
             "content": _text_content(text), "language": "ru-RU",
             "group_id": "ru-RU_1", "recognize_task_id": "task",
-            "words": {"start_time": [0], "end_time": [500], "text": [text.split()[0]]},
+            # Последнее слово кончается ровно на краю реплики — так это устроено
+            # в рабочих проектах, и на это опирается анимация подписи.
+            "words": {"start_time": [0], "end_time": [1500], "text": [text.split()[0]]},
         })
         materials["material_animations"].append({
             "id": f"ANI_SUB{index}", "type": "sticker_animation",

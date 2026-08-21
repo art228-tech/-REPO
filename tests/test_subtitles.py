@@ -69,14 +69,21 @@ def test_max_length_respected():
 
 
 def test_word_arrays_have_zero_width_spaces():
-    """CapCut хранит пробелы отдельными токенами нулевой длины."""
-    cue = Cue(text="раз два", start_us=0, duration_us=1_000_000,
+    """CapCut хранит пробелы отдельными токенами нулевой длины.
+
+    Времена при этом подгоняются под длительность реплики: последнее слово
+    обязано кончаться ровно на её краю, иначе анимация подписи ломается.
+    """
+    cue = Cue(text="раз два", start_us=0, duration_us=900_000,
               words=[("раз", 0, 400), ("два", 500, 900)])
     arrays = _word_arrays(cue)
 
     assert arrays["text"] == ["раз", " ", "два"]
     assert arrays["start_time"] == [0, 400, 500]
     assert arrays["end_time"] == [400, 400, 900]
+    # Пробел стоит там, где кончилось предыдущее слово.
+    assert arrays["start_time"][1] == arrays["end_time"][0]
+    assert arrays["end_time"][1] == arrays["end_time"][0]
 
 
 def test_script_text_replaces_recognition():

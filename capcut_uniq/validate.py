@@ -112,20 +112,41 @@ def _check_subtitles(draft: Draft, index: dict, report: Report) -> None:
 
 
 def _check_subtitle_durations(draft: Draft, report: Report) -> None:
-    """Слишком короткий субтитр на экране не появится."""
-    texts = {t["id"] for t in draft.materials.get("texts") or []}
-    templates = {t["id"] for t in draft.materials.get("text_templates") or []}
+    """Субтитр должен быть достаточно длинным, а слова — совпадать с его краем."""
+    texts = {t["id"]: t for t in draft.materials.get("texts") or []}
+    templates = {t["id"]: t for t in draft.materials.get("text_templates") or []}
+
     for track in draft.tracks:
         if track.get("type") not in ("sticker", "text"):
             continue
         for position, segment in enumerate(track.get("segments") or []):
             material_id = segment.get("material_id")
-            if material_id not in texts and material_id not in templates:
+            text = texts.get(material_id)
+            if text is None and material_id in templates:
+                for resource in templates[material_id].get("text_info_resources") or []:
+                    text = texts.get(resource.get("text_material_id"))
+                    if text:
+                        break
+            if text is None:
                 continue
+
             duration = int((segment.get("target_timerange") or {}).get("duration") or 0)
             if duration < 150_000:
                 report.errors.append(
                     f"субтитр {position} длится {duration / 1000:.0f} мс - его не будет видно"
+                )
+
+            # Анимация подписи отсчитывает по временам слов, и в рабочих
+            # шаблонах последнее слово кончается ровно на краю реплики.
+            ends = (text.get("words") or {}).get("end_time") or []
+            if not ends:
+                continue
+            expected = duration // 1000
+            actual = max(ends)
+            if abs(actual - expected) > 2:
+                report.errors.append(
+                    f"субтитр {position}: слова кончаются на {actual} мс, "
+                    f"а реплика длится {expected} мс - анимация покажет не всё"
                 )
 
 
