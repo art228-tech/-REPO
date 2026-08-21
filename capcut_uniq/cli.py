@@ -67,6 +67,21 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--asr-model", default="small", help="модель распознавания: tiny, base, small, medium")
     _add_common(run)
 
+    vary = sub.add_parser(
+        "variants",
+        help="собрать один ролик несколькими способами записи субтитров")
+    vary.add_argument("--clips", type=Path, nargs="+", required=True)
+    vary.add_argument("--voice", type=Path, required=True)
+    vary.add_argument("--templates", nargs="+", required=True,
+                      help="шаблон, на котором перебирать (достаточно одного)")
+    vary.add_argument("--seed", type=int, default=None)
+    vary.add_argument("--fps", type=float, default=60.0)
+    vary.add_argument("--prefix", default="перебор")
+    vary.add_argument("--keep-inputs", action="store_true", default=True,
+                      help="по умолчанию материалы не расходуются")
+    vary.add_argument("--asr-model", default="small")
+    _add_common(vary)
+
     cut = sub.add_parser("split", help="нарезать длинное видео на клипы (на сборку не влияет)")
     cut.add_argument("source", type=Path, help="исходное видео")
     cut.add_argument("--out", type=Path, nargs="+", default=None,
@@ -134,6 +149,8 @@ def main(argv: list[str] | None = None) -> int:
             return _diagnose(args, config)
         if args.command == "probe":
             return _probe(args, config)
+        if args.command == "variants":
+            return _variants(args, config)
         if args.command == "split":
             return _split(args)
         if args.command == "run":
@@ -217,6 +234,27 @@ def _diagnose(args, config: Config) -> int:
     print(f"Слепок для разбора: {path}")
     print("Пришли этот файл, если субтитров не видно.")
     return 0 if not report.problems else 1
+
+
+def _variants(args, config: Config) -> int:
+    """Собирает один ролик несколькими способами записи субтитров."""
+    from . import batch, variants
+
+    config.count = 1
+    report = batch.run(config)
+    made = next((o for o in report.outcomes if o.ok), None)
+    if made is None or made.folder is None:
+        print(report.summary())
+        return 1
+    if not made.cues:
+        print("Реплик не получилось — перебирать нечего.")
+        return 1
+
+    template = next(iter(batch.discover_templates(config)))
+    result = variants.build(config, made.folder, template.folder, made.cues)
+    print()
+    print(result.summary())
+    return 0
 
 
 def _probe(args, config: Config) -> int:

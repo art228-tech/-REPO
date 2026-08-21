@@ -36,6 +36,7 @@ class VideoOutcome:
     error: str = ""
     notes: list[str] = field(default_factory=list)
     seconds: float = 0.0
+    cues: list = field(default_factory=list)
 
 
 @dataclass
@@ -264,6 +265,7 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
     outcome.duration_us = result.duration_us
     outcome.subtitle_count = result.subtitle_count
     outcome.notes = result.notes
+    outcome.cues = render_plan.cues
     return outcome
 
 

@@ -248,9 +248,12 @@ class BatchTab(ttk.Frame):
         check.pack(side="left", padx=PAD)
         diag = ttk.Button(actions, text="Диагностика субтитров", command=self._diagnose)
         diag.pack(side="left")
+        vary = ttk.Button(actions, text="Перебор субтитров", command=self._variants)
+        vary.pack(side="left", padx=PAD)
         app.register(start)
         app.register(check)
         app.register(diag)
+        app.register(vary)
 
         self._reload()
 
@@ -303,6 +306,33 @@ class BatchTab(ttk.Frame):
             self.app.say("\n" + report.summary())
 
         self.app.start(work, config.log_dir, config.count)
+
+    def _variants(self) -> None:
+        """Собирает один ролик несколькими способами записи субтитров."""
+        from . import variants
+
+        try:
+            config = self._collect()
+        except PipelineError as exc:
+            messagebox.showerror("Не хватает данных", str(exc))
+            return
+
+        config.count = 1
+        config.consume_inputs = False
+        config.name_prefix = "перебор"
+
+        def work() -> None:
+            report = batch.run(config, progress=self.app.progress_callback)
+            made = next((o for o in report.outcomes if o.ok), None)
+            if made is None or made.folder is None or not made.cues:
+                self.app.say("\n" + report.summary())
+                self.app.say("\nПеребирать нечего: основа не собралась.")
+                return
+            template = next(iter(batch.discover_templates(config)))
+            result = variants.build(config, made.folder, template.folder, made.cues)
+            self.app.say("\n" + result.summary())
+
+        self.app.start(work, config.log_dir, 1)
 
     def _diagnose(self) -> None:
         """Сравнивает субтитры последнего собранного ролика с шаблоном."""

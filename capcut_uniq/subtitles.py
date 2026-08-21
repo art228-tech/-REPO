@@ -12,8 +12,12 @@ from __future__ import annotations
 
 import copy
 import json
+import random
 import re
+import string
 import time
+
+from dataclasses import dataclass
 
 from .config import Timing
 from .draft_io import Draft, new_capcut_id
@@ -24,6 +28,37 @@ from .units import s2ms, s2us
 from .asr import Transcript
 
 log = get_logger("subtitles")
+
+
+@dataclass(frozen=True)
+class Way:
+    """Способ записать субтитры в черновик.
+
+    Нужен для перебора: CapCut не рассказывает, почему не рисует текст, поэтому
+    один и тот же ролик собирается несколькими способами, и по готовым роликам
+    видно, какой работает.
+    """
+
+    name: str = "как сейчас"
+    note: str = ""
+    ids: str = "uuid"           # uuid | capcut | template
+    words: str = "computed"     # computed | template | empty
+    animation: bool = True
+    device: str = "auto"        # auto | text
+    size: str = "measured"      # measured | template
+
+
+DEFAULT_WAY = Way()
+
+
+def _capcut_style_id() -> str:
+    """Идентификатор в том же виде, в каком их пишет сам CapCut."""
+    alphabet = string.ascii_uppercase + string.digits
+    parts = (8, 4, 4, 4, 12)
+    return "-".join(
+        "".join(random.choice(alphabet) for _ in range(size)) for size in parts
+    )
+
 
 TRAILING_PUNCT = re.compile(r"[.,!?;:…«»\"()]+$")
 LEADING_PUNCT = re.compile(r"^[«\"(]+")
@@ -206,16 +241,24 @@ def _size_for(style_metrics: list[tuple[int, float, float]], length: int) -> tup
     return closest[1], closest[2]
 
 
-def _fill_text(base_text: dict, cue: Cue, group_id: str) -> tuple[str, dict]:
+def _fill_text(base_text: dict, cue: Cue, group_id: str,
+               text_id: str | None = None, way: Way = DEFAULT_WAY) -> tuple[str, dict]:
     """Клон текстового материала с новым содержимым."""
     material = copy.deepcopy(base_text)
-    text_id = new_capcut_id()
+    text_id = text_id or new_capcut_id()
     material["id"] = text_id
     material["name"] = new_capcut_id()
     material["recognize_text"] = cue.text
     material["group_id"] = group_id
-    material["words"] = _word_arrays(cue)
-    material["current_words"] = {"start_time": [], "end_time": [], "text": []}
+
+    empty = {"start_time": [], "end_time": [], "text": []}
+    if way.words == "template":
+        material["words"] = copy.deepcopy(base_text.get("words") or empty)
+    elif way.words == "empty":
+        material["words"] = dict(empty)
+    else:
+        material["words"] = _word_arrays(cue)
+    material["current_words"] = dict(empty)
 
     material["content"] = rewrite_content(material.get("content") or "{}", cue.text)
     return text_id, material
@@ -275,8 +318,13 @@ def rewrite_content(original: str, text: str) -> str:
     return json.dumps(expected, ensure_ascii=False, separators=(",", ":"))
 
 
-def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue]) -> int:
-    """Заменяет дорожку субтитров на новую. Возвращает число реплик."""
+def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue],
+          way: Way = DEFAULT_WAY, borrow: list[dict] | None = None) -> int:
+    """Заменяет дорожку субтитров на новую. Возвращает число реплик.
+
+    ``borrow`` — опознаватели, которые нужно занять вместо новых. Нужен перебору:
+    копия собирается из готового ролика, а занять надо опознаватели шаблона.
+    """
     style = profile.subtitles
     if style is None:
         return 0
@@ -302,6 +350,17 @@ def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue]) -> int:
     base_segment = copy.deepcopy(track["segments"][0])
     base_refs = [r for r in (base_segment.get("extra_material_refs") or [])]
 
+    original = borrow if borrow is not None else _original_ids(draft, track)
+
+    def make_id(position: int, role: str) -> str:
+        if way.ids == "capcut":
+            return _capcut_style_id()
+        if way.ids == "template" and position < len(original):
+            found = original[position].get(role)
+            if found:
+                return found
+        return new_capcut_id()
+
     stale = _collect_stale_ids(draft, track)
     materials["text_templates"] = [t for t in templates if t.get("id") not in stale]
     materials["texts"] = [t for t in texts if t.get("id") not in stale]
@@ -311,24 +370,34 @@ def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue]) -> int:
     segments: list[dict] = []
 
     for position, cue in enumerate(cues):
-        text_id, text_material = _fill_text(base_text, cue, group_id)
+        text_id, text_material = _fill_text(
+            base_text, cue, group_id, make_id(position, "text"), way)
+        if way.words == "template" and position < len(original):
+            occupied = original[position].get("words")
+            if occupied:
+                text_material["words"] = copy.deepcopy(occupied)
         materials["texts"].append(text_material)
 
         animation_id = None
-        if base_animation is not None:
+        if base_animation is not None and way.animation:
             animation = copy.deepcopy(base_animation)
-            animation_id = new_capcut_id()
+            animation_id = make_id(position, "animation")
             animation["id"] = animation_id
             for item in animation.get("animations") or []:
                 item["duration"] = cue.duration_us
                 item["start"] = 0
             materials["material_animations"].append(animation)
 
-        if style.kind == "template":
+        if style.kind == "template" and way.device != "text":
             template = copy.deepcopy(base_template)
-            segment_material_id = new_capcut_id()
+            segment_material_id = make_id(position, "template")
             template["id"] = segment_material_id
             width, height = _size_for(style.metrics, len(cue.text))
+            if way.size == "template":
+                first = (base_template.get("text_info_resources") or [{}])[0]
+                attach = first.get("attach_info") or {}
+                width = attach.get("original_size_width", width)
+                height = attach.get("original_size_height", height)
             for resource in template.get("text_info_resources") or []:
                 resource["text_material_id"] = text_id
                 resource["extra_material_refs"] = [animation_id] if animation_id else []
@@ -342,7 +411,7 @@ def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue]) -> int:
             segment_material_id = text_id
 
         segment = copy.deepcopy(base_segment)
-        segment["id"] = new_capcut_id()
+        segment["id"] = make_id(position, "segment")
         segment["material_id"] = segment_material_id
         segment["target_timerange"] = {"start": cue.start_us, "duration": cue.duration_us}
         # Прочие ссылки сегмента сохраняем, подменяя только анимацию.
@@ -356,6 +425,38 @@ def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue]) -> int:
     track["segments"] = segments
     log.debug("дорожка субтитров пересобрана: %d реплик (устройство %s)", len(segments), style.kind)
     return len(segments)
+
+
+def original_ids(draft: Draft, track: int) -> list[dict]:
+    """Опознаватели субтитров по порядку у дорожки с указанным номером."""
+    return _original_ids(draft, draft.tracks[track])
+
+
+def _original_ids(draft: Draft, track: dict) -> list[dict]:
+    """Идентификаторы субтитров шаблона по порядку — чтобы можно было их занять."""
+    index = draft.material_index()
+    rows: list[dict] = []
+    for segment in track.get("segments") or []:
+        row = {"segment": segment.get("id"), "template": segment.get("material_id")}
+        found = index.get(segment.get("material_id"))
+        if found and found[0] == "text_templates":
+            for resource in found[1].get("text_info_resources") or []:
+                row["text"] = resource.get("text_material_id")
+                refs = resource.get("extra_material_refs") or []
+                if refs:
+                    row["animation"] = refs[0]
+                break
+        else:
+            row["text"] = segment.get("material_id")
+            refs = segment.get("extra_material_refs") or []
+            if refs:
+                row["animation"] = refs[0]
+
+        text_material = index.get(row.get("text"))
+        if text_material and text_material[0] == "texts":
+            row["words"] = text_material[1].get("words")
+        rows.append(row)
+    return rows
 
 
 def _collect_stale_ids(draft: Draft, track: dict) -> set[str]:
