@@ -157,3 +157,58 @@ def test_clip_shorter_than_slot_is_rejected(template_folder: Path):
             profile, config, line, Path("voice.mp3"),
             [Path("a.mp4"), Path("b.mp4")], [30.0, 2.0], random.Random(1),
         )
+
+
+def _line_and_config(template_folder: Path):
+    profile = profile_module.analyse(template_folder)
+    config = Config(clips_dir=Path("."), voice_dir=Path("."))
+    transcript = Transcript(duration=13.0, words=words([("фраза.", 0.0, 2.0), ("вторая", 2.4, 3.0)]))
+    return profile, config, plan_module.timeline(profile, config, transcript, 0.0)
+
+
+def test_clip_a_hair_short_is_stretched_instead_of_refused(template_folder: Path):
+    """Нехватку меньше допуска закрывает замедление, а не отказ."""
+    profile, config, line = _line_and_config(template_folder)
+    needed = line.slot_durations[1] / 1_000_000
+    available = needed - 0.15
+
+    built = plan_module.build(
+        profile, config, line, Path("voice.mp3"),
+        [Path("a.mp4"), Path("b.mp4")], [30.0, available], random.Random(1),
+    )
+
+    assert built.slot_speeds[0] == 1.0
+    assert built.slot_speeds[1] < 1.0
+    # Замедление ровно такое, чтобы клип занял слот целиком.
+    assert built.slot_speeds[1] == pytest.approx(available / needed, abs=1e-6)
+    assert any("замедлен" in note for note in built.notes)
+
+
+def test_stretch_stays_within_the_allowance(template_folder: Path):
+    """За пределом допуска по-прежнему отказ, а не заметное замедление."""
+    from capcut_uniq.errors import ClipTooShort
+
+    profile, config, line = _line_and_config(template_folder)
+    needed = line.slot_durations[1] / 1_000_000
+    barely = needed / (1.0 + config.timing.max_clip_stretch) + 0.01
+    too_much = needed / (1.0 + config.timing.max_clip_stretch) - 0.05
+
+    plan_module.build(
+        profile, config, line, Path("voice.mp3"),
+        [Path("a.mp4"), Path("b.mp4")], [30.0, barely], random.Random(1),
+    )
+    with pytest.raises(ClipTooShort):
+        plan_module.build(
+            profile, config, line, Path("voice.mp3"),
+            [Path("a.mp4"), Path("b.mp4")], [30.0, too_much], random.Random(1),
+        )
+
+
+def test_long_enough_clip_keeps_normal_speed(template_folder: Path):
+    profile, config, line = _line_and_config(template_folder)
+    built = plan_module.build(
+        profile, config, line, Path("voice.mp3"),
+        [Path("a.mp4"), Path("b.mp4")], [30.0, 30.0], random.Random(1),
+    )
+    assert built.slot_speeds == [1.0, 1.0]
+    assert not any("замедлен" in note for note in built.notes)

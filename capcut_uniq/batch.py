@@ -14,7 +14,7 @@ from . import (
     profile as profile_module, subtitles, textalign, validate,
 )
 from .config import Config
-from .errors import AssetShortage, PipelineError
+from .errors import PipelineError
 from .logging_setup import get_logger
 from .plan import Cue
 from .units import fmt, us2s
@@ -39,10 +39,15 @@ class VideoOutcome:
     cues: list = field(default_factory=list)
 
 
+# Сколько неудач подряд стерпеть, прежде чем признать, что материалы не подходят.
+GIVE_UP_AFTER = 5
+
+
 @dataclass
 class BatchReport:
     outcomes: list[VideoOutcome] = field(default_factory=list)
     stopped_reason: str = ""
+    skipped: list[str] = field(default_factory=list)
 
     @property
     def made(self) -> int:
@@ -53,9 +58,9 @@ class BatchReport:
         return sum(1 for item in self.outcomes if not item.ok)
 
     def summary(self) -> str:
-        lines = [f"Готово роликов: {self.made}, с ошибкой: {self.failed}"]
+        lines = [f"Готово роликов: {self.made}, пропущено: {self.failed}"]
         if self.stopped_reason:
-            lines.append(f"Партия остановлена: {self.stopped_reason}")
+            lines.append(f"Партия окончена раньше: {self.stopped_reason}")
         for item in self.outcomes:
             mark = "+" if item.ok else "x"
             head = f"  {mark} #{item.number} {item.template}"
@@ -139,6 +144,12 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
 
     stamp = datetime.now().strftime("%m%d_%H%M")
 
+    # Одна неудачная озвучка не должна хоронить всю партию: такая озвучка
+    # откладывается, и работа идёт дальше. Останавливаемся, только когда подряд
+    # не выходит ничего — значит материалы и правда кончились.
+    in_a_row = 0
+    skipped: list[str] = []
+
     for number in range(1, config.count + 1):
         profile = profiles[(number - 1) % len(profiles)]
         started = time.monotonic()
@@ -148,13 +159,6 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
 
         try:
             outcome = _one(config, profile, clips, voices, rng, number, stamp)
-        except AssetShortage as exc:
-            outcome.error = str(exc)
-            report.outcomes.append(outcome)
-            report.stopped_reason = str(exc)
-            log.error("Ролик %d: %s", number, exc)
-            log.error("Партия остановлена — материалы закончились")
-            break
         except PipelineError as exc:
             outcome.error = str(exc)
             log.error("Ролик %d: %s", number, exc)
@@ -166,10 +170,29 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
             outcome.seconds = time.monotonic() - started
 
         report.outcomes.append(outcome)
-        if not outcome.ok:
-            report.stopped_reason = outcome.error
-            log.error("Партия остановлена на ролике %d", number)
+
+        if outcome.ok:
+            in_a_row = 0
+            continue
+
+        in_a_row += 1
+        skipped.append(outcome.error)
+
+        if not len(voices):
+            report.stopped_reason = "закончились озвучки"
+            log.error("Озвучки закончились, партия окончена")
             break
+        if in_a_row >= GIVE_UP_AFTER:
+            report.stopped_reason = (
+                f"{in_a_row} неудач подряд, последняя: {outcome.error}"
+            )
+            log.error("Подряд не вышло %d роликов — останавливаюсь, материалы не подходят",
+                      in_a_row)
+            break
+
+        log.warning("Ролик %d пропущен, беру следующую озвучку", number)
+
+    report.skipped = skipped
 
     log.info("%s", report.summary())
     return report
@@ -202,9 +225,10 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
         fmt(line.slot_durations[0]), fmt(line.slot_durations[1]),
     )
 
+    stretch = config.timing.max_clip_stretch
     chosen = [
-        clips.take_longest_enough(us2s(line.slot_durations[0])),
-        clips.take_longest_enough(us2s(line.slot_durations[1])),
+        clips.take_longest_enough(us2s(line.slot_durations[0]), stretch),
+        clips.take_longest_enough(us2s(line.slot_durations[1]), stretch),
     ]
     log.info("   клипы: %s (%.2fс) и %s (%.2fс)",
              chosen[0].path.name, chosen[0].duration_s, chosen[1].path.name, chosen[1].duration_s)

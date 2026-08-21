@@ -77,6 +77,7 @@ class RenderPlan:
 
     clips: list[Path]
     slot_durations: list[int]
+    slot_speeds: list[float]
     overlay_scales: list[float]
 
     swoosh: SfxPlacement | None = None
@@ -194,12 +195,27 @@ def build(
     cut = line.cut_us
     slot_durations = list(line.slot_durations)
 
+    # Клип чуть короче слота закрываем замедлением, а не отказом: нарезка даёт
+    # файлы ровно по 15.00с, а слот запросто выходит 15.15с.
+    slot_speeds = [1.0, 1.0]
     for index, (clip, available) in enumerate(zip(clips, clip_durations)):
         needed = us2s(slot_durations[index])
-        if available + 1e-3 < needed:
+        if available + 1e-3 >= needed:
+            continue
+
+        floor = needed / (1.0 + config.timing.max_clip_stretch)
+        if available + 1e-3 < floor:
             raise ClipTooShort(
-                f"Клип {clip.name} длится {available:.2f}с, а в слот {index + 1} нужно {needed:.2f}с"
+                f"Клип {clip.name} длится {available:.2f}с, а в слот {index + 1} нужно "
+                f"{needed:.2f}с — не хватает {needed - available:.2f}с, это больше "
+                f"допустимого замедления {config.timing.max_clip_stretch * 100:.0f}%"
             )
+
+        slot_speeds[index] = available / needed
+        notes.append(
+            f"слот {index + 1}: клип короче на {needed - available:.2f}с, "
+            f"замедлен на {(1.0 - slot_speeds[index]) * 100:.1f}%"
+        )
 
     overlay_scales = [
         slot.overlay_scale * rng.uniform(1 - ranges.overlay_scale_jitter, 1 + ranges.overlay_scale_jitter)
@@ -224,6 +240,7 @@ def build(
         voice_trimmed_us=line.voice_trimmed_us,
         clips=list(clips),
         slot_durations=slot_durations,
+        slot_speeds=slot_speeds,
         overlay_scales=overlay_scales,
         swoosh=swoosh,
         sticker=sticker,

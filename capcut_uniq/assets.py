@@ -76,16 +76,20 @@ class Pool:
     def shuffle(self, rng: random.Random) -> None:
         rng.shuffle(self.items)
 
-    def take_longest_enough(self, needed_s: float) -> Clip:
+    def take_longest_enough(self, needed_s: float, stretch: float = 0.0) -> Clip:
         """Берёт первый подходящий по длине клип, самый короткий из достаточных.
 
         Так длинные клипы остаются для длинных слотов и пул расходуется ровнее.
+
+        ``stretch`` — на сколько клип может быть короче слота: такую нехватку
+        закроет замедление, поэтому отбрасывать клип из-за неё не нужно.
         """
-        candidates = [item for item in self.items if item.duration_s + 1e-3 >= needed_s]
+        floor = needed_s / (1.0 + stretch) if stretch > 0 else needed_s
+        candidates = [item for item in self.items if item.duration_s + 1e-3 >= floor]
         if not candidates:
             longest = max((item.duration_s for item in self.items), default=0.0)
             raise AssetShortage(
-                f"Нет клипа длиной хотя бы {needed_s:.2f}с — самый длинный из оставшихся {longest:.2f}с. "
+                f"Нет клипа длиной хотя бы {floor:.2f}с — самый длинный из оставшихся {longest:.2f}с. "
                 f"Добавь файлы в {self._where()}"
             )
         chosen = min(candidates, key=lambda item: item.duration_s)

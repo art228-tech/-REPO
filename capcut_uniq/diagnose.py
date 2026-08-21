@@ -330,11 +330,14 @@ def compare(template_folder: Path, clone_folder: Path) -> SubtitleReport:
         report.add("ошибка", "в собранном ролике не опознана дорожка субтитров")
         return report
 
-    if template_profile.subtitles.kind != clone_profile.subtitles.kind:
+    # Разное устройство — не поломка: обычный текстовый материал выбран нарочно,
+    # потому что через текстовый шаблон CapCut наш текст в кадре не рисует.
+    same_device = template_profile.subtitles.kind == clone_profile.subtitles.kind
+    if not same_device:
         report.add(
-            "внимание",
-            f"устройство субтитров разное: в шаблоне {template_profile.subtitles.kind}, "
-            f"в ролике {clone_profile.subtitles.kind}",
+            "ок",
+            f"устройство субтитров разное по замыслу: в шаблоне "
+            f"{template_profile.subtitles.kind}, в ролике {clone_profile.subtitles.kind}",
         )
 
     template_chain = _chain(Draft.load(template_folder), template_profile.subtitles)
@@ -348,8 +351,9 @@ def compare(template_folder: Path, clone_folder: Path) -> SubtitleReport:
 
     if template_chain and clone_chain:
         _diff_fields(template_chain[0].get("text"), clone_chain[0].get("text"), "текст", report)
-        _diff_fields(template_chain[0].get("text_template"), clone_chain[0].get("text_template"),
-                     "оформление", report)
+        if same_device:
+            _diff_fields(template_chain[0].get("text_template"),
+                         clone_chain[0].get("text_template"), "оформление", report)
         _diff_fields(template_chain[0].get("segment"), clone_chain[0].get("segment"),
                      "сегмент", report)
         _diff_fields(template_chain[0].get("animation"), clone_chain[0].get("animation"),

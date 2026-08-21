@@ -250,6 +250,8 @@ def _apply_slots(draft: Draft, profile: TemplateProfile, plan: RenderPlan,
     start = 0
     for position, slot in enumerate(profile.slots):
         duration = plan.slot_durations[position]
+        speed = plan.slot_speeds[position] if plan.slot_speeds else 1.0
+        source_duration = int(round(duration * speed))
         installed = media[f"slot{position}"]
 
         for ref, base_scale, is_overlay in (
@@ -258,7 +260,10 @@ def _apply_slots(draft: Draft, profile: TemplateProfile, plan: RenderPlan,
         ):
             segment = ref.get(draft)
             _set_range(segment, "target_timerange", start, duration)
-            _set_range(segment, "source_timerange", 0, duration)
+            _set_range(segment, "source_timerange", 0, source_duration)
+            segment["speed"] = speed
+            for material in _refs(draft, segment, "speeds"):
+                material["speed"] = speed
 
             scale, changed = _compensated(
                 base_scale, template_sizes.get(position), installed.info, canvas_w, canvas_h
