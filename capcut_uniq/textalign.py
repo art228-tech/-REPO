@@ -86,24 +86,79 @@ def realign(words: list[Word], script: str, duration: float = 0.0) -> list[Word]
             token_start = start + step * offset
             result.append(Word(script_tokens[i1 + offset], token_start, token_start + step))
 
-    _enforce_minimum(result)
-    matched = sum(1 for tag, *_ in matcher.get_opcodes() if tag == "equal")
+    _enforce_minimum(result, limit)
+
+    opcodes = matcher.get_opcodes()
+    matched_words = sum(i2 - i1 for tag, i1, i2, _, _ in opcodes if tag == "equal")
     log.debug(
-        "текст сценария подставлен: %d слов, совпавших участков %d",
-        len(result), matched,
+        "текст сценария подставлен: слов в сценарии %d, распознано %d, "
+        "времена взяты напрямую у %d, остальным розданы пропорционально",
+        len(script_tokens), len(words), matched_words,
     )
+    _trace(result, {id(w) for w in result[:0]})
     return result
 
 
-def _enforce_minimum(words: list[Word]) -> None:
-    """Гарантирует, что ни одно слово не осталось нулевой длины."""
-    fixed = 0
+def _trace(words: list[Word], _unused) -> None:
+    """Пишет в журнал каждое слово с временем — по этому видно, где разъехалось."""
+    if not log.isEnabledFor(10):  # DEBUG
+        return
+    log.debug("  слова после выравнивания:")
     for word in words:
-        if word.end - word.start < MIN_WORD:
-            word.end = word.start + MIN_WORD
+        log.debug("    %8.3f..%8.3f  %s", word.start, word.end, word.text)
+
+
+def _enforce_minimum(words: list[Word], limit: float = 0.0) -> None:
+    """Приводит времена в порядок: без нулевых длин, наложений и возвратов назад.
+
+    Возврат назад появляется там, где несовпавшему куску сценария не хватало
+    времени и его пришлось растянуть: конец такого куска заезжал на следующий
+    участок, и слова начинали идти вразнобой. Анимация подписи от такого текст
+    не показывает.
+
+    Сдвигаем только нарушенное, сохраняя естественные паузы. Но сдвиги
+    накапливаются, и хвост может уехать за конец озвучки — тогда реплики
+    оказались бы за пределами ролика и просто пропали. Поэтому в конце вся
+    последовательность при необходимости сжимается назад в отведённое время.
+    """
+    if not words:
+        return
+
+    fixed = 0
+    previous_start = float("-inf")
+    previous_end = float("-inf")
+
+    for word in words:
+        start = word.start
+        if start < previous_start:
+            start = previous_start
+        if start < previous_end:
+            start = previous_end
+        end = max(word.end, start + MIN_WORD)
+
+        if start != word.start or end != word.end:
             fixed += 1
+        word.start, word.end = start, end
+        previous_start, previous_end = start, end
+
     if fixed:
-        log.debug("растянуто до минимальной длины слов: %d", fixed)
+        log.debug("выправлено времён слов: %d", fixed)
+
+    overrun = words[-1].end - limit
+    if limit <= 0 or overrun <= 0:
+        return
+
+    origin = words[0].start
+    span = words[-1].end - origin
+    room = limit - origin
+    if span <= 0 or room <= 0:
+        return
+
+    factor = room / span
+    for word in words:
+        word.start = origin + (word.start - origin) * factor
+        word.end = origin + (word.end - origin) * factor
+    log.debug("слова уезжали за озвучку на %.3fс, сжато в %.3fс", overrun, limit)
 
 
 _PUNCT_TAIL = re.compile(r"[.!?…,;:]+$")

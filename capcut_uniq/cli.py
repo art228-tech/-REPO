@@ -42,6 +42,11 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("folder", type=Path)
     _add_common(check)
 
+    diag = sub.add_parser("diagnose", help="сравнить субтитры ролика с шаблоном")
+    diag.add_argument("template", help="папка шаблона")
+    diag.add_argument("clone", help="папка собранного ролика")
+    _add_common(diag)
+
     run = sub.add_parser("run", help="собрать партию роликов")
     run.add_argument("--clips", type=Path, nargs="+", required=True,
                  help="папка с клипами; можно несколько, если короткие и длинные разложены отдельно")
@@ -119,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
             return _templates(config, args.names)
         if args.command == "check":
             return _check(args.folder)
+        if args.command == "diagnose":
+            return _diagnose(args, config)
         if args.command == "split":
             return _split(args)
         if args.command == "run":
@@ -186,6 +193,22 @@ def _check(folder: Path) -> int:
     report = validate.check(folder)
     print(report.describe())
     return 0 if report.ok else 1
+
+
+def _diagnose(args, config: Config) -> int:
+    from . import diagnose
+
+    def resolve(name: str) -> Path:
+        folder = Path(name)
+        return folder if folder.is_absolute() else config.drafts_dir / name
+
+    report = diagnose.compare(resolve(args.template), resolve(args.clone))
+    print(report.describe())
+    path = diagnose.write_bundle(report, config.log_dir)
+    print()
+    print(f"Слепок для разбора: {path}")
+    print("Пришли этот файл, если субтитров не видно.")
+    return 0 if not report.problems else 1
 
 
 def _split(args) -> int:

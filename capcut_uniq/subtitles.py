@@ -58,8 +58,21 @@ def build_cues(transcript: Transcript, timing: Timing) -> list[Cue]:
         comma_break = bool(re.search(r"[,;:]$", previous_text)) and len(pending) >= comfortable
         natural_break = gap >= 0.15 and len(pending) >= comfortable
 
-        if current and (gap >= timing.subtitle_gap_s or too_long or sentence_break
-                        or comma_break or natural_break):
+        reason = ""
+        if current:
+            if sentence_break:
+                reason = "конец предложения"
+            elif gap >= timing.subtitle_gap_s:
+                reason = f"пауза {gap:.2f}с"
+            elif too_long:
+                reason = f"длина {length} символов"
+            elif comma_break:
+                reason = "запятая"
+            elif natural_break:
+                reason = f"пауза {gap:.2f}с при длине {len(pending)}"
+
+        if reason:
+            log.debug("  разрыв реплики перед «%s»: %s", clean_word(word.text), reason)
             groups.append([word])
         else:
             current.append(word)
@@ -73,15 +86,33 @@ def build_cues(transcript: Transcript, timing: Timing) -> list[Cue]:
         start = words[0][1]
         end = words[-1][2]
         text = " ".join(text for text, _, _ in words)
+        # Границу считаем от абсолютных времён, а не как начало плюс длина:
+        # независимое округление давало наложение соседних реплик на
+        # микросекунду, и CapCut считал такой черновик битым.
+        start_us = s2us(start)
+        end_us = s2us(end)
         cues.append(Cue(
             text=text,
-            start_us=s2us(start),
-            duration_us=max(1, s2us(end - start)),
+            start_us=start_us,
+            duration_us=max(1, end_us - start_us),
             words=[(text, s2ms(w_start - start), s2ms(w_end - start)) for text, w_start, w_end in words],
         ))
 
     _widen_short(cues)
     log.debug("собрано реплик: %d", len(cues))
+    for position, cue in enumerate(cues):
+        arrays = _word_arrays(cue)
+        log.debug(
+            "  реплика %d: %s..%s (%d мс), символов %d, слов %d, край слов %d мс — %r",
+            position,
+            f"{cue.start_us / 1e6:.3f}",
+            f"{(cue.start_us + cue.duration_us) / 1e6:.3f}",
+            cue.duration_us // 1000,
+            len(cue.text),
+            len(cue.words),
+            max(arrays["end_time"]) if arrays["end_time"] else 0,
+            cue.text,
+        )
     return cues
 
 

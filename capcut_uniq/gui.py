@@ -246,8 +246,11 @@ class BatchTab(ttk.Frame):
         start.pack(side="left")
         check = ttk.Button(actions, text="Проверить окружение", command=self._doctor)
         check.pack(side="left", padx=PAD)
+        diag = ttk.Button(actions, text="Диагностика субтитров", command=self._diagnose)
+        diag.pack(side="left")
         app.register(start)
         app.register(check)
+        app.register(diag)
 
         self._reload()
 
@@ -300,6 +303,45 @@ class BatchTab(ttk.Frame):
             self.app.say("\n" + report.summary())
 
         self.app.start(work, config.log_dir, config.count)
+
+    def _diagnose(self) -> None:
+        """Сравнивает субтитры последнего собранного ролика с шаблоном."""
+        from . import diagnose
+
+        drafts = Path(self.drafts_dir.get())
+        chosen = [self.templates.get(i) for i in self.templates.curselection()]
+        if not chosen:
+            messagebox.showinfo("Диагностика", "Выдели шаблон, по которому собирался ролик")
+            return
+
+        prefix = self.prefix.get().strip() or "auto"
+        made = [
+            item for item in drafts.iterdir()
+            if item.is_dir() and item.name.startswith(prefix)
+        ] if drafts.is_dir() else []
+        if not made:
+            messagebox.showinfo(
+                "Диагностика",
+                f"Не нашёл собранных роликов с именем на «{prefix}». Сначала собери хотя бы один.",
+            )
+            return
+
+        clone = max(made, key=lambda item: item.stat().st_mtime)
+        try:
+            report = diagnose.compare(drafts / chosen[0], clone)
+            path = diagnose.write_bundle(report, Path(self.drafts_dir.get()).parent / "диагностика")
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Диагностика", str(exc))
+            return
+
+        self.app.say(report.describe())
+        self.app.say(f"\nСлепок для разбора: {path}")
+        messagebox.showinfo(
+            "Диагностика",
+            f"Проверен ролик {clone.name}.\n"
+            f"Расхождений: {len(report.problems)}.\n\n"
+            f"Подробности в окне ниже.\nФайл для пересылки:\n{path}",
+        )
 
     def _doctor(self) -> None:
         from .cli import _doctor as run_doctor

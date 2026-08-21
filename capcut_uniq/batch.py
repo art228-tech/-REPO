@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Callable
 
 from . import (
-    asr, assets, builder, ffmpeg, plan as plan_module, profile as profile_module,
-    subtitles, textalign, validate,
+    asr, assets, builder, diagnose, ffmpeg, plan as plan_module,
+    profile as profile_module, subtitles, textalign, validate,
 )
 from .config import Config
 from .errors import AssetShortage, PipelineError
@@ -237,6 +237,21 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
         for error in report.errors:
             log.error("   проверка: %s", error)
         raise PipelineError(f"Черновик {name} не прошёл самопроверку, подробности в журнале")
+
+    # Слепок субтитров снимаем с первого ролика партии: он маленький, а по нему
+    # видно, чем собранный субтитр отличается от эталонного в шаблоне.
+    if number == 1:
+        try:
+            report = diagnose.compare(profile.folder, result.folder)
+            log.info("%s", report.describe())
+            path = diagnose.write_bundle(report, config.log_dir)
+            if report.problems:
+                log.warning(
+                    "Диагностика нашла %d расхождений. Если субтитров не видно, "
+                    "пришли этот файл: %s", len(report.problems), path,
+                )
+        except Exception as exc:  # noqa: BLE001 - диагностика не должна валить сборку
+            log.warning("Снять слепок субтитров не удалось: %s", exc)
 
     if config.consume_inputs:
         assets.consume([voice.path, chosen[0].path, chosen[1].path], config.used_dir)
