@@ -317,9 +317,23 @@ class BatchTab(ttk.Frame):
             messagebox.showerror("Не хватает данных", str(exc))
             return
 
+        # Перебор идёт по одному шаблону: сравнивать копии между собой имеет смысл
+        # только когда у них одна основа.
+        if len(config.templates) != 1:
+            picked = config.templates[0]
+            if not messagebox.askokcancel(
+                "Перебор субтитров",
+                f"Перебор идёт по одному шаблону, а выделено {len(config.templates)}.\n\n"
+                f"Взять {picked}?\n\n"
+                "Если нужен другой — отмени и выдели в списке ровно его.",
+            ):
+                return
+            config.templates = [picked]
+
         config.count = 1
         config.consume_inputs = False
         config.name_prefix = "перебор"
+        self.app.say(f"Перебор по шаблону {config.templates[0]}")
 
         def work() -> None:
             report = batch.run(config, progress=self.app.progress_callback)

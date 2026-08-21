@@ -26,24 +26,26 @@ from .subtitles import Way
 
 log = get_logger("variants")
 
-# Порядок важен: сначала то, что ближе к нынешнему поведению.
+# Имена короткие и отличаются с первой буквы: в списке проектов CapCut показывает
+# начало имени и обрезает хвост, поэтому длинные имена с отличием в конце выглядят
+# там одинаково.
 WAYS: tuple[Way, ...] = (
-    Way("A_как_сейчас", "как программа делает сейчас"),
-    Way("B_ид_капкута", "опознаватели в виде, в каком их пишет CapCut, а не UUID",
+    Way("A_сейчас", "как программа делает сейчас"),
+    Way("B_идкапкута", "опознаватели в виде, в каком их пишет CapCut, а не UUID",
         ids="capcut"),
-    Way("C_ид_шаблона", "заняты те же опознаватели, что у субтитров шаблона",
+    Way("C_идшаблона", "заняты те же опознаватели, что у субтитров шаблона",
         ids="template"),
-    Way("D_простой_текст", "субтитр обычным текстом, без текстового шаблона",
+    Way("D_простой", "субтитр обычным текстом, без текстового шаблона",
         device="text"),
-    Way("E_слова_шаблона", "разбиение по словам взято из шаблона без изменений",
+    Way("E_словашаблона", "разбиение по словам взято из шаблона без изменений",
         words="template"),
-    Way("F_без_слов", "разбиение по словам пустое", words="empty"),
-    Way("G_без_анимации", "без анимации подписи", animation=False),
-    Way("H_размер_шаблона", "размер надписи как в шаблоне, а не по длине текста",
+    Way("F_безслов", "разбиение по словам пустое", words="empty"),
+    Way("G_безанимации", "без анимации подписи", animation=False),
+    Way("H_размершаблона", "размер надписи как в шаблоне, а не по длине текста",
         size="template"),
 )
 
-CONTROL = "I_субтитры_шаблона"
+CONTROL = "I_шаблон"
 
 
 @dataclass
@@ -59,14 +61,18 @@ class VariantOutcome:
 @dataclass
 class VariantsReport:
     base: str = ""
+    template: str = ""
     outcomes: list[VariantOutcome] = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [
             f"Собрано вариантов: {sum(1 for o in self.outcomes if o.ok)} "
-            f"из {len(self.outcomes)} (основа: {self.base})",
+            f"из {len(self.outcomes)}",
+            f"Шаблон: {self.template}",
+            f"Основа (её открывать не нужно): {self.base}",
             "",
-            "Открой каждый в CapCut и посмотри, в каком видно текст субтитров:",
+            "В списке проектов CapCut ищи девять проектов с именами на A_ … I_",
+            "Открой каждый и посмотри, в каком видно текст субтитров:",
         ]
         for item in self.outcomes:
             mark = "+" if item.ok else "x"
@@ -91,8 +97,9 @@ def build(config: Config, base_folder: Path, template_folder: Path,
         raise ValueError("нет реплик, перебирать нечего")
 
     profile = profile_module.analyse(base_folder)
-    log.info("Перебор способов записи субтитров: %d вариантов, реплик %d",
-             len(WAYS) + 1, len(cues))
+    report.template = template_folder.name
+    log.info("Перебор способов записи субтитров по шаблону %s: %d вариантов, реплик %d",
+             template_folder.name, len(WAYS) + 1, len(cues))
 
     # Опознаватели берём у шаблона, а не у готовой копии: в копии на дорожке
     # субтитров уже лежит то, что положила программа.
@@ -105,13 +112,40 @@ def build(config: Config, base_folder: Path, template_folder: Path,
         report.outcomes.append(_make(config, base_folder, profile, cues, way, borrow))
 
     report.outcomes.append(_control(config, base_folder, template_folder))
+    _write_legend(base_folder.parent, report)
     return report
+
+
+def _write_legend(folder: Path, report: VariantsReport) -> Path:
+    """Памятка рядом с проектами: какая буква что означает."""
+    path = folder / "перебор — что есть что.txt"
+    lines = [
+        f"Перебор способов записи субтитров по шаблону {report.template}.",
+        f"Основа: {report.base} — её открывать не нужно.",
+        "",
+        "Девять проектов различаются только дорожкой субтитров.",
+        "Клипы, озвучка, музыка, стикер и QR во всех одни и те же.",
+        "",
+    ]
+    for item in report.outcomes:
+        state = f"реплик {item.subtitle_count}" if item.ok else f"НЕ СОБРАЛСЯ: {item.error}"
+        lines.append(f"{item.name}  —  {item.note}  ({state})")
+    lines += [
+        "",
+        "Открой каждый и посмотри, видно ли текст субтитров.",
+        "Назови те, где видно. Если ни в одном, включая I_шаблон, значит запись",
+        "субтитров не при чём: CapCut не рисует этот текстовый шаблон в таком",
+        "проекте, и искать надо в самом проекте или в кэше приложения.",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+    log.info("Памятка: %s", path)
+    return path
 
 
 def _make(config: Config, base_folder: Path, base_profile, cues: list[Cue],
           way: Way, borrow: list[dict]) -> VariantOutcome:
     outcome = VariantOutcome(name=way.name, note=way.note, ok=False)
-    target = base_folder.parent / f"{base_folder.name}_{way.name}"
+    target = base_folder.parent / way.name
 
     try:
         _clone(base_folder, target)
@@ -148,7 +182,7 @@ def _control(config: Config, base_folder: Path, template_folder: Path) -> Varian
         note="субтитры шаблона без изменений — проверка, что рисуется хоть что-то",
         ok=False,
     )
-    target = base_folder.parent / f"{base_folder.name}_{CONTROL}"
+    target = base_folder.parent / CONTROL
     try:
         _clone(base_folder, target)
         count = diagnose.restore_template_subtitles(template_folder, target)
