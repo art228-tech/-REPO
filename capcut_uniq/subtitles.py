@@ -211,6 +211,16 @@ def _fit_words(cue: Cue) -> list[tuple[str, int, int]]:
     return fitted
 
 
+def word_arrays(cue: Cue) -> dict:
+    """Разбиение реплики по словам в том виде, в каком его ждёт CapCut."""
+    return _word_arrays(cue)
+
+
+def size_for(metrics, length: int) -> tuple[float, float]:
+    """Размер надписи под длину текста, по замерам шаблона."""
+    return _size_for(metrics, length)
+
+
 def _word_arrays(cue: Cue) -> dict:
     """Массивы для поля ``words``: между словами стоят пробелы нулевой длины."""
     starts: list[int] = []

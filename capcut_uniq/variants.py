@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import diagnose, meta, profile as profile_module, subtitles, validate
 from .config import Config
-from .draft_io import Draft
+from .draft_io import Draft, new_capcut_id
 from .logging_setup import get_logger
 from .plan import Cue
 from .subtitles import Way
@@ -47,6 +47,28 @@ WAYS: tuple[Way, ...] = (
 
 CONTROL = "I_шаблон"
 
+# Второй заход перебора: сужение между тем, что работает, и тем, что нет.
+#
+# Известно, что субтитры шаблона без изменений рисуются, а пересобранный
+# текстовый шаблон с нашим текстом — нет. Значит виновато одно из изменений,
+# которые программа вносит. Здесь берётся дорожка шаблона как есть и к ней
+# добавляется по одному изменению: где текст в кадре пропадёт, то изменение и
+# виновато.
+STEPS: tuple[tuple[str, str, frozenset[str]], ...] = (
+    ("J_текст", "субтитры шаблона, заменён только текст",
+     frozenset({"text"})),
+    ("K_слова", "то же плюс наше разбиение по словам",
+     frozenset({"text", "words"})),
+    ("L_время", "то же плюс наши времена реплик",
+     frozenset({"text", "words", "times"})),
+    ("M_длина", "то же плюс наша длительность в оформлении",
+     frozenset({"text", "words", "times", "attach"})),
+    ("N_размер", "то же плюс наш размер надписи",
+     frozenset({"text", "words", "times", "attach", "size"})),
+    ("O_опознаватели", "то же плюс новые опознаватели — это уже как в A",
+     frozenset({"text", "words", "times", "attach", "size", "ids"})),
+)
+
 
 @dataclass
 class VariantOutcome:
@@ -71,7 +93,7 @@ class VariantsReport:
             f"Шаблон: {self.template}",
             f"Основа (её открывать не нужно): {self.base}",
             "",
-            "В списке проектов CapCut ищи девять проектов с именами на A_ … I_",
+            "В списке проектов CapCut ищи проекты с именами на A_ … O_",
             "Открой каждый и посмотри, в каком видно текст субтитров:",
         ]
         for item in self.outcomes:
@@ -112,8 +134,122 @@ def build(config: Config, base_folder: Path, template_folder: Path,
         report.outcomes.append(_make(config, base_folder, profile, cues, way, borrow))
 
     report.outcomes.append(_control(config, base_folder, template_folder))
+
+    for name, note, steps in STEPS:
+        report.outcomes.append(
+            _stepwise(config, base_folder, template_folder, cues, name, note, steps))
+
     _write_legend(base_folder.parent, report)
     return report
+
+
+def _stepwise(config: Config, base_folder: Path, template_folder: Path,
+              cues: list[Cue], name: str, note: str,
+              steps: frozenset[str]) -> VariantOutcome:
+    """Дорожка шаблона, к которой добавлено ровно перечисленное."""
+    outcome = VariantOutcome(name=name, note=note, ok=False)
+    target = base_folder.parent / name
+    try:
+        _clone(base_folder, target)
+        diagnose.restore_template_subtitles(template_folder, target)
+
+        draft = Draft.load(target)
+        profile = profile_module.analyse(target)
+        style = profile.subtitles
+        if style is None:
+            raise ValueError("дорожка субтитров не опознана")
+
+        segments = draft.tracks[style.track].get("segments") or []
+        texts = {m["id"]: m for m in draft.materials.get("texts") or []}
+        templates = {m["id"]: m for m in draft.materials.get("text_templates") or []}
+        animations = {m["id"]: m for m in draft.materials.get("material_animations") or []}
+
+        # Сравнивать честно можно только столько реплик, сколько есть в обоих.
+        count = min(len(segments), len(cues))
+        del segments[count:]
+
+        for position in range(count):
+            _step_one(segments[position], cues[position], steps, style,
+                      texts, templates, animations)
+
+        draft.save()
+        _register(config, base_folder, target)
+
+        outcome.ok = True
+        outcome.folder = target
+        outcome.subtitle_count = count
+        log.info("   %s: готово, реплик %d — %s", name, count, note)
+    except Exception as exc:  # noqa: BLE001
+        outcome.error = str(exc)
+        log.warning("   %s: не собрался — %s", name, exc)
+    return outcome
+
+
+def _step_one(segment: dict, cue: Cue, steps: frozenset[str], style,
+              texts: dict, templates: dict, animations: dict) -> None:
+    """Вносит в один субтитр шаблона только перечисленные изменения."""
+    template = templates.get(segment.get("material_id"))
+    resources = (template.get("text_info_resources") or []) if template else []
+    text_id = resources[0].get("text_material_id") if resources else segment.get("material_id")
+    text = texts.get(text_id)
+
+    if text is not None and "text" in steps:
+        text["content"] = subtitles.rewrite_content(text.get("content") or "{}", cue.text)
+        text["recognize_text"] = cue.text
+    if text is not None and "words" in steps:
+        text["words"] = subtitles.word_arrays(cue)
+
+    if "times" in steps:
+        segment["target_timerange"] = {"start": cue.start_us, "duration": cue.duration_us}
+
+    for resource in resources:
+        attach = resource.setdefault("attach_info", {})
+        if "attach" in steps:
+            attach["start_time"] = 0
+            attach["duration"] = cue.duration_us
+        if "size" in steps:
+            width, height = subtitles.size_for(style.metrics, len(cue.text))
+            attach["original_size_width"] = width
+            attach["original_size_height"] = height
+
+    for reference in segment.get("extra_material_refs") or []:
+        animation = animations.get(reference)
+        if animation and "attach" in steps:
+            for item in animation.get("animations") or []:
+                item["start"] = 0
+                item["duration"] = cue.duration_us
+
+    if "ids" in steps:
+        _renumber(segment, template, text, animations)
+
+
+def _renumber(segment: dict, template: dict | None, text: dict | None,
+              animations: dict) -> None:
+    """Выдаёт субтитру новые опознаватели, сохраняя связи между объектами."""
+    if text is not None:
+        text["id"] = new_capcut_id()
+    if template is not None:
+        template["id"] = new_capcut_id()
+        segment["material_id"] = template["id"]
+        for resource in template.get("text_info_resources") or []:
+            if text is not None:
+                resource["text_material_id"] = text["id"]
+    elif text is not None:
+        segment["material_id"] = text["id"]
+
+    fresh: list[str] = []
+    for reference in segment.get("extra_material_refs") or []:
+        animation = animations.get(reference)
+        if animation is None:
+            fresh.append(reference)
+            continue
+        animation["id"] = new_capcut_id()
+        fresh.append(animation["id"])
+        if template is not None:
+            for resource in template.get("text_info_resources") or []:
+                resource["extra_material_refs"] = [animation["id"]]
+    segment["extra_material_refs"] = fresh
+    segment["id"] = new_capcut_id()
 
 
 def _write_legend(folder: Path, report: VariantsReport) -> Path:

@@ -63,7 +63,9 @@ def build(profile: TemplateProfile, plan: RenderPlan, config: Config, name: str)
 
     subtitle_count = 0
     if config.make_subtitles and plan.cues:
-        subtitle_count = subtitles.apply(draft, profile, plan.cues)
+        way = subtitles.Way(
+            device="text" if config.subtitle_device == "простой" else "auto")
+        subtitle_count = subtitles.apply(draft, profile, plan.cues, way)
     elif not config.make_subtitles:
         removed = subtitles.clear(draft, profile)
         if removed:

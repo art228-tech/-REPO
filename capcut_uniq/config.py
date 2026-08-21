@@ -80,6 +80,10 @@ class Config:
     name_prefix: str = "auto"
 
     make_subtitles: bool = True
+    # Как записывать субтитр. «простой» — обычный текстовый материал: проверено,
+    # что CapCut рисует в нём наш текст. «шаблонный» — через текстовый шаблон,
+    # как в исходном проекте: оформление богаче, но текст в кадре не появляется.
+    subtitle_device: str = "простой"
     asr_model: str = "small"
     asr_language: str = "ru"
     consume_inputs: bool = True
