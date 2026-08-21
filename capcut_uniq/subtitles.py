@@ -217,13 +217,62 @@ def _fill_text(base_text: dict, cue: Cue, group_id: str) -> tuple[str, dict]:
     material["words"] = _word_arrays(cue)
     material["current_words"] = {"start_time": [], "end_time": [], "text": []}
 
-    body = json.loads(material.get("content") or "{}")
-    body["text"] = cue.text
-    # Диапазон оформления считается в символах, поэтому его надо пересчитать.
-    for entry in body.get("styles") or []:
-        entry["range"] = [0, len(cue.text)]
-    material["content"] = json.dumps(body, ensure_ascii=False)
+    material["content"] = rewrite_content(material.get("content") or "{}", cue.text)
     return text_id, material
+
+
+_TEXT_VALUE = re.compile(r'("text"\s*:\s*)("(?:[^"\\]|\\.)*")')
+_RANGE_VALUE = re.compile(r'("range"\s*:\s*\[\s*\d+\s*,\s*)(\d+)(\s*\])')
+
+
+def rewrite_content(original: str, text: str) -> str:
+    """Подставляет новый текст в оформление субтитра, не переписывая остальное.
+
+    Оформление лежит в черновике как JSON внутри строки. Если разобрать его и
+    собрать заново, меняется всё: CapCut пишет без пробелов, а Python — с
+    пробелами после запятых и двоеточий, и вдобавок сокращает запись дробных
+    чисел (0.059999998658895493 превращается в 0.05999999865889549). Значение
+    то же, а байты другие.
+
+    Поэтому правим строку на месте: меняем только сам текст и диапазон
+    оформления, который считается в символах. Всё остальное остаётся точно
+    таким, как его записал CapCut.
+    """
+    body = json.loads(original or "{}")
+    old_text = body.get("text") or ""
+
+    # Диапазон, покрывавший строку целиком, тянется за новой длиной. Диапазон
+    # части строки трогать нельзя: он про своё, а не про длину текста.
+    expected = copy.deepcopy(body)
+    expected["text"] = text
+    for entry in expected.get("styles") or []:
+        span = entry.get("range")
+        if isinstance(span, list) and len(span) == 2 and span[1] == len(old_text):
+            entry["range"] = [span[0], len(text)]
+
+    result = _RANGE_VALUE.sub(
+        lambda m: m.group(1) + str(len(text)) + m.group(3)
+        if int(m.group(2)) == len(old_text) else m.group(0),
+        original,
+    )
+
+    # Ключ "text" CapCut пишет последним, поэтому берём последнее совпадение с
+    # прежним текстом — так не задеть одноимённые ключи внутри оформления.
+    encoded = json.dumps(text, ensure_ascii=False)
+    matches = [m for m in _TEXT_VALUE.finditer(result)
+               if json.loads(m.group(2)) == old_text]
+    if matches:
+        last = matches[-1]
+        result = result[:last.start()] + last.group(1) + encoded + result[last.end():]
+
+    try:
+        if json.loads(result) == expected:
+            return result
+    except ValueError:
+        pass
+
+    log.debug("оформление субтитра не поддалось точечной правке, собираю заново")
+    return json.dumps(expected, ensure_ascii=False, separators=(",", ":"))
 
 
 def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue]) -> int:

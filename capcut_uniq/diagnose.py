@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import copy
 import json
 import platform
 import sys
@@ -266,6 +267,53 @@ def _check_fonts(chain: list[dict], report: SubtitleReport) -> None:
         report.add("ок", "все шрифты на месте")
 
 
+def _check_content_fidelity(template_chain: list[dict], clone_chain: list[dict],
+                            report: SubtitleReport) -> None:
+    """Сверяет оформление субтитра побайтово, а не по смыслу.
+
+    Оформление лежит в черновике как JSON внутри строки, и одно и то же по смыслу
+    содержимое можно записать разными байтами: с пробелами после запятых или без,
+    с полной записью дробного числа или сокращённой. Обычное сравнение объектов
+    такую разницу не видит, поэтому здесь берётся оформление из шаблона, в него
+    подставляется текст ролика, и результат сравнивается со тем, что в ролике
+    действительно лежит.
+    """
+    from .subtitles import rewrite_content
+
+    if not template_chain or not clone_chain:
+        return
+
+    origin = (template_chain[0].get("text") or {}).get("content") or ""
+    if not origin:
+        return
+
+    bad = 0
+    example = ""
+    for entry in clone_chain:
+        actual = (entry.get("text") or {}).get("content") or ""
+        try:
+            text = json.loads(actual).get("text") or ""
+        except ValueError:
+            continue
+        wanted = rewrite_content(origin, text)
+        if actual != wanted:
+            bad += 1
+            if not example:
+                position = next(
+                    (i for i, (a, b) in enumerate(zip(actual, wanted)) if a != b),
+                    min(len(actual), len(wanted)),
+                )
+                low = max(0, position - 30)
+                example = (f"с позиции {position}: в ролике …{actual[low:position + 30]}… "
+                           f"а надо …{wanted[low:position + 30]}…")
+
+    if bad:
+        report.add("ошибка", f"оформление записано не теми байтами, что в шаблоне "
+                            f"({bad} из {len(clone_chain)}) — {example}")
+    else:
+        report.add("ок", "оформление записано теми же байтами, что в шаблоне")
+
+
 def compare(template_folder: Path, clone_folder: Path) -> SubtitleReport:
     """Сравнивает субтитры собранного ролика с субтитрами шаблона."""
     template_folder = Path(template_folder)
@@ -296,6 +344,7 @@ def compare(template_folder: Path, clone_folder: Path) -> SubtitleReport:
 
     _check_invariants(clone_chain, report, "ролик")
     _check_fonts(clone_chain, report)
+    _check_content_fidelity(template_chain, clone_chain, report)
 
     if template_chain and clone_chain:
         _diff_fields(template_chain[0].get("text"), clone_chain[0].get("text"), "текст", report)
@@ -337,6 +386,79 @@ def _slim(entry: dict) -> dict:
         "текст": entry.get("text"),
         "анимация": entry.get("animation"),
     }
+
+
+def restore_template_subtitles(template_folder: Path, clone_folder: Path) -> int:
+    """Кладёт в собранный ролик субтитры шаблона без изменений.
+
+    Это проба на разделение причин. Всё в ролике остаётся своим — клипы,
+    озвучка, музыка, стикер, — а дорожка субтитров становится буквально той же,
+    что в шаблоне: тот же текст, те же времена, те же байты.
+
+    Если после этого субтитры видно, значит дело в том, что программа собирает,
+    и разбираться надо в сборке. Если по-прежнему не видно, значит собранные
+    субтитры тут вообще не при чём: CapCut не рисует этот текстовый шаблон в
+    таком проекте, и искать надо в самом проекте или в кэше приложения.
+    """
+    template_folder = Path(template_folder)
+    clone_folder = Path(clone_folder)
+
+    template_profile = profile_module.analyse(template_folder)
+    clone_profile = profile_module.analyse(clone_folder)
+    if template_profile.subtitles is None or clone_profile.subtitles is None:
+        raise ValueError("дорожка субтитров не опознана")
+
+    source = Draft.load(template_folder)
+    target = Draft.load(clone_folder)
+
+    kinds = ("text_templates", "texts", "material_animations")
+    source_pool = {kind: {m["id"]: m for m in source.materials.get(kind) or []}
+                   for kind in kinds}
+
+    # Убираем то, что положила программа, чтобы не осталось висячих материалов.
+    doomed = _referenced(target, clone_profile.subtitles.track)
+    for kind in kinds:
+        target.materials[kind] = [
+            m for m in target.materials.get(kind) or [] if m["id"] not in doomed
+        ]
+
+    segments = copy.deepcopy(source.tracks[template_profile.subtitles.track]
+                             .get("segments") or [])
+    wanted = _referenced(source, template_profile.subtitles.track)
+    for kind in kinds:
+        target.materials.setdefault(kind, []).extend(
+            copy.deepcopy(source_pool[kind][item])
+            for item in wanted if item in source_pool[kind]
+        )
+
+    target.tracks[clone_profile.subtitles.track]["segments"] = segments
+
+    backup = clone_folder / "draft_content.json.до_пробы"
+    if not backup.exists():
+        backup.write_text((clone_folder / "draft_content.json").read_text(encoding="utf-8"),
+                          encoding="utf-8")
+    target.save()
+    log.info("В ролик %s положены субтитры шаблона: %d реплик (запас в %s)",
+             clone_folder.name, len(segments), backup.name)
+    return len(segments)
+
+
+def _referenced(draft: Draft, track: int) -> set[str]:
+    """Все материалы, на которые опирается дорожка."""
+    index = draft.material_index()
+    found: set[str] = set()
+
+    for segment in draft.tracks[track].get("segments") or []:
+        for item in [segment.get("material_id"), *(segment.get("extra_material_refs") or [])]:
+            if not item:
+                continue
+            found.add(item)
+            entry = index.get(item)
+            if entry and entry[0] == "text_templates":
+                for resource in entry[1].get("text_info_resources") or []:
+                    found.add(resource.get("text_material_id"))
+                    found.update(resource.get("extra_material_refs") or [])
+    return {item for item in found if item}
 
 
 def write_bundle(report: SubtitleReport, folder: Path) -> Path:

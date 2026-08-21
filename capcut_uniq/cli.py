@@ -47,6 +47,12 @@ def build_parser() -> argparse.ArgumentParser:
     diag.add_argument("clone", help="папка собранного ролика")
     _add_common(diag)
 
+    probe = sub.add_parser(
+        "probe", help="положить в ролик субтитры шаблона без изменений (проба)")
+    probe.add_argument("template", help="папка шаблона")
+    probe.add_argument("clone", help="папка собранного ролика")
+    _add_common(probe)
+
     run = sub.add_parser("run", help="собрать партию роликов")
     run.add_argument("--clips", type=Path, nargs="+", required=True,
                  help="папка с клипами; можно несколько, если короткие и длинные разложены отдельно")
@@ -126,6 +132,8 @@ def main(argv: list[str] | None = None) -> int:
             return _check(args.folder)
         if args.command == "diagnose":
             return _diagnose(args, config)
+        if args.command == "probe":
+            return _probe(args, config)
         if args.command == "split":
             return _split(args)
         if args.command == "run":
@@ -209,6 +217,25 @@ def _diagnose(args, config: Config) -> int:
     print(f"Слепок для разбора: {path}")
     print("Пришли этот файл, если субтитров не видно.")
     return 0 if not report.problems else 1
+
+
+def _probe(args, config: Config) -> int:
+    from . import diagnose
+
+    def resolve(name: str) -> Path:
+        folder = Path(name)
+        return folder if folder.is_absolute() else config.drafts_dir / name
+
+    count = diagnose.restore_template_subtitles(resolve(args.template), resolve(args.clone))
+    print(f"В ролик {args.clone} положены субтитры шаблона без изменений: {count} реплик.")
+    print()
+    print("Открой ролик в CapCut и посмотри на кадр.")
+    print("  Видно субтитры  — дело в том, что собирает программа.")
+    print("  Не видно        — собранные субтитры не при чём, CapCut не рисует")
+    print("                    этот текстовый шаблон в таком проекте.")
+    print()
+    print("Прежний вариант сохранён рядом файлом draft_content.json.до_пробы")
+    return 0
 
 
 def _split(args) -> int:
