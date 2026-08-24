@@ -83,6 +83,11 @@ class SubtitleStyle:
     metrics: list[tuple[int, float, float]] = field(default_factory=list)
     """Тройки (длина текста, ширина, высота) из шаблона — для подбора размеров."""
 
+    font_path: str = ""
+    """Шрифт из ресурсов текстового шаблона: единственный путь, записанный не
+    телефонный, а настоящий. Нужен как запасной, когда своего шрифта субтитра на
+    этой машине не нашлось."""
+
 
 @dataclass
 class SubtitleDiagnosis:
@@ -186,6 +191,17 @@ def _segments(track: dict) -> list[dict]:
 def _target(segment: dict) -> tuple[int, int]:
     tr = segment.get("target_timerange") or {}
     return int(tr.get("start") or 0), int(tr.get("duration") or 0)
+
+
+def _template_font(draft: Draft, segment: dict) -> str:
+    """Путь к шрифту, записанный в ресурсах текстового шаблона субтитра."""
+    found = draft.material_index().get(segment.get("material_id"))
+    if not found or found[0] != "text_templates":
+        return ""
+    for resource in found[1].get("resources") or []:
+        if resource.get("panel") == "fonts" and resource.get("path"):
+            return str(resource["path"])
+    return ""
 
 
 def _scale(segment: dict) -> float:
@@ -540,6 +556,7 @@ def _subtitles(draft: Draft, tracks: list[dict]):
         offset_y=offset_y,
         render_index=int(first.get("render_index") or 14000),
         metrics=metrics,
+        font_path=_template_font(draft, first),
     )
     diagnosis = SubtitleDiagnosis(found=len(segments), texts_in_draft=total_texts, kind=kind)
     return style, len(segments), diagnosis

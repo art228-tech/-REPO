@@ -257,14 +257,19 @@ def _check_fonts(chain: list[dict], report: SubtitleReport) -> None:
             elif not Path(item).exists():
                 missing.add(item)
 
+    if android:
+        # Телефонного пути на ноутбуке нет, и CapCut подставит вместо шрифта свой —
+        # один и тот же в любом проекте. Раньше это спасал текстовый шаблон, у
+        # которого путь записан настоящий; у обычного текста такой ссылки нет.
+        report.add(
+            "ошибка",
+            f"шрифт остался телефонным путём ({len(android)} шт) — CapCut подставит "
+            f"свой, и он будет одинаковым во всех роликах: {sorted(android)[0][-45:]}",
+        )
     if missing:
-        report.add("ошибка", f"файлы шрифтов не найдены на диске: {sorted(missing)[:3]}")
-    elif android:
-        # Ровно так же записано в шаблоне: CapCut находит шрифт по своему
-        # идентификатору, а не по этому пути. Поломкой это не является.
-        report.add("ок", f"шрифты указаны путями от телефона ({len(android)} шт), как в шаблоне")
-    else:
-        report.add("ок", "все шрифты на месте")
+        report.add("ошибка", f"файлы шрифтов не найдены на диске: {sorted(missing)[:2]}")
+    if not android and not missing:
+        report.add("ок", "шрифт найден на диске, подставится он, а не стандартный")
 
 
 def _check_content_fidelity(template_chain: list[dict], clone_chain: list[dict],

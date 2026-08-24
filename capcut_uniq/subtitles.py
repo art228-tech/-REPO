@@ -19,6 +19,7 @@ import time
 
 from dataclasses import dataclass
 
+from . import fonts
 from .config import Timing
 from .draft_io import Draft, new_capcut_id
 from .logging_setup import get_logger
@@ -371,6 +372,21 @@ def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue],
                 return found
         return new_capcut_id()
 
+    # Без текстового шаблона единственная ссылка на шрифт — телефонная, её на
+    # ноутбуке не открыть, и CapCut подставляет свой. Ищем настоящий файл заранее,
+    # пока текстовые шаблоны ещё на месте: в них записан путь до кэша.
+    font = ""
+    if way.device == "text" or style.kind != "template":
+        roots = fonts.cache_roots(draft, draft.folder.parent, (style.font_path,))
+        font = fonts.resolve(base_text, roots, style.font_path)
+        if font:
+            log.debug("шрифт субтитров: %s", font)
+        elif not fonts.usable(base_text.get("font_path") or ""):
+            log.warning(
+                "Файл шрифта субтитров не найден — CapCut подставит свой. "
+                "Просит: %s", ", ".join(fonts.wanted(base_text)) or "не указан",
+            )
+
     stale = _collect_stale_ids(draft, track)
     materials["text_templates"] = [t for t in templates if t.get("id") not in stale]
     materials["texts"] = [t for t in texts if t.get("id") not in stale]
@@ -386,6 +402,8 @@ def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue],
             occupied = original[position].get("words")
             if occupied:
                 text_material["words"] = copy.deepcopy(occupied)
+        if font:
+            fonts.stamp(text_material, font)
         materials["texts"].append(text_material)
 
         animation_id = None
