@@ -94,7 +94,10 @@ def test_own_font_wins_when_it_is_on_disk(tmp_path: Path):
     spare = _put(root, "7256628603268370945", "ZY Innocent.ttf")
 
     chosen = fonts.resolve(_material(), [root], str(spare))
-    assert chosen == str(own).replace("\\", "/")
+    assert chosen.path == str(own).replace("\\", "/")
+    assert chosen.source == "свой"
+    assert chosen.own
+    assert chosen.title == "Блок-Hv"
 
 
 def test_template_font_is_the_spare(tmp_path: Path):
@@ -103,7 +106,12 @@ def test_template_font_is_the_spare(tmp_path: Path):
     spare = _put(root, "7256628603268370945", "ZY Innocent.ttf")
 
     chosen = fonts.resolve(_material(), [root], str(spare))
-    assert chosen == str(spare).replace("\\", "/")
+    assert chosen.path == str(spare).replace("\\", "/")
+    assert chosen.source == "запасной"
+    assert not chosen.own
+    # По журналу должно быть ясно, что шрифт общий, а не свой.
+    assert "ЗАПАСНОЙ" in chosen.describe()
+    assert "7579481374890003713" in chosen.describe()
 
 
 def test_nothing_to_do_when_the_recorded_path_opens(tmp_path: Path):
@@ -112,13 +120,23 @@ def test_nothing_to_do_when_the_recorded_path_opens(tmp_path: Path):
     material = _material()
     material["font_path"] = str(real)
 
-    assert fonts.resolve(material, [root], "") == ""
+    chosen = fonts.resolve(material, [root], "")
+    assert chosen.path == ""
+    assert chosen.source == "записанный"
+    assert chosen.own
 
 
 def test_no_font_anywhere_gives_nothing(tmp_path: Path):
     root = _cache(tmp_path)
-    assert fonts.resolve(_material(), [root], "") == ""
-    assert fonts.resolve(_material(), [root], "/нет/такого/файла.ttf") == ""
+    for spare in ("", "/нет/такого/файла.ttf"):
+        chosen = fonts.resolve(_material(), [root], spare)
+        assert chosen.path == ""
+        assert chosen.source == "нет"
+        assert not chosen.own
+
+
+def test_font_titles_are_read_for_the_log():
+    assert fonts.titles(_material()) == {"7579481374890003713": "Блок-Hv"}
 
 
 def test_path_is_written_everywhere_it_is_referenced(tmp_path: Path):

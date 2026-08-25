@@ -31,6 +31,10 @@ class BuildResult:
     duration_us: int
     subtitle_count: int
     notes: list[str] = field(default_factory=list)
+    font_name: str = ""
+    """Имя файла подставленного шрифта — по нему видно, разные ли они в партии."""
+    font_own: bool = True
+    """Свой шрифт шаблона, а не общий запасной."""
 
 
 def build(profile: TemplateProfile, plan: RenderPlan, config: Config, name: str) -> BuildResult:
@@ -62,10 +66,15 @@ def build(profile: TemplateProfile, plan: RenderPlan, config: Config, name: str)
     _apply_music(draft, profile, plan)
 
     subtitle_count = 0
+    font = subtitles.fonts.Choice(source="записанный")
     if config.make_subtitles and plan.cues:
         way = subtitles.Way(
             device="text" if config.subtitle_device == "простой" else "auto")
-        subtitle_count = subtitles.apply(draft, profile, plan.cues, way)
+        font = subtitles.choose_font(draft, profile, way)
+        if font.source != "записанный":
+            (log.info if font.own else log.warning)("   %s", font.describe())
+        subtitle_count = subtitles.apply(draft, profile, plan.cues, way,
+                                         font_path=font.path)
     elif not config.make_subtitles:
         removed = subtitles.clear(draft, profile)
         if removed:
@@ -85,6 +94,8 @@ def build(profile: TemplateProfile, plan: RenderPlan, config: Config, name: str)
         duration_us=plan.total_us,
         subtitle_count=subtitle_count,
         notes=notes,
+        font_name=Path(font.path).name if font.path else "",
+        font_own=font.own,
     )
 
 

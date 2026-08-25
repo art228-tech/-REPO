@@ -329,8 +329,32 @@ def rewrite_content(original: str, text: str) -> str:
     return json.dumps(expected, ensure_ascii=False, separators=(",", ":"))
 
 
+def choose_font(draft: Draft, profile: TemplateProfile,
+                way: Way = DEFAULT_WAY) -> fonts.Choice:
+    """Какой файл шрифта подставить субтитрам этого шаблона.
+
+    Отдельно от сборки, чтобы про исход можно было написать в журнал и в итог
+    партии: по одному пути не видно, свой это шрифт шаблона или общий запасной.
+    """
+    style = profile.subtitles
+    if style is None:
+        return fonts.Choice()
+    if way.device != "text" and style.kind == "template":
+        # Текстовый шаблон сам держит рабочую ссылку на шрифт, подменять нечего.
+        return fonts.Choice(source="записанный")
+
+    base = next((t for t in draft.materials.get("texts") or []
+                 if t.get("id") == style.text_material_id), None)
+    if base is None:
+        return fonts.Choice()
+
+    roots = fonts.cache_roots(draft, draft.folder.parent, (style.font_path,))
+    return fonts.resolve(base, roots, style.font_path)
+
+
 def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue],
-          way: Way = DEFAULT_WAY, borrow: list[dict] | None = None) -> int:
+          way: Way = DEFAULT_WAY, borrow: list[dict] | None = None,
+          font_path: str | None = None) -> int:
     """Заменяет дорожку субтитров на новую. Возвращает число реплик.
 
     ``borrow`` — опознаватели, которые нужно занять вместо новых. Нужен перебору:
@@ -375,17 +399,7 @@ def apply(draft: Draft, profile: TemplateProfile, cues: list[Cue],
     # Без текстового шаблона единственная ссылка на шрифт — телефонная, её на
     # ноутбуке не открыть, и CapCut подставляет свой. Ищем настоящий файл заранее,
     # пока текстовые шаблоны ещё на месте: в них записан путь до кэша.
-    font = ""
-    if way.device == "text" or style.kind != "template":
-        roots = fonts.cache_roots(draft, draft.folder.parent, (style.font_path,))
-        font = fonts.resolve(base_text, roots, style.font_path)
-        if font:
-            log.debug("шрифт субтитров: %s", font)
-        elif not fonts.usable(base_text.get("font_path") or ""):
-            log.warning(
-                "Файл шрифта субтитров не найден — CapCut подставит свой. "
-                "Просит: %s", ", ".join(fonts.wanted(base_text)) or "не указан",
-            )
+    font = font_path if font_path is not None else choose_font(draft, profile, way).path
 
     stale = _collect_stale_ids(draft, track)
     materials["text_templates"] = [t for t in templates if t.get("id") not in stale]

@@ -32,6 +32,9 @@ EXPECTED_DIFFERENT = {
     "id", "name", "content", "words", "current_words", "recognize_text",
     "group_id", "material_id", "target_timerange", "extra_material_refs",
     "render_index", "text_info_resources", "recognize_task_id",
+    # Путь к шрифту подставляется нарочно: в шаблоне он телефонный и не
+    # открывается, поэтому совпадать с ним и не должен.
+    "font_path", "fonts",
 }
 
 
@@ -292,15 +295,23 @@ def _check_content_fidelity(template_chain: list[dict], clone_chain: list[dict],
     if not origin:
         return
 
+    origin_font = (template_chain[0].get("text") or {}).get("font_path") or ""
+
     bad = 0
     example = ""
     for entry in clone_chain:
-        actual = (entry.get("text") or {}).get("content") or ""
+        material = entry.get("text") or {}
+        actual = material.get("content") or ""
         try:
             text = json.loads(actual).get("text") or ""
         except ValueError:
             continue
         wanted = rewrite_content(origin, text)
+        # Шрифт подставлен нарочно, поэтому в эталон для сравнения его тоже надо
+        # подставить — иначе разойдётся заведомо.
+        font = material.get("font_path") or ""
+        if font and origin_font and font != origin_font:
+            wanted = wanted.replace(origin_font, font)
         if actual != wanted:
             bad += 1
             if not example:

@@ -37,6 +37,8 @@ class VideoOutcome:
     notes: list[str] = field(default_factory=list)
     seconds: float = 0.0
     cues: list = field(default_factory=list)
+    font_name: str = ""
+    font_own: bool = True
 
 
 # Сколько неудач подряд стерпеть, прежде чем признать, что материалы не подходят.
@@ -71,7 +73,26 @@ class BatchReport:
             lines.append(head)
             for note in item.notes:
                 lines.append(f"      ! {note}")
+
+        lines.extend(self._fonts())
         return "\n".join(lines)
+
+    def _fonts(self) -> list[str]:
+        """Сводка по шрифтам: одинаковые они в партии или нет."""
+        made = [item for item in self.outcomes if item.ok and item.font_name]
+        if not made:
+            return []
+
+        kinds = sorted({item.font_name for item in made})
+        lines = [f"Шрифтов в партии: {len(kinds)} — {', '.join(kinds)}"]
+
+        borrowed = sorted({item.template for item in made if not item.font_own})
+        if borrowed:
+            lines.append(
+                f"  своего шрифта не нашлось у шаблонов: {', '.join(borrowed)} — "
+                f"им подставлен общий запасной, поэтому шрифт у них одинаковый"
+            )
+        return lines
 
 
 def discover_templates(config: Config) -> list[profile_module.TemplateProfile]:
@@ -306,6 +327,8 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
     outcome.subtitle_count = result.subtitle_count
     outcome.notes = result.notes
     outcome.cues = render_plan.cues
+    outcome.font_name = result.font_name
+    outcome.font_own = result.font_own
     return outcome
 
 

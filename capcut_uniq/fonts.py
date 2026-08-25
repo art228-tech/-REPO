@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .logging_setup import get_logger
@@ -76,6 +77,47 @@ def find(resource_id: str, roots: list[Path]) -> Path | None:
     return None
 
 
+@dataclass
+class Choice:
+    """Что вышло с поиском шрифта — и главное, свой он или запасной."""
+
+    path: str = ""
+    source: str = "нет"
+    """«записанный» — путь из шаблона и так открывается; «свой» — нашли в кэше
+    тот шрифт, который просит шаблон; «запасной» — свой не нашёлся, взяли шрифт
+    из ресурсов текстового шаблона; «нет» — не нашлось ничего."""
+
+    asked: list[str] = field(default_factory=list)
+    title: str = ""
+
+    @property
+    def own(self) -> bool:
+        return self.source in ("записанный", "свой")
+
+    def describe(self) -> str:
+        name = self.title or (Path(self.path).name if self.path else "не указан")
+        if self.source == "записанный":
+            return f"шрифт {name}: путь из шаблона открывается, оставляю как есть"
+        if self.source == "свой":
+            return f"шрифт {name}: свой шрифт шаблона, найден в кэше CapCut"
+        if self.source == "запасной":
+            return (f"шрифт {Path(self.path).name}: ЗАПАСНОЙ из текстового шаблона — "
+                    f"свой ({', '.join(self.asked) or 'не указан'}) на диске не найден, "
+                    f"поэтому у таких шаблонов шрифт будет одинаковый")
+        return (f"шрифт не найден совсем — CapCut подставит свой, одинаковый везде. "
+                f"Просит: {', '.join(self.asked) or 'не указан'}")
+
+
+def titles(material: dict) -> dict[str, str]:
+    """Названия шрифтов по номеру ресурса — чтобы в журнале были имена, а не цифры."""
+    found: dict[str, str] = {}
+    for entry in material.get("fonts") or []:
+        number = entry.get("resource_id") or entry.get("effect_id") or ""
+        if number and entry.get("title"):
+            found[number] = entry["title"]
+    return found
+
+
 def wanted(material: dict) -> list[str]:
     """Номера ресурсов шрифтов, которые просит текстовый материал."""
     numbers: list[str] = []
@@ -102,25 +144,31 @@ def usable(path: str) -> bool:
     return Path(path.replace("\\", "/")).is_file()
 
 
-def resolve(material: dict, roots: list[Path], spare: str = "") -> str:
-    """Путь к шрифту, которым нужно подписать текстовый материал.
+def resolve(material: dict, roots: list[Path], spare: str = "") -> Choice:
+    """Какой шрифт подставить текстовому материалу.
 
     Порядок такой: если записанный путь и так открывается — ничего не меняем.
     Иначе ищем в кэше тот шрифт, который материал просит, — так у каждого шаблона
     остаётся свой. Если не нашёлся, берём запасной: шрифт из ресурсов текстового
-    шаблона, тот самый, которым шаблон и рисовался.
+    шаблона, тот самый, которым шаблон и рисовался. Он общий для всех шаблонов,
+    поэтому такой исход отмечается отдельно.
     """
-    if usable(material.get("font_path") or ""):
-        return ""
+    asked = wanted(material)
+    names = titles(material)
 
-    for number in wanted(material):
+    if usable(material.get("font_path") or ""):
+        return Choice(source="записанный", asked=asked,
+                      title=names.get(asked[0], "") if asked else "")
+
+    for number in asked:
         found = find(number, roots)
         if found is not None:
-            return str(found).replace("\\", "/")
+            return Choice(path=str(found).replace("\\", "/"), source="свой",
+                          asked=asked, title=names.get(number, ""))
 
     if usable(spare):
-        return spare.replace("\\", "/")
-    return ""
+        return Choice(path=spare.replace("\\", "/"), source="запасной", asked=asked)
+    return Choice(source="нет", asked=asked)
 
 
 def stamp(material: dict, path: str) -> bool:
