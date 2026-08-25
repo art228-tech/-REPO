@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import (
-    asr, assets, builder, diagnose, ffmpeg, plan as plan_module,
+    asr, assets, builder, diagnose, ffmpeg, naming, plan as plan_module,
     profile as profile_module, subtitles, textalign, validate,
 )
 from .config import Config
@@ -143,6 +143,11 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
         log.warning("Озвучек %d, а заказано роликов %d — партия остановится раньше", len(voices), config.count)
 
     stamp = datetime.now().strftime("%m%d_%H%M")
+    black = naming.black_background_numbers(config.count, config.black_bg_of_six, rng)
+    if black:
+        log.info("Без размытого фона: %d из %d (%d из каждых шести)",
+                 len(black), config.count, config.black_bg_of_six)
+    taken = naming.occupied(config.drafts_dir)
 
     # Одна неудачная озвучка не должна хоронить всю партию: такая озвучка
     # откладывается, и работа идёт дальше. Останавливаемся, только когда подряд
@@ -158,7 +163,8 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
             progress(number, config.count, f"ролик {number} из {config.count}, шаблон {profile.name}")
 
         try:
-            outcome = _one(config, profile, clips, voices, rng, number, stamp)
+            outcome = _one(config, profile, clips, voices, rng, number, stamp,
+                           black_background=number in black, taken=taken)
         except PipelineError as exc:
             outcome.error = str(exc)
             log.error("Ролик %d: %s", number, exc)
@@ -199,7 +205,8 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
 
 
 def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
-         rng: random.Random, number: int, stamp: str) -> VideoOutcome:
+         rng: random.Random, number: int, stamp: str,
+         black_background: bool = False, taken: set[str] | None = None) -> VideoOutcome:
     outcome = VideoOutcome(number=number, template=profile.name, ok=False)
 
     voice = voices.take_next()
@@ -238,6 +245,10 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
         [c.path for c in chosen], [c.duration_s for c in chosen], rng,
     )
 
+    render_plan.black_background = black_background
+    if black_background:
+        log.info("   фон погашен: под наложением чёрное поле")
+
     if config.make_subtitles:
         render_plan.cues = _cues_for(transcript, config, line)
         if not render_plan.cues:
@@ -245,7 +256,12 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
 
     log.debug("план:\n%s", render_plan.describe())
 
-    name = f"{config.name_prefix}_{stamp}_{number:03d}"
+    if config.random_names:
+        name = naming.random_name(rng, config.name_length, taken)
+        if taken is not None:
+            taken.add(name)
+    else:
+        name = f"{config.name_prefix}_{stamp}_{number:03d}"
     result = builder.build(profile, render_plan, config, name)
 
     if config.make_subtitles and render_plan.cues and result.subtitle_count == 0:

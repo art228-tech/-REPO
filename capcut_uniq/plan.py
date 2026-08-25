@@ -80,6 +80,9 @@ class RenderPlan:
     slot_speeds: list[float]
     overlay_scales: list[float]
 
+    black_background: bool = False
+    """Фон погашен: под наложением чёрное поле вместо размытой копии клипа."""
+
     swoosh: SfxPlacement | None = None
     sticker: DecorPlacement | None = None
     qr: DecorPlacement | None = None

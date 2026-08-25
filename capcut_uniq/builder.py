@@ -271,12 +271,32 @@ def _apply_slots(draft: Draft, profile: TemplateProfile, plan: RenderPlan,
             clip = segment.setdefault("clip", {})
             clip.setdefault("scale", {})["x"] = scale
             clip["scale"]["y"] = scale
+
+            # Фон гасим прозрачностью, а не удалением: сегмент остаётся на месте
+            # со своим звуком и размытием, просто в кадре его не видно и сквозь
+            # него виден чёрный холст.
+            if plan.black_background and not is_overlay:
+                clip["alpha"] = 0.0
+                _drop_alpha_keyframes(segment)
             if changed and not is_overlay:
                 notes.append(
                     f"слот {position + 1}: у клипа другое соотношение сторон, "
                     f"масштаб пересчитан {base_scale:.3f} → {scale:.3f}"
                 )
         start += duration
+
+
+def _drop_alpha_keyframes(segment: dict) -> None:
+    """Убирает ключевые кадры прозрачности — иначе они перебьют погашенный фон."""
+    for group in segment.get("common_keyframes") or []:
+        items = group.get("keyframe_list") or []
+        group["keyframe_list"] = [
+            item for item in items if "alpha" not in str(item.get("property_type", "")).lower()
+        ]
+    segment["common_keyframes"] = [
+        group for group in segment.get("common_keyframes") or []
+        if group.get("keyframe_list")
+    ]
 
 
 def _template_slot_sizes(profile: TemplateProfile) -> dict[int, MediaInfo]:

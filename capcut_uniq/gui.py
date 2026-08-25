@@ -196,6 +196,9 @@ class BatchTab(ttk.Frame):
         self.make_subtitles = tk.BooleanVar(value=True)
         self.consume = tk.BooleanVar(value=True)
         self.asr_model = tk.StringVar(value="small")
+        self.black_bg = tk.StringVar(value="0")
+        self.random_names = tk.BooleanVar(value=False)
+        self.name_length = tk.StringVar(value="10")
 
         self.columnconfigure(1, weight=1)
         folder_row(self, 0, "Папка с клипами", self.clips_dir)
@@ -227,21 +230,37 @@ class BatchTab(ttk.Frame):
         ttk.Combobox(options, width=5, textvariable=self.fps, values=("30", "60"),
                      state="readonly").pack(side="left", padx=(4, PAD))
         ttk.Label(options, text="Имена проектов").pack(side="left")
-        ttk.Entry(options, width=10, textvariable=self.prefix).pack(side="left", padx=(4, PAD))
+        self.prefix_entry = ttk.Entry(options, width=10, textvariable=self.prefix)
+        self.prefix_entry.pack(side="left", padx=(4, PAD))
         ttk.Label(options, text="Зерно").pack(side="left")
         ttk.Entry(options, width=8, textvariable=self.seed).pack(side="left", padx=(4, PAD))
         ttk.Label(options, text="Распознавание").pack(side="left")
         ttk.Combobox(options, width=8, textvariable=self.asr_model, state="readonly",
                      values=("tiny", "base", "small", "medium")).pack(side="left", padx=(4, PAD))
 
+        extra = ttk.Frame(self)
+        extra.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        ttk.Label(extra, text="Без размытого фона, из каждых 6").pack(side="left")
+        ttk.Spinbox(extra, from_=0, to=6, width=4,
+                    textvariable=self.black_bg).pack(side="left", padx=(4, 2))
+        ttk.Label(extra, foreground="#666",
+                  text="под наложением чёрное поле").pack(side="left", padx=(0, PAD))
+        ttk.Checkbutton(extra, text="Случайные имена", variable=self.random_names,
+                        command=self._names_changed).pack(side="left")
+        ttk.Label(extra, text="длина").pack(side="left", padx=(PAD, 0))
+        self.length_box = ttk.Spinbox(extra, from_=4, to=24, width=4,
+                                      textvariable=self.name_length)
+        self.length_box.pack(side="left", padx=(4, 0))
+        self._names_changed()
+
         checks = ttk.Frame(self)
-        checks.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        checks.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(4, 0))
         ttk.Checkbutton(checks, text="Собирать субтитры", variable=self.make_subtitles).pack(side="left")
         ttk.Checkbutton(checks, text="Убирать использованные материалы",
                         variable=self.consume).pack(side="left", padx=(PAD, 0))
 
         actions = ttk.Frame(self)
-        actions.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
+        actions.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
         start = ttk.Button(actions, text="Собрать", command=self._start)
         start.pack(side="left")
         check = ttk.Button(actions, text="Проверить окружение", command=self._doctor)
@@ -289,6 +308,9 @@ class BatchTab(ttk.Frame):
             seed=int(seed_text) if seed_text.isdigit() else None,
             fps=float(self.fps.get()),
             name_prefix=self.prefix.get().strip() or "auto",
+            black_bg_of_six=int(self.black_bg.get() or 0),
+            random_names=bool(self.random_names.get()),
+            name_length=int(self.name_length.get() or 10),
             make_subtitles=bool(self.make_subtitles.get()),
             consume_inputs=bool(self.consume.get()),
             asr_model=self.asr_model.get(),
@@ -306,6 +328,12 @@ class BatchTab(ttk.Frame):
             self.app.say("\n" + report.summary())
 
         self.app.start(work, config.log_dir, config.count)
+
+    def _names_changed(self) -> None:
+        """Случайное имя и префикс друг друга исключают — прячем ненужное."""
+        random_on = bool(self.random_names.get())
+        self.prefix_entry.configure(state="disabled" if random_on else "normal")
+        self.length_box.configure(state="normal" if random_on else "disabled")
 
     def _variants(self) -> None:
         """Собирает один ролик несколькими способами записи субтитров."""

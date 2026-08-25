@@ -62,6 +62,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--seed", type=int, default=None, help="зерно случайности для повторяемости")
     run.add_argument("--fps", type=float, default=60.0)
     run.add_argument("--prefix", default="auto", help="префикс имён проектов")
+    run.add_argument("--black-bg", type=int, default=0, metavar="N",
+                     help="сколько роликов из каждых шести собрать без размытого фона (0-6)")
+    run.add_argument("--random-names", action="store_true",
+                     help="случайные имена проектов из русских и английских букв и цифр")
+    run.add_argument("--name-length", type=int, default=10, help="длина случайного имени")
     run.add_argument("--no-subtitles", action="store_true", help="не собирать субтитры, а очистить дорожку")
     run.add_argument("--keep-inputs", action="store_true", help="не убирать использованные материалы")
     run.add_argument("--asr-model", default="small", help="модель распознавания: tiny, base, small, medium")
@@ -109,6 +114,9 @@ def _config_from(args) -> Config:
         seed=getattr(args, "seed", None),
         fps=getattr(args, "fps", 60.0),
         name_prefix=getattr(args, "prefix", "auto"),
+        black_bg_of_six=getattr(args, "black_bg", 0),
+        random_names=getattr(args, "random_names", False),
+        name_length=getattr(args, "name_length", 10),
         make_subtitles=not getattr(args, "no_subtitles", False),
         consume_inputs=not getattr(args, "keep_inputs", False),
         asr_model=getattr(args, "asr_model", "small"),
