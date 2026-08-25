@@ -316,7 +316,12 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
             log.warning("Снять слепок субтитров не удалось: %s", exc)
 
     if config.consume_inputs:
-        assets.consume([voice.path, chosen[0].path, chosen[1].path], config.used_dir)
+        # Сценарий уносим вместе с озвучкой: они одно целое, и без этого в папке
+        # копятся текстовики без своих звуковых файлов.
+        used = [voice.path, chosen[0].path, chosen[1].path]
+        if script_path:
+            used.append(script_path)
+        assets.consume(used, config.used_dir)
 
     log.info("   готово: %s, %s, субтитров %d", name, fmt(result.duration_us), result.subtitle_count)
 
