@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -200,10 +201,25 @@ def split(
     for length in sorted(targets):
         log.debug("  фрагменты по %g с → %s", length, targets[length])
 
+    # Нумерация продолжается с той, что уже лежит в папках. Без этого повторная
+    # нарезка того же видео давала те же имена и затирала прежние клипы: восемь
+    # прогонов по одному файлу оставляли материал только последнего.
+    suffix = source.suffix.lower() or ".mp4"
+    offset = _last_index(source.stem, suffix, set(targets.values()))
+    if offset:
+        log.info("В папках уже есть клипы из этого видео, продолжаю нумерацию с %d",
+                 offset + 1)
+
     total = len(pieces)
     for position, piece in enumerate(pieces, start=1):
-        name = f"{source.stem}_{piece.index:03d}_{piece.requested_s:g}s{source.suffix.lower() or '.mp4'}"
-        destination = targets[key(piece.requested_s)] / name
+        folder = targets[key(piece.requested_s)]
+        number = piece.index + offset
+        name = f"{source.stem}_{number:03d}_{piece.requested_s:g}s{suffix}"
+        # Подстраховка: если такое имя всё же занято, отступаем дальше.
+        while (folder / name).exists():
+            number += 1
+            name = f"{source.stem}_{number:03d}_{piece.requested_s:g}s{suffix}"
+        destination = folder / name
         if progress:
             progress(position, total, f"фрагмент {position} из {total}: {name}")
 
@@ -217,6 +233,21 @@ def split(
 
     log.info("%s", report.summary())
     return report
+
+
+def _last_index(stem: str, suffix: str, folders: set[Path]) -> int:
+    """Самый большой номер клипа из этого видео среди уже нарезанных."""
+    pattern = re.compile(rf"^{re.escape(stem)}_(\d+)_[\d.]+s{re.escape(suffix)}$",
+                         re.IGNORECASE)
+    highest = 0
+    for folder in folders:
+        if not folder.is_dir():
+            continue
+        for item in folder.iterdir():
+            found = pattern.match(item.name)
+            if found:
+                highest = max(highest, int(found.group(1)))
+    return highest
 
 
 def _cut(source: Path, destination: Path, piece: Piece, reencode: bool, crf: int) -> None:
