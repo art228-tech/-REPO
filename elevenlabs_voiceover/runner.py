@@ -60,8 +60,9 @@ class PromptSpec:
 class TextSpec:
     path: Path
     name: str
-    text: str
-    chunks: List[Chunk]
+    text: str = ""
+    chunks: List[Chunk] = field(default_factory=list)
+    loaded: bool = False
 
     @property
     def characters(self) -> int:
@@ -314,9 +315,6 @@ class Runner:
         self._sync_subscription(initial=True)
         self._resolve_model()
 
-        # Пересчитываем нарезку под реальный лимит выбранной модели.
-        self._rechunk(texts)
-
         if from_account:
             voices = self._voices_from_account()
         else:
@@ -327,21 +325,15 @@ class Runner:
         jobs = self._build_jobs(texts, voices, service_dir)
         self.stats.texts_total = len(jobs)
 
-        self._total_units = max(1, sum(len(job.text.chunks) for job in jobs))
+        self._total_units = max(1, len(jobs))
         self._done_units = 0
 
-        estimated = sum(job.text.characters for job in jobs) * self._cost_multiplier()
         log.info(
-            "К озвучке %d заданий, %d кусков, примерно %s кредитов. Доступно %s",
+            "К озвучке %d заданий. Доступно %s кредитов. "
+            "Тексты читаю по одному, когда до них дойдёт очередь",
             len(jobs),
-            self._total_units,
-            f"{estimated:,.0f}".replace(",", " "),
             f"{self._credits_budget:,.0f}".replace(",", " "),
         )
-        if estimated > self._credits_budget:
-            log.warning(
-                "Кредитов не хватит на всё задание — работа остановится, когда они закончатся"
-            )
 
         jobs_by_text: Dict[Path, List[Job]] = {}
         for job in jobs:
@@ -350,6 +342,9 @@ class Runner:
         try:
             for job in jobs:
                 self._check_cancelled()
+                if not self._ensure_text_loaded(job.text):
+                    self._done_units += 1
+                    continue
                 if not self._has_budget_for(job.text.chunks[0].characters if job.text.chunks else 0):
                     self.stats.stopped_reason = "Кредиты закончились"
                     log.warning("Кредиты закончились, останавливаюсь до следующего файла")
@@ -388,39 +383,39 @@ class Runner:
         return prompts
 
     def _load_texts(self, directory: Path) -> List[TextSpec]:
+        """Только список файлов: содержимое читается в момент озвучки."""
+        self._progress("Смотрю папку с текстами…")
         files = list_txt_files(directory)
         if not files:
             raise PreflightError(f"В папке текстов нет ни одного .txt файла: {directory}")
-
-        texts: List[TextSpec] = []
-        for path in files:
-            content = read_text_file(path)
-            chunks = split_text(
-                content, self.settings.chunk_target_chars, line_breaks=self.settings.line_breaks
-            )
-            if not chunks:
-                log.warning("Текст %s пустой, пропускаю", path.name)
-                continue
-            texts.append(TextSpec(path=path, name=path.stem, text=content, chunks=chunks))
-
-        if not texts:
-            raise PreflightError("Все файлы текстов пустые")
-        return texts
-
-    def _rechunk(self, texts: List[TextSpec]) -> None:
-        """Перенарезать тексты с учётом лимита символов выбранной модели."""
-        max_chars = self._model.max_chars_per_request if self._model else 0
-        if not max_chars or max_chars >= self.settings.chunk_target_chars:
-            return
         log.info(
-            "Модель принимает не больше %d символов за запрос — уменьшаю размер куска",
-            max_chars,
+            "Найдено %d текстов, каждый открою только когда до него дойдёт очередь",
+            len(files),
         )
-        for spec in texts:
-            spec.chunks = split_text(
-                spec.text, self.settings.chunk_target_chars, max_chars,
-                line_breaks=self.settings.line_breaks,
-            )
+        self._progress(f"Найдено текстов: {len(files)}")
+        return [TextSpec(path=path, name=path.stem) for path in files]
+
+    def _ensure_text_loaded(self, spec: TextSpec) -> bool:
+        """Прочитать и нарезать один текст. False, если файл пустой или не читается."""
+        if spec.loaded:
+            return bool(spec.chunks)
+        spec.loaded = True
+        try:
+            spec.text = read_text_file(spec.path)
+        except OSError as exc:
+            log.warning("Не удалось прочитать %s (%s), пропускаю", spec.path.name, exc)
+            return False
+        max_chars = self._model.max_chars_per_request if self._model else 0
+        spec.chunks = split_text(
+            spec.text,
+            self.settings.chunk_target_chars,
+            max_chars,
+            line_breaks=self.settings.line_breaks,
+        )
+        if not spec.chunks:
+            log.warning("Текст %s пустой, пропускаю", spec.path.name)
+            return False
+        return True
 
     # ------------------------------------------------------------------
     def _resolve_model(self) -> None:

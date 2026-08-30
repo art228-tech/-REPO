@@ -376,6 +376,46 @@ def test_estimate_does_not_read_text_files(workspace, monkeypatch):
     assert plan["line_breaks"] == 0
 
 
+def test_run_does_not_read_texts_before_client_starts(workspace, store, monkeypatch):
+    """Старт не должен открывать все txt сразу — иначе на большой папке всё зависает."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 8)
+    text_names = {path.name for path in workspace["texts"].glob("*.txt")}
+
+    reads: list = []
+    original = runner_module.read_text_file
+
+    def tracking(path):
+        reads.append(path.name)
+        return original(path)
+
+    texts_seen_when_client_created = []
+
+    def factory(*_args, **_kwargs):
+        texts_seen_when_client_created.append([name for name in reads if name in text_names])
+        return FakeClient()
+
+    monkeypatch.setattr(runner_module, "read_text_file", tracking)
+    monkeypatch.setattr(runner_module, "ElevenLabsClient", factory)
+
+    stats = Runner(make_settings(workspace, max_voices=1), store).run()
+
+    assert texts_seen_when_client_created == [[]]
+    assert stats.texts_done == 8
+    assert text_names <= set(reads)
+
+
+def test_empty_text_is_skipped_without_blocking_others(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+    (workspace["texts"] / "пустой.txt").write_text("   \n", encoding="utf-8")
+
+    stats = run_with(monkeypatch, make_settings(workspace, max_voices=1), store, FakeClient())
+
+    assert stats.texts_done == 2
+    assert stats.texts_total == 3
+
+
 def test_manifest_records_pace(workspace, store, monkeypatch):
     write_prompts(workspace["prompts"], 1)
     write_texts(workspace["texts"], 2)
