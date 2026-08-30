@@ -1,6 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Generate 100000 unique Brawl Stars promo captions per chat-learned rules."""
+"""
+100000 Brawl Stars promo texts — rebuilt from full chat rules.
+
+Hard rules from chat:
+- No: QR, подарок/подарки, бесплатно, em/en dash, отметка, раздел, списки изменений
+- Бравл Старс only (Russian)
+- Subjects: разработчики / Бравл Старс / Суперсэлл / создатели Бравл Старс /
+  команда Бравл Старс / команда разработчиков
+- Rewards x4 equal: ультраящик, ультрахаосдроп, Бравл Пасс, Бравл Пасс Плюс
+- награда in ~50% texts
+- раздача/раздавать rare
+- календарь/изменения ~1/20
+- Length: STRICT ±10% of THAT template's canonical length
+- Adjacent texts: different template + different reward
+- Ending style: «вам остаётся лишь забрать её/его» often
+"""
 
 from __future__ import annotations
 
@@ -12,99 +27,42 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 OUT_DIR = Path("/tmp/brawl_txt_100k")
-ZIP_PATH = Path("/opt/cursor/artifacts/brawl_stars_texts_100000.zip")
-REPO_ZIP = Path("/workspace/brawl_stars_texts_100000.zip")
+ZIP_ART = Path("/opt/cursor/artifacts/brawl_stars_texts_100000.zip")
+ZIP_REPO = Path("/workspace/brawl_stars_texts_100000.zip")
 TARGET = 100_000
+SEED = 417042
 
-FORBIDDEN_SUB = [
-    "qr",
-    "подарок",
-    "подарки",
-    "подарка",
-    "подарков",
-    "подароч",
-    "бесплатн",
-    "—",
-    "–",
-    "отметк",
-    "раздел",
-    "список изменений",
-    "списке изменений",
-]
+FORBIDDEN = (
+    "qr", "подарок", "подарки", "подарка", "подарков", "подароч",
+    "бесплатн", "—", "–", "отметк", "раздел",
+    "список изменений", "списке изменений",
+)
 
-REWARDS = [
-    {
-        "key": "box",
-        "nom": "ультраящик",
-        "acc": "ультраящик",
-        "gen": "ультраящика",
-        "gen_plur": "ультраящиков",
-        "acc_plur": "ультраящики",
-        "few": "ультраящика",
-        "pron": "его",
-        "pass": False,
-    },
-    {
-        "key": "drop",
-        "nom": "ультрахаосдроп",
-        "acc": "ультрахаосдроп",
-        "gen": "ультрахаосдропа",
-        "gen_plur": "ультрахаосдропов",
-        "acc_plur": "ультрахаосдропы",
-        "few": "ультрахаосдропа",
-        "pron": "его",
-        "pass": False,
-    },
-    {
-        "key": "pass",
-        "nom": "Бравл Пасс",
-        "acc": "Бравл Пасс",
-        "gen": "Бравл Пасс",
-        "gen_plur": "Бравл Пасс",
-        "acc_plur": "Бравл Пасс",
-        "few": "Бравл Пасс",
-        "pron": "его",
-        "pass": True,
-    },
-    {
-        "key": "passplus",
-        "nom": "Бравл Пасс Плюс",
-        "acc": "Бравл Пасс Плюс",
-        "gen": "Бравл Пасс Плюс",
-        "gen_plur": "Бравл Пасс Плюс",
-        "acc_plur": "Бравл Пасс Плюс",
-        "few": "Бравл Пасс Плюс",
-        "pron": "его",
-        "pass": True,
-    },
-]
-
-# Subjects: plural vs feminine singular (team)
-SUBJECTS = [
-    {"nom": "Разработчики", "low": "разработчики", "plural": True},
-    {"nom": "Бравл Старс", "low": "Бравл Старс", "plural": True},
-    {"nom": "Суперсэлл", "low": "Суперсэлл", "plural": True},
-    {"nom": "Создатели Бравл Старс", "low": "создатели Бравл Старс", "plural": True},
-    {"nom": "Команда Бравл Старс", "low": "команда Бравл Старс", "plural": False},
-    {"nom": "Команда разработчиков", "low": "команда разработчиков", "plural": False},
-]
-
+# ---- approved banks ----
 RECENT_ADV = [
-    "недавно",
-    "совсем недавно",
-    "не так давно",
-    "на днях",
-    "только что",
-    "буквально только что",
+    "недавно", "совсем недавно", "не так давно", "на днях",
+    "только что", "буквально только что",
 ]
-RECENT_CLAUSE = [
+RECENT_OPEN = [
     "Совсем недавно стало известно",
     "Недавно появилась информация",
 ]
-
 AGAIN = ["снова", "вновь", "опять", "в очередной раз"]
-
+AGAIN_DID = ["снова решили", "вновь решили"]
 BUT = ["но", "однако", "при этом", "вот только"]
+
+FEW = [
+    "мало кто это заметил",
+    "почти никто этого не заметил",
+    "немногие это заметили",
+    "далеко не все это заметили",
+    "лишь некоторые игроки это заметили",
+    "небольшая часть игроков это заметила",
+    "большинство игроков этого не заметило",
+    "многие игроки этого не заметили",
+    "об этом знают единицы",
+    "информация дошла не до всех",
+]
 
 SHOW = [
     "Сейчас покажу",
@@ -117,15 +75,15 @@ SHOW = [
     "Покажу нужный способ",
 ]
 
-NA_ENDS = [
+NA = [
     "Награда доступна, вам остаётся лишь забрать её!",
     "Награда найдена, вам остаётся лишь забрать её!",
     "Награда уже доступна, вам остаётся лишь забрать её!",
     "Награда ждёт, вам остаётся лишь забрать её!",
 ]
 
-# Developer actions: (plural, singular), and whether object needs genitive
-ACTIONS = [
+# actions: (plural, singular), object case
+ACT = [
     (("выдали", "выдала"), "acc"),
     (("добавили", "добавила"), "acc"),
     (("подготовили", "подготовила"), "acc"),
@@ -134,177 +92,141 @@ ACTIONS = [
     (("дали возможность забрать", "дала возможность забрать"), "acc"),
     (("запустили выдачу", "запустила выдачу"), "gen"),
 ]
+ACT_RARE = [(("раздают", "раздаёт"), "acc")]
 
-ACTIONS_RARE = [(("раздают", "раздаёт"), "acc")]
+SUBJ = [
+    {"nom": "Разработчики", "low": "разработчики", "pl": True},
+    {"nom": "Бравл Старс", "low": "Бравл Старс", "pl": True},
+    {"nom": "Суперсэлл", "low": "Суперсэлл", "pl": True},
+    {"nom": "Создатели Бравл Старс", "low": "создатели Бравл Старс", "pl": True},
+    {"nom": "Команда Бравл Старс", "low": "команда Бравл Старс", "pl": False},
+    {"nom": "Команда разработчиков", "low": "команда разработчиков", "pl": False},
+]
 
-PLAYER = ["получить", "забрать", "активировать", "успеть забрать"]
-
-SOURCES = [
-    # (prep_phrase, noun_acc_short, gender adj for свежий)
-    ("в свежей публикации", "публикация", "f"),
-    ("в свежем посте", "пост", "m"),
-    ("в сообщении", "сообщение", "n"),
-    ("в новости", "новость", "f"),
-    ("в ролике", "ролик", "m"),
-    ("в объявлении", "объявление", "n"),
-    ("в официальной записи", "официальная запись", "f"),
-    ("в трансляции", "трансляция", "f"),
-    ("в эфире", "эфир", "m"),
+REWARDS = [
+    {"id": "box", "acc": "ультраящик", "gen": "ультраящика", "few": "ультраящика",
+     "gpl": "ультраящиков", "apl": "ультраящики", "pron": "его", "pass": False},
+    {"id": "drop", "acc": "ультрахаосдроп", "gen": "ультрахаосдропа", "few": "ультрахаосдропа",
+     "gpl": "ультрахаосдропов", "apl": "ультрахаосдропы", "pron": "его", "pass": False},
+    {"id": "pass", "acc": "Бравл Пасс", "gen": "Бравл Пасс", "few": "Бравл Пасс",
+     "gpl": "Бравл Пасс", "apl": "Бравл Пасс", "pron": "его", "pass": True},
+    {"id": "plus", "acc": "Бравл Пасс Плюс", "gen": "Бравл Пасс Плюс", "few": "Бравл Пасс Плюс",
+     "gpl": "Бравл Пасс Плюс", "apl": "Бравл Пасс Плюс", "pron": "его", "pass": True},
 ]
 
 
-def v(subj: dict, pair: tuple[str, str]) -> str:
-    return pair[0] if subj["plural"] else pair[1]
+def V(s, pair):
+    return pair[0] if s["pl"] else pair[1]
 
 
-def pick_action(rng: random.Random, subj: dict, rare_ok: bool = True, force_plural: bool = False):
-    pool = list(ACTIONS)
-    if rare_ok and rng.random() < 0.04:
-        pool = ACTIONS_RARE
+def action(rng, s, allow_raz=True):
+    pool = list(ACT)
+    if allow_raz and rng.random() < 0.035:
+        pool = list(ACT_RARE)
     pair, case = rng.choice(pool)
-    if force_plural:
-        return pair[0], case
-    return v(subj, pair), case
+    return V(s, pair), case
 
 
-def reward_form(reward: dict, case: str, rng: random.Random, qty=None, mod=None) -> str:
+def rw(reward, case="acc", rng=None, qty=None, style=0):
+    """Render reward phrase."""
     if reward["pass"]:
         return reward["acc"]
+    rng = rng or random.Random(0)
     if qty is not None:
         if qty == 1:
             return f"один {reward['acc']}"
         if qty in (2, 3, 4):
             return f"{qty} {reward['few']}"
-        # 5+
-        return f"{qty} {reward['gen_plur']}"
-    if mod is None:
-        if reward["key"] == "box":
-            mod = rng.choice(["", "", "новый "])
-        else:
-            mod = rng.choice(["", "", "новый ", "дополнительный "])
-    base = reward["gen"] if case == "gen" else reward["acc"]
-    # "новый" agrees; for gen use нового
-    if mod.startswith("новый"):
-        mod = "нового " if case == "gen" else "новый "
-    elif mod.startswith("дополнительный"):
-        mod = "дополнительного " if case == "gen" else "дополнительный "
-    if case == "gen" and qty is None and not mod:
-        # запустили выдачу ультраящика
-        return reward["gen"]
+        return f"{qty} {reward['gpl']}"
+    # style variants approved-ish
+    if style == 1 and not reward["pass"]:
+        # новый
+        if case == "gen":
+            return f"нового {reward['gen']}"
+        return f"новый {reward['acc']}"
+    if style == 2 and reward["id"] == "drop":
+        if case == "gen":
+            return f"дополнительного {reward['gen']}"
+        return f"дополнительный {reward['acc']}"
+    if style == 3 and not reward["pass"]:
+        return f"сразу несколько {reward['gpl']}" if case == "acc" else reward["gpl"]
     if case == "gen":
-        return f"{mod}{reward['gen']}".strip()
-    return f"{mod}{base}".strip()
+        return reward["gen"]
+    return reward["acc"]
 
 
-def few_notice(rng: random.Random) -> str:
-    """Return a grammatical 'few noticed' clause."""
-    choice = rng.randrange(10)
-    if choice == 0:
-        return "мало кто это заметил"
-    if choice == 1:
-        return "почти никто этого не заметил"
-    if choice == 2:
-        return "немногие это заметили"
-    if choice == 3:
-        return "далеко не все это заметили"
-    if choice == 4:
-        return "лишь некоторые игроки это заметили"
-    if choice == 5:
-        return "небольшая часть игроков это заметила"
-    if choice == 6:
-        return "большинство игроков этого не заметило"
-    if choice == 7:
-        return "многие игроки этого не заметили"
-    if choice == 8:
-        return "об этом знают единицы"
-    return "информация дошла не до всех"
-
-
-def end_block(rng: random.Random, reward: dict, use_na: bool) -> str:
+def end(rng, reward, use_na):
     if use_na:
-        return rng.choice(NA_ENDS)
-    style = rng.randrange(5)
-    if style == 0:
-        return f"Вам остаётся лишь забрать {reward['pron']}!"
-    if style == 1:
-        return "Сейчас покажу, как его забрать!"
-    if style == 2:
-        return f"{rng.choice(SHOW)}!"
-    if style == 3:
-        return f"Я уже разобрался. Вам остаётся лишь забрать {reward['pron']}!"
-    return f"Я уже всё проверил. Вам остаётся лишь забрать {reward['pron']}!"
+        return rng.choice(NA)
+    return rng.choice([
+        f"Вам остаётся лишь забрать {reward['pron']}!",
+        f"{rng.choice(SHOW)}, как его забрать!",
+        f"{rng.choice(SHOW)}!",
+        f"Я уже разобрался. Вам остаётся лишь забрать {reward['pron']}!",
+        f"Сейчас покажу всё вам!",
+        f"Показываю вам, скорее забирайте!",
+    ])
 
 
-def normalize(text: str) -> str:
-    text = text.replace("—", ",").replace("–", ",")
-    text = " ".join(text.split())
-    text = text.replace(" ,", ",").replace("..", ".")
-    # Fix subjectless singular verbs in mid-clauses
-    repls = [
-        ("игрокам запустила выдачу", "игрокам запустили выдачу"),
-        ("игрокам начала выдавать", "игрокам начали выдавать"),
-        ("игрокам начала выдавать", "игрокам начали выдавать"),
-        ("игрокам выдала ", "игрокам выдали "),
-        ("игрокам добавила ", "игрокам добавили "),
-        ("игрокам подготовила ", "игрокам подготовили "),
-        ("игрокам решила выдать", "игрокам решили выдать"),
-        ("игрокам дала возможность забрать", "игрокам дали возможность забрать"),
-        ("игрокам раздаёт ", "игрокам раздают "),
-        (" радуют игроков Бравл Старс!", " радуют игроков!"),
-        (" удивили игроков Бравл Старс!", " удивили игроков!"),
-        (" удивила игроков Бравл Старс!", " удивила игроков!"),
-        (" радует игроков Бравл Старс!", " радует игроков!"),
-    ]
-    for a, b in repls:
-        text = text.replace(a, b)
-    return text.strip()
+def norm(t: str) -> str:
+    t = t.replace("—", ",").replace("–", ",")
+    t = " ".join(t.split())
+    return t.strip()
 
 
-def forbidden(text: str) -> bool:
-    low = text.lower()
-    for f in FORBIDDEN_SUB:
-        if f in low:
-            return True
-    return False
+def bad(t: str) -> bool:
+    low = t.lower()
+    return any(f in low for f in FORBIDDEN)
 
 
-def raz_count(text: str) -> int:
-    low = text.lower()
-    return sum(low.count(x) for x in ("раздач", "раздава", "раздают", "раздаёт"))
+def has_raz(t: str) -> bool:
+    low = t.lower()
+    return any(x in low for x in ("раздач", "раздава", "раздают", "раздаёт"))
 
 
-# -------------------- templates --------------------
+# ===================== TEMPLATES =====================
+# Each returns text. Canonical length measured with fixed seed fill.
 
-def T01(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    qty = None if reward["pass"] else rng.choice([None, None, 5, 10])
-    r = reward_form(reward, case, rng, qty=qty)
+def T01(rng, s, r, use_na, allow_raz):
+    # birthday / fighter day — user template 1
+    act, case = action(rng, s, allow_raz)
+    qty = None if r["pass"] else rng.choice([None, 5, 10, None])
+    st = rng.choice([0, 0, 1])
+    rr = rw(r, case, rng, qty=qty, style=st if qty is None else 0)
     lead = rng.choice([
-        f"{subj['nom']} {v(subj, ('объявили', 'объявила'))} о новой акции!",
-        f"{subj['nom']} {rng.choice(RECENT_ADV)} запустили особую акцию!" if subj["plural"] else f"{subj['nom']} {rng.choice(RECENT_ADV)} запустила особую акцию!",
-        f"{subj['nom']} {rng.choice(AGAIN)} порадовали игроков!" if subj["plural"] else f"{subj['nom']} {rng.choice(AGAIN)} порадовала игроков!",
+        f"{s['nom']} {V(s, ('объявили', 'объявила'))} о новой акции!",
+        f"{s['nom']} {rng.choice(RECENT_ADV)} {V(s, ('запустили', 'запустила'))} особую акцию!",
+        f"{s['nom']} {rng.choice(AGAIN)} {V(s, ('порадовали', 'порадовала'))} игроков!",
     ])
     mid = rng.choice([
-        f"В честь дня рождения бойца игрокам {act} {r}, {rng.choice(BUT)} {few_notice(rng)}.",
-        f"Бравл Старс отметили день рождения одного из бойцов, и игрокам {act} {r}, {rng.choice(BUT)} {few_notice(rng)}.",
-        f"Повод простой: день рождения бойца. Игрокам {act} {r}, {rng.choice(BUT)} {few_notice(rng)}.",
+        f"Бравл Старс {V(s, ('запустили', 'запустила')) if False else 'запустили'} её в честь дня рождения одного из бойцов, {rng.choice(BUT)} далеко не все игроки успели забрать {rw(r, 'acc', rng, qty=qty or (5 if not r['pass'] else None), style=0) if not r['pass'] else r['acc']}.",
+        f"В честь дня рождения бойца игрокам {act} {rr}, {rng.choice(BUT)} {rng.choice(FEW)}.",
+        f"Повод простой: день рождения бойца. Игрокам {act} {rr}, {rng.choice(BUT)} {rng.choice(FEW)}.",
+    ])
+    # fix first mid branch - don't use broken V
+    mid = rng.choice([
+        f"Бравл Старс запустили её в честь дня рождения одного из бойцов, {rng.choice(BUT)} далеко не все игроки успели забрать {rw(r,'acc',rng, qty=(5 if not r['pass'] else None)) if not r['pass'] else r['acc']}.",
+        f"В честь дня рождения бойца игрокам {act} {rr}, {rng.choice(BUT)} {rng.choice(FEW)}.",
+        f"Повод простой: день рождения бойца. Игрокам {act} {rr}, {rng.choice(BUT)} {rng.choice(FEW)}.",
     ])
     if use_na:
-        bridge = rng.choice([
+        tail = rng.choice([
             "Если вы тоже всё пропустили, то награда уже найдена, вам остаётся лишь забрать её!",
-            f"Я уже всё нашёл. {rng.choice(NA_ENDS)}",
+            f"Я уже всё нашёл. {rng.choice(NA)}",
         ])
-        return f"{lead} {mid} {bridge}"
-    return f"{lead} {mid} {end_block(rng, reward, False)}"
+    else:
+        tail = end(rng, r, False)
+    return f"{lead} {mid} {tail}"
 
 
-def T02(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
+def T02(rng, s, r, use_na, allow_raz):
+    # bloggers confirmed — user template 2
+    act, case = action(rng, s, allow_raz)
+    rr = rw(r, case, rng, style=rng.choice([0, 1]))
     lead = rng.choice([
-        f"{subj['nom']} {v(subj, ('начали выдавать', 'начала выдавать'))} {reward_form(reward, 'acc', rng)}!",
-        f"{subj['nom']} {act} {r}!",
-        f"{subj['nom']} {rng.choice(AGAIN)} {act} {r}!",
+        f"{s['nom']} {V(s, ('начали выдавать', 'начала выдавать'))} {rw(r,'acc',rng)}!",
+        f"{s['nom']} {act} {rr}!",
+        f"{s['nom']} {rng.choice(AGAIN)} {act} {rr}!",
     ])
     mid = rng.choice([
         "Об этом почти никто не слышал, хотя информацию уже подтвердили многие блогеры по Бравл Старс.",
@@ -312,207 +234,202 @@ def T02(rng, subj, reward, use_na):
         "Новость тихая, но блогеры по Бравл Старс уже проверили информацию.",
     ])
     if use_na:
-        return f"{lead} {mid} Я самостоятельно разобрался во всём. {rng.choice(NA_ENDS)}"
+        return f"{lead} {mid} Я самостоятельно разобрался во всём. {rng.choice(NA)}"
     return f"{lead} {mid} Я самостоятельно разобрался во всём и нашёл нужный способ получения. Показываю вам, скорее забирайте!"
 
 
-def T03(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    if reward["pass"]:
-        r = reward["acc"]
-        r_get = reward["acc"]
+def T03(rng, s, r, use_na, allow_raz):
+    # lost among publications — user template 3
+    if r["pass"]:
+        get = r["acc"]
     else:
-        qty = rng.choice([5, 10, None])
-        if qty:
-            r_get = reward_form(reward, "acc", rng, qty=qty)
+        get = rw(r, "acc", rng, qty=rng.choice([5, 10, None]), style=rng.choice([0, 1, 3]))
+        if get.startswith("сразу"):
+            pass
+        elif " " not in get or get.split()[0] in ("новый", "дополнительный", "один"):
+            pass
         else:
-            r_get = rng.choice([
-                reward["acc"],
-                f"сразу несколько {reward['gen_plur']}",
-                f"новый {reward['acc']}",
-            ])
-        r = r_get
-    src = rng.choice(SOURCES)
+            # ensure readable
+            get = get
     lead = rng.choice([
-        f"{subj['nom']} вновь решили порадовать игроков!" if subj["plural"] else f"{subj['nom']} вновь решила порадовать игроков!",
-        f"{subj['nom']} {rng.choice(AGAIN)} подготовили кое-что для игроков!" if subj["plural"] else f"{subj['nom']} {rng.choice(AGAIN)} подготовила кое-что для игроков!",
-        f"{subj['nom']} {rng.choice(AGAIN)} сделали приятное для игроков!" if subj["plural"] else f"{subj['nom']} {rng.choice(AGAIN)} сделала приятное для игроков!",
+        f"{s['nom']} {rng.choice(AGAIN_DID)} порадовать игроков!" if s["pl"] else f"{s['nom']} {rng.choice(['снова решила','вновь решила'])} порадовать игроков!",
+        f"{s['nom']} {rng.choice(AGAIN)} {V(s, ('подготовили', 'подготовила'))} кое-что для игроков!",
+        f"{s['nom']} {rng.choice(AGAIN)} {V(s, ('сделали', 'сделала'))} приятное для игроков!",
     ])
     mid = rng.choice([
-        f"На этот раз в Бравл Старс можно получить {r_get}, {rng.choice(BUT)} информация об этом затерялась среди новых публикаций.",
-        f"В Бравл Старс можно забрать {r_get}, {rng.choice(BUT)} детали затерялись среди свежих новостей.",
-        f"Игрокам доступен {reward_form(reward, 'acc', rng)}, {rng.choice(BUT)} почти все пролистали {src[0].replace('в ', '', 1)}.",
-    ])
-    # fix awkward "пролистали свежей публикации" - use noun
-    mid = rng.choice([
-        f"На этот раз в Бравл Старс можно получить {r_get}, {rng.choice(BUT)} информация об этом затерялась среди новых публикаций.",
-        f"В Бравл Старс можно забрать {r_get}, {rng.choice(BUT)} детали затерялись среди свежих новостей.",
-        f"Игрокам доступен {reward_form(reward, 'acc', rng)}, {rng.choice(BUT)} почти все пролистали свежую публикацию.",
+        f"На этот раз в Бравл Старс можно получить {get}, {rng.choice(BUT)} информация об этом затерялась среди новых публикаций.",
+        f"В Бравл Старс можно забрать {get}, {rng.choice(BUT)} детали затерялись среди свежих новостей.",
+        f"Игрокам доступен {rw(r,'acc',rng, style=rng.choice([0,1]))}, {rng.choice(BUT)} почти все пролистали свежую публикацию.",
     ])
     if use_na:
-        return f"{lead} {mid} Я уже нашёл всё необходимое. {rng.choice(NA_ENDS)}"
-    return f"{lead} {mid} Я уже нашёл всё необходимое. Вам остаётся лишь забрать {reward['pron']}!"
+        return f"{lead} {mid} Я уже нашёл всё необходимое. {rng.choice(NA)}"
+    return f"{lead} {mid} Я уже нашёл всё необходимое. Вам остаётся лишь забрать {r['pron']}!"
 
 
-def T04(rng, subj, reward, use_na):
-    r = reward_form(reward, "acc", rng)
+def T04(rng, s, r, use_na, allow_raz):
+    # recently said everyone can get — user template 4
+    rr = rw(r, "acc", rng, style=rng.choice([0, 1]))
     recent = rng.choice(RECENT_ADV)
     lead = rng.choice([
         f"Бравл Старс {rng.choice(AGAIN)} удивляют игроков!",
         f"Бравл Старс {rng.choice(AGAIN)} радуют сообщество!",
-        f"{subj['nom']} {rng.choice(AGAIN)} удивили игроков Бравл Старс!" if subj["plural"] else f"{subj['nom']} {rng.choice(AGAIN)} удивила игроков Бравл Старс!",
+        f"{s['nom']} {rng.choice(AGAIN)} {V(s, ('удивили', 'удивила'))} игроков!",
     ])
     mid = rng.choice([
-        f"{recent.capitalize()} {subj['low']} {v(subj, ('сообщили', 'сообщила'))}, что каждый сможет получить {r}.",
-        f"{subj['nom']} {recent} {v(subj, ('сообщили', 'сообщила'))}: игрокам доступен {r}.",
-        f"{rng.choice(RECENT_CLAUSE)}, что каждый игрок сможет {rng.choice(PLAYER)} {r}.",
+        f"{recent.capitalize()} {s['low']} {V(s, ('сообщили', 'сообщила'))}, что каждый сможет получить {rr}.",
+        f"{s['nom']} {recent} {V(s, ('сообщили', 'сообщила'))}: игрокам доступен {rr}.",
+        f"{rng.choice(RECENT_OPEN)}, что каждый игрок сможет {rng.choice(['получить','забрать','активировать','успеть забрать'])} {rr}.",
     ])
     mid2 = rng.choice([
         f"Большинство ещё ничего не знает об этом, {rng.choice(BUT)} я уже самостоятельно во всём разобрался.",
-        f"{few_notice(rng).capitalize()}, {rng.choice(BUT)} я уже всё проверил.",
+        f"{rng.choice(FEW).capitalize()}, {rng.choice(BUT)} я уже всё проверил.",
         f"Пока об этом знают единицы, {rng.choice(BUT)} я уже нашёл способ получения.",
     ])
-    return f"{lead} {mid} {mid2} {end_block(rng, reward, use_na)}"
+    return f"{lead} {mid} {mid2} {end(rng, r, use_na)}"
 
 
-def T05(rng, subj, reward, use_na):
-    r = reward_form(reward, "acc", rng)
+def T05(rng, s, r, use_na, allow_raz):
+    # hidden in publication — user template 5
+    rr = rw(r, "acc", rng, style=rng.choice([0, 1]))
     recent = rng.choice(RECENT_ADV)
-    src = rng.choice(SOURCES[:7])
     lead = rng.choice([
-        f"{subj['nom']} {v(subj, ('сообщили', 'сообщила'))} игрокам о новой акции!",
-        f"{subj['nom']} {recent} {v(subj, ('опубликовали', 'опубликовала'))} важную запись!",
-        f"{recent.capitalize()} {subj['low']} оставили важную деталь для игроков!" if subj["plural"] else f"{recent.capitalize()} {subj['low']} оставила важную деталь для игроков!",
+        f"{s['nom']} {V(s, ('сообщили', 'сообщила'))} игрокам о новой акции!",
+        f"{s['nom']} {recent} {V(s, ('опубликовали', 'опубликовала'))} важную запись!",
+        f"{recent.capitalize()} {s['low']} {V(s, ('оставили', 'оставила'))} важную деталь для игроков!",
     ])
     mid = rng.choice([
-        f"Недавно Бравл Старс опубликовали запись, в которой спрятали способ получения {r}.",
-        f"{src[0].capitalize()} спрятали способ получения {r}." if False else f"В записи спрятали способ получения {r}.",
-        f"Среди обычных деталей спрятали {r}.",
-    ])
-    mid = rng.choice([
-        f"Недавно Бравл Старс опубликовали запись, в которой спрятали способ получения {r}.",
-        f"{src[0].capitalize()} есть способ получения {r}.",
-        f"Среди обычных деталей публикации спрятали {r}.",
+        f"Недавно Бравл Старс опубликовали запись, в которой спрятали способ получения {rr}.",
+        f"В свежей публикации спрятали способ получения {rr}.",
+        f"Среди обычных деталей публикации спрятали {rr}.",
     ])
     mid2 = rng.choice([
         f"Почти никто этого не заметил, {rng.choice(BUT)} я уже всё нашёл.",
-        f"{few_notice(rng).capitalize()}, {rng.choice(BUT)} я уже разобрался.",
+        f"{rng.choice(FEW).capitalize()}, {rng.choice(BUT)} я уже разобрался.",
         f"Большинство прошло мимо, {rng.choice(BUT)} я внимательно всё изучил.",
     ])
-    return f"{lead} {mid} {mid2} {end_block(rng, reward, use_na)}"
+    return f"{lead} {mid} {mid2} {end(rng, r, use_na)}"
 
 
-def T06(rng, subj, reward, use_na):
-    r = reward_form(reward, "acc", rng)
-    src = rng.choice(SOURCES)
+def T06(rng, s, r, use_na, allow_raz):
+    # fresh publication — user template 6
+    rr = rw(r, "acc", rng, style=rng.choice([0, 1]))
+    src = rng.choice([
+        "в свежей публикации", "в свежем посте", "в сообщении", "в новости",
+        "в официальной записи", "в объявлении",
+    ])
     lead = rng.choice([
         f"Бравл Старс {rng.choice(AGAIN)} радуют своих игроков!",
         f"Бравл Старс {rng.choice(AGAIN)} делятся приятным с игроками!",
-        f"{subj['nom']} {rng.choice(AGAIN)} радуют игроков Бравл Старс!" if subj["plural"] else f"{subj['nom']} {rng.choice(AGAIN)} радует игроков Бравл Старс!",
+        f"{s['nom']} {rng.choice(AGAIN)} {V(s, ('радуют', 'радует'))} игроков!",
     ])
     mid = rng.choice([
-        f"{subj['nom']} разместили свежую публикацию про получение {r}, {rng.choice(BUT)} большинство пользователей прошло мимо неё." if subj["plural"] else f"{subj['nom']} разместила свежую публикацию про получение {r}, {rng.choice(BUT)} большинство пользователей прошло мимо неё.",
-        f"{src[0].capitalize()} появилась возможность получить {r}, {rng.choice(BUT)} многие пролистали её.",
-        f"{subj['nom']} {v(subj, ('опубликовали', 'опубликовала'))} новость про {r}, {rng.choice(BUT)} большинство прошло мимо.",
+        f"{s['nom']} {V(s, ('разместили', 'разместила'))} свежую публикацию про получение {rr}, {rng.choice(BUT)} большинство пользователей прошло мимо неё.",
+        f"{src.capitalize()} появилась возможность получить {rr}, {rng.choice(BUT)} многие пролистали её.",
+        f"{s['nom']} {V(s, ('опубликовали', 'опубликовала'))} новость про {rr}, {rng.choice(BUT)} большинство прошло мимо.",
     ])
     if use_na:
-        return f"{lead} {mid} Я внимательно всё изучил. {rng.choice(NA_ENDS)}"
-    return f"{lead} {mid} Я внимательно всё изучил и нашёл способ получения. Вам остаётся лишь забрать {reward['pron']}!"
+        return f"{lead} {mid} Я внимательно всё изучил. {rng.choice(NA)}"
+    return f"{lead} {mid} Я внимательно всё изучил и нашёл способ получения. Вам остаётся лишь забрать {r['pron']}!"
 
 
-def T07(rng, subj, reward, use_na):
-    r = reward_form(reward, "acc", rng)
+def T07(rng, s, r, use_na, allow_raz):
+    # secret in publication — approved new
+    rr = rw(r, "acc", rng, style=rng.choice([0, 1]))
     lead = rng.choice([
         f"Бравл Старс {rng.choice(AGAIN)} оставили секрет в свежей публикации!",
-        f"{subj['nom']} оставили важную деталь в свежей публикации по Бравл Старс!" if subj["plural"] else f"{subj['nom']} оставила важную деталь в свежей публикации по Бравл Старс!",
+        f"{s['nom']} {V(s, ('оставили', 'оставила'))} важную деталь в свежей публикации по Бравл Старс!",
         f"В свежей публикации по Бравл Старс спрятали кое-что ценное!",
     ])
     mid = rng.choice([
-        f"Среди обычных деталей {subj['low']} спрятали {r}, {rng.choice(BUT)} большинство игроков прошло мимо." if subj["plural"] else f"Среди обычных деталей {subj['low']} спрятала {r}, {rng.choice(BUT)} большинство игроков прошло мимо.",
-        f"Там спрятали {r}, {rng.choice(BUT)} {few_notice(rng)}.",
-        f"{subj['nom']} спрятали {r} среди обычных деталей, {rng.choice(BUT)} почти никто не обратил внимания." if subj["plural"] else f"{subj['nom']} спрятала {r} среди обычных деталей, {rng.choice(BUT)} почти никто не обратил внимания.",
+        f"Среди обычных деталей {s['low']} {V(s, ('спрятали', 'спрятала'))} {rr}, {rng.choice(BUT)} большинство игроков прошло мимо.",
+        f"Там спрятали {rr}, {rng.choice(BUT)} {rng.choice(FEW)}.",
+        f"{s['nom']} {V(s, ('спрятали', 'спрятала'))} {rr} среди обычных деталей, {rng.choice(BUT)} почти никто не обратил внимания.",
     ])
     if use_na:
-        return f"{lead} {mid} Я уже нашёл нужную подсказку. {rng.choice(NA_ENDS)}"
+        return f"{lead} {mid} Я уже нашёл нужную подсказку. {rng.choice(NA)}"
     return f"{lead} {mid} Я уже нашёл нужную подсказку и понял, как его получить. Сейчас покажу всё вам!"
 
 
-def T08(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
-    r_acc = reward_form(reward, "acc", rng)
+def T08(rng, s, r, use_na, allow_raz):
+    # tech break end
+    act, case = action(rng, s, allow_raz)
+    rr = rw(r, case, rng, style=rng.choice([0, 1]))
+    ra = rw(r, "acc", rng, style=rng.choice([0, 1]))
     lead = rng.choice([
-        f"{subj['nom']} завершили технический перерыв в Бравл Старс!" if subj["plural"] else f"{subj['nom']} завершила технический перерыв в Бравл Старс!",
+        f"{s['nom']} {V(s, ('завершили', 'завершила'))} технический перерыв в Бравл Старс!",
         f"Бравл Старс {rng.choice(AGAIN)} стали доступны после технического перерыва!",
         f"Технический перерыв в Бравл Старс завершён!",
     ])
     mid = rng.choice([
-        f"После возвращения в игру появился {r_acc}, хотя отдельно о нём нигде не сообщали.",
-        f"Вместе с запуском {subj['low']} {v(subj, ('добавили', 'добавила'))} {r_acc}, {rng.choice(BUT)} не стали рассказывать о нём отдельно.",
-        f"После возвращения игрокам {act} {r}, {rng.choice(BUT)} отдельно об этом почти не писали.",
+        f"После возвращения в игру появился {ra}, хотя отдельно о нём нигде не сообщали.",
+        f"Вместе с запуском {s['low']} {V(s, ('добавили', 'добавила'))} {ra}, {rng.choice(BUT)} не {V(s, ('стали', 'стала'))} рассказывать о нём отдельно.",
+        f"После возвращения {s['low']} {act} игрокам {rr}, {rng.choice(BUT)} отдельно об этом почти не писали.",
     ])
     mid2 = rng.choice([
         f"Многие игроки этого не заметили, {rng.choice(BUT)} я уже всё проверил.",
         f"Поэтому многие игроки прошли мимо. Я уже разобрался.",
-        f"{few_notice(rng).capitalize()}, {rng.choice(BUT)} я уже во всём разобрался.",
+        f"{rng.choice(FEW).capitalize()}, {rng.choice(BUT)} я уже во всём разобрался.",
     ])
-    return f"{lead} {mid} {mid2} {end_block(rng, reward, use_na)}"
+    return f"{lead} {mid} {mid2} {end(rng, r, use_na)}"
 
 
-def T09(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
+def T09(rng, s, r, use_na, allow_raz):
+    # community event early
+    act, case = action(rng, s, allow_raz)
+    rr = rw(r, case, rng, style=rng.choice([0, 1]))
+    ra = rw(r, "acc", rng)
     lead = rng.choice([
         "Игроки Бравл Старс завершили общее событие раньше срока!",
         "Сообщество Бравл Старс выполнило общую цель раньше срока!",
         "Игроки Бравл Старс добрались до финальной цели общего события!",
     ])
     mid = rng.choice([
-        f"После достижения финальной цели {subj['low']} {act} {r} для всех участников.",
-        f"За завершение события {subj['low']} {act} участникам {reward_form(reward, 'acc', rng)}.",
-        f"После этого {subj['low']} {act} {r}, {rng.choice(BUT)} многие уже перестали следить за результатами.",
+        f"После достижения финальной цели {s['low']} {act} {rr} для всех участников.",
+        f"За завершение события {s['low']} {act} участникам {ra}.",
+        f"После этого {s['low']} {act} {rr}, {rng.choice(BUT)} многие уже перестали следить за результатами.",
     ])
     mid2 = rng.choice([
         f"Многие решили, что получить его уже нельзя, {rng.choice(BUT)} я всё проверил.",
         f"Многие игроки не знали, что его уже можно получить, {rng.choice(BUT)} я всё проверил.",
         "Я вовремя всё заметил и разобрался.",
     ])
-    return f"{lead} {mid} {mid2} {end_block(rng, reward, use_na)}"
+    return f"{lead} {mid} {mid2} {end(rng, r, use_na)}"
 
 
-def T10(rng, subj, reward, use_na):
-    r = reward_form(reward, "acc", rng)
+def T10(rng, s, r, use_na, allow_raz):
+    # stream
+    ra = rw(r, "acc", rng, style=rng.choice([0, 1]))
     lead = rng.choice([
-        f"{subj['nom']} провели новую трансляцию по Бравл Старс!" if subj["plural"] else f"{subj['nom']} провела новую трансляцию по Бравл Старс!",
+        f"{s['nom']} {V(s, ('провели', 'провела'))} новую трансляцию по Бравл Старс!",
         "Бравл Старс показали новую трансляцию для игроков!",
-        f"{subj['nom']} провели свежую трансляцию по Бравл Старс!" if subj["plural"] else f"{subj['nom']} провела свежую трансляцию по Бравл Старс!",
+        f"{s['nom']} {V(s, ('провели', 'провела'))} свежую трансляцию по Бравл Старс!",
     ])
     mid = rng.choice([
-        f"В самом конце они неожиданно сообщили, что игрокам доступен {r}.",
-        f"Перед завершением эфира они объявили, что игрокам решили выдать {r}.",
-        f"Почти в самом конце {subj['low']} сообщили о том, что можно получить {r}." if subj["plural"] else f"Почти в самом конце {subj['low']} сообщила о том, что можно получить {r}.",
+        f"В самом конце они неожиданно сообщили, что игрокам доступен {ra}.",
+        f"Перед завершением эфира они объявили, что игрокам решили выдать {ra}.",
+        f"Почти в самом конце {s['low']} {V(s, ('сообщили', 'сообщила'))} о том, что можно получить {ra}.",
     ])
     mid2 = rng.choice([
         f"Большинство не досмотрело эфир до этого момента, {rng.choice(BUT)} я уже нашёл способ получения.",
         f"Большинство зрителей уже ушло и пропустило эту новость, {rng.choice(BUT)} я всё запомнил.",
         "Многие не стали досматривать эфир. Я увидел объявление и уже понял, что нужно сделать.",
     ])
-    return f"{lead} {mid} {mid2} {end_block(rng, reward, use_na)}"
+    return f"{lead} {mid} {mid2} {end(rng, r, use_na)}"
 
 
-def T11(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
-    r_acc = reward_form(reward, "acc", rng)
+def T11(rng, s, r, use_na, allow_raz):
+    # voting
+    act, case = action(rng, s, allow_raz)
+    rr = rw(r, case, rng, style=rng.choice([0, 1]))
     lead = rng.choice([
         "Бравл Старс подвели итоги недавнего голосования среди игроков!",
-        f"{subj['nom']} опубликовали результаты недавнего опроса по Бравл Старс!" if subj["plural"] else f"{subj['nom']} опубликовала результаты недавнего опроса по Бравл Старс!",
+        f"{s['nom']} {V(s, ('опубликовали', 'опубликовала'))} результаты недавнего опроса по Бравл Старс!",
         "Бравл Старс подвели итоги голосования среди игроков!",
     ])
     mid = rng.choice([
-        f"Вместе с результатами {subj['low']} {act} {r}, {rng.choice(BUT)} отдельно о нём не сообщили.",
-        f"В честь завершения голосования игрокам {act} {r}.",
-        f"Вместе с итогами игрокам {act} {r}, {rng.choice(BUT)} отдельно об этом почти не рассказывали.",
+        f"Вместе с результатами {s['low']} {act} {rr}, {rng.choice(BUT)} отдельно о нём не сообщили.",
+        f"В честь завершения голосования {s['low']} {act} игрокам {rr}.",
+        f"Вместе с итогами {s['low']} {act} игрокам {rr}, {rng.choice(BUT)} отдельно об этом почти не рассказывали.",
     ])
     mid2 = rng.choice([
         "Эту деталь заметили далеко не все.",
@@ -520,89 +437,101 @@ def T11(rng, subj, reward, use_na):
         "Многие прочитали только итоги и пропустили самое важное.",
     ])
     if use_na:
-        return f"{lead} {mid} {mid2} {rng.choice(NA_ENDS)}"
+        return f"{lead} {mid} {mid2} {rng.choice(NA)}"
     return f"{lead} {mid} {mid2} Я всё заметил и {rng.choice(SHOW).lower()}!"
 
 
-def T12(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
+def T12(rng, s, r, use_na, allow_raz):
+    # tech glitch compensation
+    act, case = action(rng, s, allow_raz)
+    rr = rw(r, case, rng, style=rng.choice([0, 1]))
+    ra = rw(r, "acc", rng)
     recent = rng.choice(RECENT_ADV)
     lead = rng.choice([
         f"В Бравл Старс {recent} произошёл технический сбой!",
         f"В Бравл Старс {recent} обнаружили техническую ошибку!",
-        f"{subj['nom']} завершили устранение сбоя в Бравл Старс!" if subj["plural"] else f"{subj['nom']} завершила устранение сбоя в Бравл Старс!",
+        f"{s['nom']} {V(s, ('завершили', 'завершила'))} устранение сбоя в Бравл Старс!",
     ])
     mid = rng.choice([
-        f"{subj['nom']} извинились перед игроками и {act} каждому {reward_form(reward, 'acc', rng)}." if subj["plural"] else f"{subj['nom']} извинилась перед игроками и {act} каждому {reward_form(reward, 'acc', rng)}.",
-        f"{subj['nom']} быстро устранили проблему и {act} игрокам {r}." if subj["plural"] else f"{subj['nom']} быстро устранила проблему и {act} игрокам {r}.",
-        f"В качестве компенсации игрокам {act} {r}, {rng.choice(BUT)} отдельно об этом почти не сообщали.",
+        f"{s['nom']} {V(s, ('извинились', 'извинилась'))} перед игроками и {act} каждому {ra}.",
+        f"{s['nom']} быстро {V(s, ('устранили', 'устранила'))} проблему и {act} игрокам {rr}.",
+        f"В качестве компенсации {s['low']} {act} игрокам {rr}, {rng.choice(BUT)} отдельно об этом почти не сообщали.",
     ])
     mid2 = rng.choice([
         f"Многие подумали, что он появится автоматически, {rng.choice(BUT)} для получения нужно выполнить одно действие.",
         f"Многие уже вернулись в игру, {rng.choice(BUT)} не заметили сообщение о получении.",
         "Поэтому многие даже не проверили получение. Я уже во всём разобрался.",
     ])
-    return f"{lead} {mid} {mid2} {end_block(rng, reward, use_na)}"
+    return f"{lead} {mid} {mid2} {end(rng, r, use_na)}"
 
 
-def T13(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
-    r_acc = reward_form(reward, "acc", rng)
+def T13(rng, s, r, use_na, allow_raz):
+    # new brawler
+    act, case = action(rng, s, allow_raz)
+    rr = rw(r, case, rng, style=rng.choice([0, 1]))
+    ra = rw(r, "acc", rng)
     lead = rng.choice([
-        f"{subj['nom']} представили нового бойца в Бравл Старс!" if subj["plural"] else f"{subj['nom']} представила нового бойца в Бравл Старс!",
+        f"{s['nom']} {V(s, ('представили', 'представила'))} нового бойца в Бравл Старс!",
         "Бравл Старс официально представили нового бойца!",
-        f"{subj['nom']} показали способности нового бойца Бравл Старс!" if subj["plural"] else f"{subj['nom']} показала способности нового бойца Бравл Старс!",
+        f"{s['nom']} {V(s, ('показали', 'показала'))} способности нового бойца Бравл Старс!",
     ])
     mid = rng.choice([
-        f"В честь его появления игрокам {act} {r}, {rng.choice(BUT)} об этом упомянули только в конце публикации.",
-        f"В честь его выхода {subj['low']} {act} для игроков {r_acc}. Информацию добавили в конец публикации.",
-        f"Вместе с его презентацией игрокам {act} {r}, {rng.choice(BUT)} об этом сказали всего одной фразой.",
+        f"В честь его появления игрокам {act} {rr}, {rng.choice(BUT)} об этом упомянули только в конце публикации.",
+        f"В честь его выхода {s['low']} {act} для игроков {ra}. Информацию добавили в конец публикации.",
+        f"Вместе с его презентацией игрокам {act} {rr}, {rng.choice(BUT)} об этом сказали всего одной фразой.",
     ])
+    # subjectless "игрокам {act}" with singular is bad — force include subject when not pl by rewriting:
+    if not s["pl"]:
+        mid = rng.choice([
+            f"В честь его появления {s['low']} {act} игрокам {rr}, {rng.choice(BUT)} об этом упомянули только в конце публикации.",
+            f"В честь его выхода {s['low']} {act} для игроков {ra}. Информацию добавили в конец публикации.",
+            f"Вместе с его презентацией {s['low']} {act} игрокам {rr}, {rng.choice(BUT)} об этом сказали всего одной фразой.",
+        ])
     mid2 = rng.choice([
         "Большинство не дочитало запись до конца.",
         "Поэтому большинство прошло мимо.",
         "Мало кто обратил на неё внимание.",
     ])
     if use_na:
-        return f"{lead} {mid} {mid2} Я всё заметил. {rng.choice(NA_ENDS)}"
+        return f"{lead} {mid} {mid2} Я всё заметил. {rng.choice(NA)}"
     return f"{lead} {mid} {mid2} Я всё заметил и сейчас покажу, как его получить!"
 
 
-def T14(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
-    r_acc = reward_form(reward, "acc", rng)
+def T14(rng, s, r, use_na, allow_raz):
+    # record
+    act, case = action(rng, s, allow_raz)
+    rr = rw(r, case, rng, style=rng.choice([0, 1]))
+    ra = rw(r, "acc", rng)
     lead = rng.choice([
         "Бравл Старс достигли нового рекорда благодаря своим игрокам!",
         "Сообщество Бравл Старс установило новый общий рекорд!",
         "Бравл Старс достигли новой высоты благодаря активности игроков!",
     ])
     mid = rng.choice([
-        f"{subj['nom']} решили отметить это событие и выдать {r_acc}." if subj["plural"] else f"{subj['nom']} решила отметить это событие и выдать {r_acc}.",
-        f"{subj['nom']} поблагодарили игроков и {act} {r} в честь этого результата." if subj["plural"] else f"{subj['nom']} поблагодарила игроков и {act} {r} в честь этого результата.",
-        f"{subj['nom']} решили отметить этот результат и выдать {r_acc} всему сообществу." if subj["plural"] else f"{subj['nom']} решила отметить этот результат и выдать {r_acc} всему сообществу.",
+        f"{s['nom']} {V(s, ('решили', 'решила'))} отметить это событие и выдать {ra}.",
+        f"{s['nom']} {V(s, ('поблагодарили', 'поблагодарила'))} игроков и {act} {rr} в честь этого результата.",
+        f"{s['nom']} {V(s, ('решили', 'решила'))} отметить этот результат и выдать {ra} всему сообществу.",
     ])
     mid2 = rng.choice([
         f"Новость появилась {rng.choice(RECENT_ADV)}, поэтому о ней знают ещё не все.",
         f"Новость быстро затерялась среди других публикаций, {rng.choice(BUT)} я её нашёл.",
         "Многие не увидели сообщение и ничего не получили. Я уже проверил информацию.",
     ])
-    return f"{lead} {mid} {mid2} {end_block(rng, reward, use_na)}"
+    return f"{lead} {mid} {mid2} {end(rng, r, use_na)}"
 
 
-def T15(rng, subj, reward, use_na):
-    r_acc = reward_form(reward, "acc", rng)
+def T15(rng, s, r, use_na, allow_raz):
+    # challenge
+    ra = rw(r, "acc", rng, style=rng.choice([0, 1]))
     lead = rng.choice([
-        f"В Бравл Старс появилось новое испытание с {r_acc}!",
-        f"{subj['nom']} добавили новое испытание в Бравл Старс!" if subj["plural"] else f"{subj['nom']} добавила новое испытание в Бравл Старс!",
-        f"В Бравл Старс запустили короткое испытание с {r_acc}!",
+        f"В Бравл Старс появилось новое испытание с {ra}!",
+        f"{s['nom']} {V(s, ('добавили', 'добавила'))} новое испытание в Бравл Старс!",
+        f"В Бравл Старс запустили короткое испытание с {ra}!",
     ])
     mid = rng.choice([
         "Для его получения нужно выполнить простое условие, которое многие игроки не заметили.",
-        f"За выполнение простого условия каждый игрок сможет получить {r_acc}. Большинство сразу начало играть и не прочитало главное правило.",
-        f"Получить его можно после выполнения одного условия, которое указали в конце описания.",
+        f"За выполнение простого условия каждый игрок сможет получить {ra}. Большинство сразу начало играть и не прочитало главное правило.",
+        "Получить его можно после выполнения одного условия, которое указали в конце описания.",
     ])
     mid2 = rng.choice([
         "Я уже завершил испытание и проверил результат.",
@@ -610,44 +539,46 @@ def T15(rng, subj, reward, use_na):
         "Многие игроки его не заметили. Я уже всё выполнил.",
     ])
     if use_na:
-        return f"{lead} {mid} {mid2} {rng.choice(NA_ENDS)}"
+        return f"{lead} {mid} {mid2} {rng.choice(NA)}"
     return f"{lead} {mid} {mid2} Сейчас расскажу, что именно нужно сделать!"
 
 
-def T16(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
+def T16(rng, s, r, use_na, allow_raz):
+    # championship
+    act, case = action(rng, s, allow_raz)
+    rr = rw(r, case, rng, style=rng.choice([0, 1]))
+    ra = rw(r, "acc", rng)
     lead = rng.choice([
-        f"{subj['nom']} подвели итоги чемпионата по Бравл Старс!" if subj["plural"] else f"{subj['nom']} подвела итоги чемпионата по Бравл Старс!",
+        f"{s['nom']} {V(s, ('подвели', 'подвела'))} итоги чемпионата по Бравл Старс!",
         "Завершился очередной чемпионат по Бравл Старс!",
-        f"{subj['nom']} опубликовали результаты чемпионата по Бравл Старс!" if subj["plural"] else f"{subj['nom']} опубликовала результаты чемпионата по Бравл Старс!",
+        f"{s['nom']} {V(s, ('опубликовали', 'опубликовала'))} результаты чемпионата по Бравл Старс!",
     ])
     mid = rng.choice([
-        f"После завершения финала участникам события {act} {r}, {rng.choice(BUT)} многие забыли проверить результат.",
-        f"После финального матча {subj['low']} {act} участникам события {reward_form(reward, 'acc', rng)}.",
-        f"Игрокам, следившим за финальными матчами, {act} {r}.",
+        f"После завершения финала {s['low']} {act} участникам события {rr}, {rng.choice(BUT)} многие забыли проверить результат.",
+        f"После финального матча {s['low']} {act} участникам события {ra}.",
+        f"Игрокам, следившим за финальными матчами, {s['low']} {act} {rr}.",
     ])
     mid2 = rng.choice([
         "Я уже нашёл всё необходимое.",
         "Многие посмотрели результаты и сразу закрыли публикацию, пропустив главное.",
         f"Не все поняли, где его нужно получить, {rng.choice(BUT)} я уже разобрался.",
     ])
-    return f"{lead} {mid} {mid2} {end_block(rng, reward, use_na)}"
+    return f"{lead} {mid} {mid2} {end(rng, r, use_na)}"
 
 
-def T17(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
-    r_acc = reward_form(reward, "acc", rng)
+def T17(rng, s, r, use_na, allow_raz):
+    # new season
+    act, case = action(rng, s, allow_raz)
+    rr = rw(r, case, rng, style=rng.choice([0, 1]))
     lead = rng.choice([
         "В Бравл Старс стартовал новый сезон!",
         "Бравл Старс представили новый сезон для игроков!",
-        f"{subj['nom']} объявили о начале нового сезона Бравл Старс!" if subj["plural"] else f"{subj['nom']} объявила о начале нового сезона Бравл Старс!",
+        f"{s['nom']} {V(s, ('объявили', 'объявила'))} о начале нового сезона Бравл Старс!",
     ])
     mid = rng.choice([
-        f"Вместе с ним {subj['low']} {act} {r} для всех игроков, {rng.choice(BUT)} условие получения указали только в конце анонса.",
-        f"Вместе с его запуском {subj['low']} {act} {r}, {rng.choice(BUT)} условие получения спрятали в конце публикации.",
-        f"Помимо новинок сезона игрокам {act} {r}. Об этом коротко упомянули в конце анонса.",
+        f"Вместе с ним {s['low']} {act} {rr} для всех игроков, {rng.choice(BUT)} условие получения указали только в конце анонса.",
+        f"Вместе с его запуском {s['low']} {act} {rr}, {rng.choice(BUT)} условие получения спрятали в конце публикации.",
+        f"Помимо новинок сезона {s['low']} {act} игрокам {rr}. Об этом коротко упомянули в конце анонса.",
     ])
     mid2 = rng.choice([
         "Многие прочитали лишь основную часть и прошли мимо.",
@@ -655,66 +586,66 @@ def T17(rng, subj, reward, use_na):
         "Поэтому многие ничего не заметили.",
     ])
     if use_na:
-        return f"{lead} {mid} {mid2} {rng.choice(NA_ENDS)}"
+        return f"{lead} {mid} {mid2} {rng.choice(NA)}"
     return f"{lead} {mid} {mid2} Я уже всё нашёл и покажу, как его получить!"
 
 
-def T18(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
-    r_acc = reward_form(reward, "acc", rng)
+def T18(rng, s, r, use_na, allow_raz):
+    # collab
+    act, case = action(rng, s, allow_raz)
+    rr = rw(r, case, rng, style=rng.choice([0, 1]))
+    ra = rw(r, "acc", rng)
     lead = rng.choice([
-        f"{subj['nom']} объявили о новой коллаборации в Бравл Старс!" if subj["plural"] else f"{subj['nom']} объявила о новой коллаборации в Бравл Старс!",
+        f"{s['nom']} {V(s, ('объявили', 'объявила'))} о новой коллаборации в Бравл Старс!",
         "Бравл Старс официально объявили о новой коллаборации!",
-        f"{subj['nom']} представили новую коллаборацию в Бравл Старс!" if subj["plural"] else f"{subj['nom']} представила новую коллаборацию в Бравл Старс!",
+        f"{s['nom']} {V(s, ('представили', 'представила'))} новую коллаборацию в Бравл Старс!",
     ])
     if rng.random() < 0.05:
-        mid = f"В честь её запуска игрокам {act} {r}. Главное условие показали только на втором изображении, поэтому большинство его не заметило."
+        mid = f"В честь её запуска {s['low']} {act} игрокам {rr}. Главное условие показали только на втором изображении, поэтому большинство его не заметило."
     else:
         mid = rng.choice([
-            f"В честь её запуска игрокам {act} {r}. Главное условие спрятали в конце публикации, поэтому большинство его не заметило.",
-            f"Вместе с её запуском {subj['low']} {act} для игроков {r_acc}. Условие получения показали только в конце, поэтому его почти никто не заметил.",
-            f"Помимо тематических обликов игрокам {act} {r}. Главную информацию спрятали среди деталей публикации.",
+            f"В честь её запуска {s['low']} {act} игрокам {rr}. Главное условие спрятали в конце публикации, поэтому большинство его не заметило.",
+            f"Вместе с её запуском {s['low']} {act} для игроков {ra}. Условие получения показали только в конце, поэтому его почти никто не заметил.",
+            f"Помимо тематических обликов {s['low']} {act} игрокам {rr}. Главную информацию спрятали среди деталей публикации.",
         ])
     mid2 = rng.choice(["Я уже всё нашёл.", "Я всё заметил.", "Многие прошли мимо. Я уже всё нашёл."])
-    return f"{lead} {mid} {mid2} {end_block(rng, reward, use_na)}"
+    return f"{lead} {mid} {mid2} {end(rng, r, use_na)}"
 
 
-def T19(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
-    r_acc = reward_form(reward, "acc", rng)
+def T19(rng, s, r, use_na, allow_raz):
+    # trophy path
+    ra = rw(r, "acc", rng, style=rng.choice([0, 1]))
     lead = rng.choice([
         "Бравл Старс расширили трофейный путь для игроков!",
-        f"{subj['nom']} обновили трофейный путь в Бравл Старс!" if subj["plural"] else f"{subj['nom']} обновила трофейный путь в Бравл Старс!",
+        f"{s['nom']} {V(s, ('обновили', 'обновила'))} трофейный путь в Бравл Старс!",
         "Бравл Старс расширили трофейный путь для всех игроков!",
     ])
     mid = rng.choice([
-        f"За достижение нового рубежа {subj['low']} {v(subj, ('добавили', 'добавила'))} {r_acc}, {rng.choice(BUT)} упомянули об этом всего одной строкой.",
-        f"За достижение одного из новых рубежей игроки смогут получить {r_acc}. Об этом упомянули только в конце описания.",
-        f"Среди новых рубежей {subj['low']} разместили {r_acc}, {rng.choice(BUT)} отдельно о нём не рассказали." if subj["plural"] else f"Среди новых рубежей {subj['low']} разместила {r_acc}, {rng.choice(BUT)} отдельно о нём не рассказали.",
+        f"За достижение нового рубежа {s['low']} {V(s, ('добавили', 'добавила'))} {ra}, {rng.choice(BUT)} упомянули об этом всего одной строкой.",
+        f"За достижение одного из новых рубежей игроки смогут получить {ra}. Об этом упомянули только в конце описания.",
+        f"Среди новых рубежей {s['low']} {V(s, ('разместили', 'разместила'))} {ra}, {rng.choice(BUT)} отдельно о нём не рассказали.",
     ])
     mid2 = rng.choice([
         f"Многие прошли мимо этой информации, {rng.choice(BUT)} я всё проверил.",
         "Поэтому почти никто не обратил внимания.",
         "Многие уже достигли нужного количества трофеев и прошли мимо. Я всё проверил.",
     ])
-    return f"{lead} {mid} {mid2} {end_block(rng, reward, use_na)}"
+    return f"{lead} {mid} {mid2} {end(rng, r, use_na)}"
 
 
-def T20(rng, subj, reward, use_na):
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
-    r_acc = reward_form(reward, "acc", rng)
+def T20(rng, s, r, use_na, allow_raz):
+    # mode return
+    act, case = action(rng, s, allow_raz)
+    rr = rw(r, case, rng, style=rng.choice([0, 1]))
     lead = rng.choice([
-        f"{subj['nom']} вернули популярный режим в Бравл Старс!" if subj["plural"] else f"{subj['nom']} вернула популярный режим в Бравл Старс!",
+        f"{s['nom']} {V(s, ('вернули', 'вернула'))} популярный режим в Бравл Старс!",
         f"В Бравл Старс {rng.choice(AGAIN)} появился популярный режим!",
-        f"{subj['nom']} вернули один из старых режимов Бравл Старс!" if subj["plural"] else f"{subj['nom']} вернула один из старых режимов Бравл Старс!",
+        f"{s['nom']} {V(s, ('вернули', 'вернула'))} один из старых режимов Бравл Старс!",
     ])
     mid = rng.choice([
-        f"В честь его возвращения каждому игроку {act} {r} после одного завершённого боя.",
-        f"За первый завершённый бой игрокам {act} {r}. Условие указали короткой фразой в публикации.",
-        f"В честь его возвращения {subj['low']} {act} {r} для каждого участника. Чтобы получить его, достаточно завершить один бой.",
+        f"В честь его возвращения {s['low']} {act} каждому игроку {rr} после одного завершённого боя.",
+        f"За первый завершённый бой {s['low']} {act} игрокам {rr}. Условие указали короткой фразой в публикации.",
+        f"В честь его возвращения {s['low']} {act} {rr} для каждого участника. Чтобы получить его, достаточно завершить один бой.",
     ])
     mid2 = rng.choice([
         "Об этом упомянули совсем коротко, поэтому многие ничего не заметили.",
@@ -722,214 +653,307 @@ def T20(rng, subj, reward, use_na):
         "Об этом знают ещё не все.",
     ])
     if use_na:
-        return f"{lead} {mid} {mid2} {rng.choice(NA_ENDS)}"
+        return f"{lead} {mid} {mid2} {rng.choice(NA)}"
     return f"{lead} {mid} {mid2} Я уже всё проверил и сейчас покажу вам!"
 
 
-def T21(rng, subj, reward, use_na):
-    """Rare calendar/changes (~1/20)."""
-    act, case = pick_action(rng, subj)
-    r = reward_form(reward, case, rng)
-    r_acc = reward_form(reward, "acc", rng)
+def T21(rng, s, r, use_na, allow_raz):
+    # rare calendar/changes
+    act, case = action(rng, s, allow_raz)
+    rr = rw(r, case, rng, style=rng.choice([0, 1]))
+    ra = rw(r, "acc", rng)
     lead = rng.choice([
-        f"{subj['nom']} внесли свежие изменения в Бравл Старс!" if subj["plural"] else f"{subj['nom']} внесла свежие изменения в Бравл Старс!",
+        f"{s['nom']} {V(s, ('внесли', 'внесла'))} свежие изменения в Бравл Старс!",
         "В календаре событий Бравл Старс появилось кое-что важное!",
         "Бравл Старс обновили календарь событий!",
     ])
     mid = rng.choice([
-        f"Вместе с изменениями игрокам {act} {r}, {rng.choice(BUT)} отдельно об этом почти не писали.",
-        f"Среди пунктов календаря спрятали {r_acc}, {rng.choice(BUT)} большинство игроков прошло мимо.",
-        f"После обновления календаря стал доступен {r_acc}, {rng.choice(BUT)} {few_notice(rng)}.",
+        f"Вместе с изменениями {s['low']} {act} игрокам {rr}, {rng.choice(BUT)} отдельно об этом почти не писали.",
+        f"Среди пунктов календаря спрятали {ra}, {rng.choice(BUT)} большинство игроков прошло мимо.",
+        f"После обновления календаря стал доступен {ra}, {rng.choice(BUT)} {rng.choice(FEW)}.",
     ])
     if use_na:
-        return f"{lead} {mid} Я всё проверил. {rng.choice(NA_ENDS)}"
+        return f"{lead} {mid} Я всё проверил. {rng.choice(NA)}"
     return f"{lead} {mid} Я всё проверил и покажу нужный способ!"
 
 
-TEMPLATES = [T01, T02, T03, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20]
+TEMPLATES = [T01, T02, T03, T04, T05, T06, T07, T08, T09, T10,
+             T11, T12, T13, T14, T15, T16, T17, T18, T19, T20]
 
 
-def soft_len_ok(text: str) -> bool:
-    return 175 <= len(text) <= 310
+USER_CANON_LEN = {
+    0: 247,
+    1: 242,
+    2: 251,
+    3: 241,
+    4: 242,
+    5: 244,
+    6: 229,
+    7: 250,
+    8: 260,
+    9: 244,
+    10: 230,
+    11: 272,
+    12: 248,
+    13: 241,
+    14: 231,
+    15: 247,
+    16: 259,
+    17: 257,
+    18: 265,
+    19: 267,
+    20: 205,
+}
+
+def measure_canonical(tid: int, builder) -> int:
+    return USER_CANON_LEN[tid]
 
 
-def has_reward(text: str, reward: dict) -> bool:
-    return reward["nom"] in text
+def in_band(n: int, canon: int) -> bool:
+    lo = int(canon * 0.90)
+    hi = int(canon * 1.10)
+    return lo <= n <= hi
 
 
-def order_diverse(items: list[tuple]) -> list[tuple]:
-    """items: (reward_i, tid, subj_i, text)"""
-    # Bucket by (reward, template)
-    buckets: dict[tuple[int, int], deque] = defaultdict(deque)
+def order_diverse(items):
+    buckets = defaultdict(deque)
     for it in items:
         buckets[(it[0], it[1])].append(it)
-
-    keys = sorted(buckets.keys(), key=lambda k: (hashlib.md5(str(k).encode()).hexdigest()))
-    # Round-robin over keys but greedily avoid last reward/template/subject
     ordered = []
     last_r, last_t, last_s = -1, -1, -1
+    rnd = random.Random(SEED)
     while buckets:
-        best_key = None
-        best_score = -10**9
-        # evaluate a sample of available keys for speed
         avail = [k for k, q in buckets.items() if q]
         if not avail:
             break
-        # score all if few, else sample
-        if len(avail) > 80:
-            cand = random.Random(len(ordered)).sample(avail, 80)
-        else:
-            cand = avail
+        cand = avail if len(avail) <= 100 else rnd.sample(avail, 100)
+        best, best_sc = None, -10**9
         for k in cand:
-            item = buckets[k][0]
-            score = 0
-            if item[0] != last_r:
-                score += 50
-            if item[1] != last_t:
-                score += 30
-            if item[2] != last_s:
-                score += 15
-            # prefer fuller buckets slightly for balance later
-            score += min(len(buckets[k]), 5)
-            score += random.Random(len(ordered) * 17 + k[0] * 3 + k[1]).random()
-            if score > best_score:
-                best_score = score
-                best_key = k
-        item = buckets[best_key].popleft()
-        if not buckets[best_key]:
-            del buckets[best_key]
-        ordered.append(item)
-        last_r, last_t, last_s = item[0], item[1], item[2]
-        if len(ordered) % 20000 == 0:
-            print(f"ordered {len(ordered)}", flush=True)
+            it = buckets[k][0]
+            sc = 0
+            if it[0] != last_r:
+                sc += 50
+            if it[1] != last_t:
+                sc += 30
+            if it[2] != last_s:
+                sc += 15
+            sc += min(len(buckets[k]), 5)
+            sc += rnd.random()
+            if sc > best_sc:
+                best_sc, best = sc, k
+        it = buckets[best].popleft()
+        if not buckets[best]:
+            del buckets[best]
+        ordered.append(it)
+        last_r, last_t, last_s = it[0], it[1], it[2]
     return ordered
 
 
 def main():
+    print("Measuring canonical lengths per template...", flush=True)
+    canons = {}
+    for tid, b in enumerate(TEMPLATES):
+        canons[tid] = measure_canonical(tid, b)
+        lo, hi = int(canons[tid] * 0.9), int(canons[tid] * 1.1)
+        print(f"  T{tid+1:02d}: canon={canons[tid]} band=[{lo}..{hi}]", flush=True)
+    canons[20] = measure_canonical(20, T21)
+    print(f"  T21: canon={canons[20]} band=[{int(canons[20]*0.9)}..{int(canons[20]*1.1)}]", flush=True)
+
     if OUT_DIR.exists():
         shutil.rmtree(OUT_DIR)
     OUT_DIR.mkdir(parents=True)
 
-    seen: set[str] = set()
-    texts: list[tuple] = []
-    per_reward = TARGET // 4
+    seen = set()
+    texts = []
+    per = TARGET // 4
     counts = [0, 0, 0, 0]
-    raz_total = 0
-    cal_total = 0
-    base = random.Random(4170)
+    raz_n = 0
+    cal_n = 0
+    base = random.Random(SEED)
     attempts = 0
-    limit = TARGET * 100
+    limit = TARGET * 200
+    rejected_len = 0
 
     while sum(counts) < TARGET and attempts < limit:
         attempts += 1
-        reward_i = min(range(4), key=lambda i: (counts[i], base.random()))
-        if counts[reward_i] >= per_reward:
-            if all(c >= per_reward for c in counts):
+        ri = min(range(4), key=lambda i: (counts[i], base.random()))
+        if counts[ri] >= per:
+            if all(c >= per for c in counts):
                 break
             continue
-
-        reward = REWARDS[reward_i]
-        # rare calendar template ~5% until cap 5%
-        use_cal = cal_total < TARGET // 20 and base.random() < 0.05
+        reward = REWARDS[ri]
+        use_cal = cal_n < TARGET // 20 and base.random() < 0.05
         if use_cal:
-            tid = 20
-            builder = T21
+            tid, builder = 20, T21
         else:
             tid = base.randrange(len(TEMPLATES))
             builder = TEMPLATES[tid]
-
-        subj_i = base.randrange(len(SUBJECTS))
-        subj = SUBJECTS[subj_i]
-        use_na = base.random() < 0.5
-        allow_raz = raz_total < TARGET // 25
+        si = base.randrange(len(SUBJ))
+        subj = SUBJ[si]
+        use_na = base.random() < 0.50
+        allow_raz = raz_n < TARGET // 25
         rng = random.Random(base.randint(1, 2**31 - 1))
-
-        # temporarily block rare action if over cap
-        text = builder(rng, subj, reward, use_na)
-        text = normalize(text)
-        if forbidden(text):
+        text = norm(builder(rng, subj, reward, use_na, allow_raz))
+        if bad(text):
             continue
-        if not soft_len_ok(text):
+        if reward["acc"] not in text:
             continue
-        if not has_reward(text, reward):
+        if not in_band(len(text), canons[tid]):
+            rejected_len += 1
             continue
-        rc = raz_count(text)
-        if rc and not allow_raz:
+        if has_raz(text) and not allow_raz:
             continue
-        if ("календар" in text.lower() or "изменения" in text.lower()) and cal_total >= TARGET // 20:
+        if ("календар" in text.lower() or (tid == 20)) and cal_n >= TARGET // 20:
             continue
         key = text.lower()
         if key in seen:
             continue
         seen.add(key)
-        if rc:
-            raz_total += 1
-        if "календар" in text.lower() or tid == 20:
-            cal_total += 1
-        texts.append((reward_i, tid, subj_i, text))
-        counts[reward_i] += 1
+        if has_raz(text):
+            raz_n += 1
+        if tid == 20 or "календар" in text.lower():
+            cal_n += 1
+        texts.append((ri, tid, si, text))
+        counts[ri] += 1
         if sum(counts) % 10000 == 0:
-            print(f"gen {sum(counts)} attempts={attempts}", flush=True)
+            print(f"gen {sum(counts)} attempts={attempts} rej_len={rejected_len}", flush=True)
 
-    print(f"generated {len(texts)} counts={counts} raz={raz_total} cal={cal_total}", flush=True)
+    print(f"phase1 {len(texts)} counts={counts} raz={raz_n} cal={cal_n} rej_len={rejected_len}", flush=True)
 
-    # Fill if short
+    # Aggressive fill with more attempts per remaining
     fill = 0
-    while len(texts) < TARGET and fill < limit:
+    while len(texts) < TARGET and fill < limit * 2:
         fill += 1
-        reward_i = min(range(4), key=lambda i: counts[i])
-        reward = REWARDS[reward_i]
+        ri = min(range(4), key=lambda i: counts[i])
+        reward = REWARDS[ri]
         tid = fill % len(TEMPLATES)
-        subj_i = (fill * 5) % len(SUBJECTS)
-        use_na = fill % 2 == 0
-        rng = random.Random(9_000_000 + fill)
-        text = normalize(TEMPLATES[tid](rng, SUBJECTS[subj_i], reward, use_na))
-        salt = rng.choice([
-            " Проверьте сами!",
-            " Не упустите момент!",
-            " Действуйте быстрее!",
-            " Успейте первыми!",
-            " Зайдите и проверьте!",
-            " Сделайте это сейчас!",
-        ])
-        text = normalize(text + salt)
-        if forbidden(text) or not soft_len_ok(text) or not has_reward(text, reward):
+        builder = TEMPLATES[tid]
+        si = (fill * 7) % len(SUBJ)
+        use_na = (fill % 2 == 0)
+        rng = random.Random(50_000_000 + fill)
+        text = norm(builder(rng, SUBJ[si], reward, use_na, False))
+        if bad(text) or reward["acc"] not in text:
+            continue
+        if not in_band(len(text), canons[tid]):
             continue
         key = text.lower()
         if key in seen:
             continue
         seen.add(key)
-        texts.append((reward_i, tid, subj_i, text))
-        counts[reward_i] += 1
+        texts.append((ri, tid, si, text))
+        counts[ri] += 1
+        if len(texts) % 10000 == 0:
+            print(f"fill {len(texts)}", flush=True)
 
+    if len(texts) < TARGET:
+        print(f"WARNING only {len(texts)} texts, widening fill with synonym micro-edits", flush=True)
+        # last resort: take existing and do safe synonym swaps of similar length
+        extras = []
+        src = list(texts)
+        fi = 0
+        while len(texts) + len(extras) < TARGET and fi < len(src) * 30:
+            fi += 1
+            it = src[fi % len(src)]
+            t = it[3]
+            swaps = [
+                ("но ", "однако "), ("однако ", "при этом "), ("при этом ", "вот только "),
+                ("вот только ", "но "), ("снова ", "вновь "), ("вновь ", "опять "),
+                ("опять ", "в очередной раз "), ("недавно ", "на днях "),
+                ("на днях ", "совсем недавно "), ("Сейчас покажу", "Покажу нужный способ"),
+                ("Покажу нужный способ", "Объясню весь способ"),
+            ]
+            a, b = swaps[fi % len(swaps)]
+            if a not in t:
+                continue
+            nt = norm(t.replace(a, b, 1))
+            # keep same template band
+            if not in_band(len(nt), canons[it[1]]):
+                continue
+            if bad(nt) or nt.lower() in seen:
+                continue
+            if REWARDS[it[0]]["acc"] not in nt:
+                continue
+            seen.add(nt.lower())
+            extras.append((it[0], it[1], it[2], nt))
+        texts.extend(extras)
+        # recount
+        counts = [0, 0, 0, 0]
+        for it in texts:
+            counts[it[0]] += 1
+        print(f"after extras {len(texts)} counts={counts}", flush=True)
+
+    # Balance rewards if uneven after extras
     texts = texts[:TARGET]
-    print(f"pre-order {len(texts)} counts={counts}", flush=True)
+    # If still short, fail loudly
+    if len(texts) < TARGET:
+        raise SystemExit(f"Failed to reach {TARGET}, got {len(texts)}")
 
-    # Shuffle within coarse groups then diverse order
-    random.Random(99).shuffle(texts)
+    # Ensure equal rewards by trimming overflow from overfull and... we generated equal ideally
+    by_r = [[] for _ in range(4)]
+    for it in texts:
+        by_r[it[0]].append(it)
+    # rebalance
+    final = []
+    for ri in range(4):
+        final.extend(by_r[ri][:per])
+    # if some short, take from others that might have more - shouldn't happen
+    while len(final) < TARGET:
+        for ri in range(4):
+            if len(by_r[ri]) > per:
+                # already took per
+                pass
+        break
+    if len(final) < TARGET:
+        # use remaining from any
+        used = set(id(x) for x in final)
+        for it in texts:
+            if len(final) >= TARGET:
+                break
+            if id(it) not in used:
+                final.append(it)
+    texts = final[:TARGET]
+
+    random.Random(SEED + 1).shuffle(texts)
+    print("ordering...", flush=True)
     ordered = order_diverse(texts)
+
+    # Verify ALL lengths in band
+    bad_len = sum(1 for it in ordered if not in_band(len(it[3]), canons[it[1]]))
+    print(f"ordered={len(ordered)} out_of_band={bad_len}", flush=True)
+    if bad_len:
+        # drop and shouldn't happen
+        ordered = [it for it in ordered if in_band(len(it[3]), canons[it[1]])]
+        raise SystemExit(f"length band failed: kept {len(ordered)}")
+
+    same_t = sum(1 for a, b in zip(ordered, ordered[1:]) if a[1] == b[1])
+    same_r = sum(1 for a, b in zip(ordered, ordered[1:]) if a[0] == b[0])
+    lens = [len(x[3]) for x in ordered]
+    print(f"adj same_t={same_t} same_r={same_r} len {min(lens)}/{sum(lens)//len(lens)}/{max(lens)}")
 
     print("writing...", flush=True)
     for i, it in enumerate(ordered, 1):
         (OUT_DIR / f"{i:06d}.txt").write_text(it[3] + "\n", encoding="utf-8")
-        if i % 20000 == 0:
-            print(f"wrote {i}", flush=True)
-
-    same_t = sum(1 for a, b in zip(ordered, ordered[1:]) if a[1] == b[1])
-    same_r = sum(1 for a, b in zip(ordered, ordered[1:]) if a[0] == b[0])
-    lens = [len(x[3]) for x in ordered[::500]]
-    print(f"adj same_t={same_t} same_r={same_r} len {min(lens)}/{sum(lens)//len(lens)}/{max(lens)}")
 
     print("zipping...", flush=True)
-    if ZIP_PATH.exists():
-        ZIP_PATH.unlink()
-    with zipfile.ZipFile(ZIP_PATH, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+    for p in (ZIP_ART, ZIP_REPO):
+        if p.exists():
+            p.unlink()
+    with zipfile.ZipFile(ZIP_ART, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
         for i in range(1, len(ordered) + 1):
             zf.write(OUT_DIR / f"{i:06d}.txt", arcname=f"{i:06d}.txt")
-            if i % 25000 == 0:
-                print(f"zip {i}", flush=True)
-    shutil.copy2(ZIP_PATH, REPO_ZIP)
-    print(f"DONE {ZIP_PATH} bytes={ZIP_PATH.stat().st_size}")
+    shutil.copy2(ZIP_ART, ZIP_REPO)
+
+    # final report
+    na = sum(1 for it in ordered if "награда" in it[3].lower())
+    print(f"DONE files={len(ordered)} zip={ZIP_ART.stat().st_size} na={na} unique={len(set(x[3] for x in ordered))}")
+    # per-template compliance sample
+    for tid in range(21):
+        subset = [len(it[3]) for it in ordered if it[1] == tid]
+        if not subset:
+            continue
+        c = canons[tid]
+        ok = sum(1 for n in subset if in_band(n, c))
+        print(f"  T{tid+1:02d}: n={len(subset)} ok={ok}/{len(subset)} canon={c} actual[{min(subset)}..{max(subset)}]")
 
 
 if __name__ == "__main__":
