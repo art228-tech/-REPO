@@ -255,18 +255,103 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
     return report
 
 
+@dataclass
+class Prepared:
+    """Разобранная озвучка и посчитанная под неё раскладка ролика."""
+
+    number: int
+    voice: object
+    transcript: object
+    script: Path | None
+    line: object
+
+
 def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
          rng: random.Random, numbers: list[int], stamp: str, shifts: list[float],
          black: set[int], taken: set[str] | None = None) -> list[VideoOutcome]:
-    """Собирает по одному набору материалов столько роликов, сколько задано кадров.
+    """Собирает несколько роликов на одной паре клипов.
 
-    Озвучка и клипы берутся один раз, а ролики из них выходят с разной рамкой:
-    обычной и сдвинутой в стороны. Материалы расходуются тоже один раз, в конце.
+    Общие у них только клипы — ради этого настройка и нужна: одна пара нарезанных
+    кусков идёт в несколько роликов, каждый со своей рамкой. Озвучка, длина,
+    субтитры и случайные параметры у каждого ролика свои.
+
+    Клипы берутся под самый длинный слот из всех озвучек набора, иначе короткому
+    клипу не хватило бы места в ролике с длинной озвучкой.
     """
+    prepared: list[Prepared] = []
+    for number in numbers:
+        prepared.append(_prepare(config, profile, voices, number))
+        if not len(voices):
+            break
+
+    if len(prepared) < len(numbers):
+        log.info("Озвучек осталось меньше, чем кадров: соберу %d вместо %d",
+                 len(prepared), len(numbers))
+
+    stretch = config.timing.max_clip_stretch
+    needed = widest_slots([item.line for item in prepared])
+    chosen = [
+        clips.take_longest_enough(us2s(needed[0]), stretch),
+        clips.take_longest_enough(us2s(needed[1]), stretch),
+    ]
+    log.info("   клипы на весь набор: %s (%.2fс) и %s (%.2fс)",
+             chosen[0].path.name, chosen[0].duration_s,
+             chosen[1].path.name, chosen[1].duration_s)
+
+    outcomes: list[VideoOutcome] = []
+    for item, shift in zip(prepared, shifts):
+        outcome = VideoOutcome(number=item.number, template=profile.name, ok=False)
+        started = time.monotonic()
+        try:
+            render_plan = plan_module.build(
+                profile, config, item.line, item.voice.path,
+                [c.path for c in chosen], [c.duration_s for c in chosen], rng,
+            )
+            if config.make_subtitles:
+                render_plan.cues = _cues_for(item.transcript, config, item.line)
+                if not render_plan.cues:
+                    render_plan.notes.append("субтитры не собраны: речь не распознана")
+            log.debug("план ролика %d:\n%s", item.number, render_plan.describe())
+
+            outcome = _render(config, profile, render_plan, item.number, stamp, shift,
+                              rng, black_background=item.number in black, taken=taken)
+        except PipelineError as exc:
+            outcome.error = str(exc)
+            log.error("Ролик %d: %s", item.number, exc)
+        finally:
+            outcome.seconds = time.monotonic() - started
+        outcomes.append(outcome)
+
+    if config.consume_inputs:
+        # Клипы уходят один раз на весь набор, озвучки — каждая своя. Сценарий
+        # уносим вместе с озвучкой: они одно целое, иначе в папке копятся
+        # текстовики без своих звуковых файлов.
+        used = [chosen[0].path, chosen[1].path]
+        for item in prepared:
+            used.append(item.voice.path)
+            if item.script:
+                used.append(item.script)
+        assets.consume(used, config.used_dir)
+
+    return outcomes
+
+
+def widest_slots(lines: list) -> list[int]:
+    """Самые длинные слоты среди озвучек набора.
+
+    Клипы у набора общие, а длина ролика у каждой озвучки своя. Брать надо под
+    самую длинную, иначе короткому клипу не хватит места в длинном ролике.
+    """
+    if not lines:
+        raise PipelineError("Нет ни одной разобранной озвучки")
+    return [max(line.slot_durations[index] for line in lines) for index in (0, 1)]
+
+
+def _prepare(config: Config, profile, voices: assets.Pool, number: int) -> Prepared:
+    """Берёт очередную озвучку и считает под неё раскладку ролика."""
     voice = voices.take_next()
-    log.info("Ролики %s: шаблон %s, озвучка %s (%.2fс)",
-             ", ".join(str(n) for n in numbers), profile.name,
-             voice.path.name, voice.duration_s)
+    log.info("Ролик %d: шаблон %s, озвучка %s (%.2fс)",
+             number, profile.name, voice.path.name, voice.duration_s)
 
     transcript = asr.transcribe(voice.path, config.asr_model, config.asr_language)
 
@@ -276,7 +361,8 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
         transcript.words = textalign.realign(transcript.words, script, transcript.duration)
         log.info("   текст субтитров взят из сценария %s", script_path.name)
     elif script_path:
-        log.warning("   сценарий %s найден, но речь не распознана — выравнивать не по чему", script_path.name)
+        log.warning("   сценарий %s найден, но речь не распознана — выравнивать не по чему",
+                    script_path.name)
 
     trailing = ffmpeg.trailing_silence(voice.path, config.timing.silence_db)
     log.debug("тишина в конце озвучки: %.3fс, источник разбора: %s", trailing, transcript.source)
@@ -287,50 +373,8 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
         fmt(line.total_us), fmt(line.cut_us), line.cut_reason,
         fmt(line.slot_durations[0]), fmt(line.slot_durations[1]),
     )
-
-    stretch = config.timing.max_clip_stretch
-    chosen = [
-        clips.take_longest_enough(us2s(line.slot_durations[0]), stretch),
-        clips.take_longest_enough(us2s(line.slot_durations[1]), stretch),
-    ]
-    log.info("   клипы: %s (%.2fс) и %s (%.2fс)",
-             chosen[0].path.name, chosen[0].duration_s, chosen[1].path.name, chosen[1].duration_s)
-
-    render_plan = plan_module.build(
-        profile, config, line, voice.path,
-        [c.path for c in chosen], [c.duration_s for c in chosen], rng,
-    )
-
-    if config.make_subtitles:
-        render_plan.cues = _cues_for(transcript, config, line)
-        if not render_plan.cues:
-            render_plan.notes.append("субтитры не собраны: речь не распознана")
-
-    log.debug("план:\n%s", render_plan.describe())
-
-    outcomes: list[VideoOutcome] = []
-    for number, shift in zip(numbers, shifts):
-        outcome = VideoOutcome(number=number, template=profile.name, ok=False)
-        started = time.monotonic()
-        try:
-            outcome = _render(config, profile, render_plan, number, stamp, shift,
-                              rng, black_background=number in black, taken=taken)
-        except PipelineError as exc:
-            outcome.error = str(exc)
-            log.error("Ролик %d: %s", number, exc)
-        finally:
-            outcome.seconds = time.monotonic() - started
-        outcomes.append(outcome)
-
-    if config.consume_inputs:
-        # Сценарий уносим вместе с озвучкой: они одно целое, и без этого в папке
-        # копятся текстовики без своих звуковых файлов.
-        used = [voice.path, chosen[0].path, chosen[1].path]
-        if script_path:
-            used.append(script_path)
-        assets.consume(used, config.used_dir)
-
-    return outcomes
+    return Prepared(number=number, voice=voice, transcript=transcript,
+                    script=script_path, line=line)
 
 
 def _render(config: Config, profile, render_plan, number: int, stamp: str,

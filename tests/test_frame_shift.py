@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from capcut_uniq import builder
-from capcut_uniq.batch import FRAME_SHIFT, frame_shifts
+from capcut_uniq.batch import FRAME_SHIFT, frame_shifts, widest_slots
 from capcut_uniq.config import Config
 
 
@@ -93,3 +93,27 @@ def test_missing_transform_is_created():
     clip: dict = {}
     builder._shift_frame(clip, 3.0, 1 / 3, position=0, is_overlay=False, notes=[])
     assert clip["transform"]["x"] == pytest.approx(2 / 3)
+
+
+class _Line:
+    def __init__(self, short: int, long: int):
+        self.slot_durations = [short, long]
+
+
+def test_clips_are_chosen_for_the_longest_voice():
+    """Клипы у набора общие, а озвучки разной длины — берём под самую длинную."""
+    lines = [_Line(2_000_000, 9_000_000),
+             _Line(3_500_000, 7_000_000),
+             _Line(2_800_000, 12_000_000)]
+    assert widest_slots(lines) == [3_500_000, 12_000_000]
+
+
+def test_single_voice_asks_for_its_own_slots():
+    assert widest_slots([_Line(2_000_000, 9_000_000)]) == [2_000_000, 9_000_000]
+
+
+def test_no_voices_is_an_error():
+    from capcut_uniq.errors import PipelineError
+
+    with pytest.raises(PipelineError):
+        widest_slots([])
