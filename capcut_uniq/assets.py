@@ -76,6 +76,15 @@ class Pool:
     def shuffle(self, rng: random.Random) -> None:
         rng.shuffle(self.items)
 
+    def give_back(self, item: Clip) -> None:
+        """Возвращает взятый файл в пул.
+
+        Нужно, когда набор материалов не сложился: клип уже вынут, а ролик так и
+        не собрался — незачем терять файл впустую.
+        """
+        if item not in self.items:
+            self.items.insert(0, item)
+
     def take_longest_enough(self, needed_s: float, stretch: float = 0.0) -> Clip:
         """Берёт первый подходящий по длине клип, самый короткий из достаточных.
 

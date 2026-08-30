@@ -14,7 +14,7 @@ from . import (
     profile as profile_module, subtitles, textalign, validate,
 )
 from .config import Config
-from .errors import PipelineError
+from .errors import AssetShortage, PipelineError
 from .logging_setup import get_logger
 from .plan import Cue
 from .units import fmt, us2s
@@ -288,17 +288,31 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
         log.info("Озвучек осталось меньше, чем кадров: соберу %d вместо %d",
                  len(prepared), len(numbers))
 
+    # Клипы у набора общие, поэтому взять надо такие, которых хватит каждой
+    # озвучке. Если не хватает даже самого длинного клипа, виновата самая
+    # длинная озвучка: откладываем её и пробуем набор без неё, чтобы не потерять
+    # заодно и остальные.
     stretch = config.timing.max_clip_stretch
-    needed = widest_slots([item.line for item in prepared])
-    chosen = [
-        clips.take_longest_enough(us2s(needed[0]), stretch),
-        clips.take_longest_enough(us2s(needed[1]), stretch),
-    ]
+    outcomes: list[VideoOutcome] = []
+    chosen: list = []
+    while prepared:
+        try:
+            chosen = _take_clips(clips, widest_slots([i.line for i in prepared]), stretch)
+            break
+        except AssetShortage as exc:
+            if len(prepared) == 1:
+                raise
+            longest = max(prepared, key=lambda item: item.line.slot_durations[1])
+            prepared.remove(longest)
+            outcomes.append(VideoOutcome(
+                number=longest.number, template=profile.name, ok=False, error=str(exc)))
+            log.warning("Ролик %d отложен: %s. Собираю набор без него",
+                        longest.number, exc)
+
     log.info("   клипы на весь набор: %s (%.2fс) и %s (%.2fс)",
              chosen[0].path.name, chosen[0].duration_s,
              chosen[1].path.name, chosen[1].duration_s)
 
-    outcomes: list[VideoOutcome] = []
     for item, shift in zip(prepared, shifts):
         outcome = VideoOutcome(number=item.number, template=profile.name, ok=False)
         started = time.monotonic()
@@ -333,7 +347,21 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
                 used.append(item.script)
         assets.consume(used, config.used_dir)
 
+    outcomes.sort(key=lambda item: item.number)
     return outcomes
+
+
+def _take_clips(clips: assets.Pool, needed: list[int], stretch: float) -> list:
+    """Берёт пару клипов, а при неудаче возвращает уже взятое обратно в пул."""
+    taken: list = []
+    try:
+        for want in needed:
+            taken.append(clips.take_longest_enough(us2s(want), stretch))
+    except AssetShortage:
+        for item in taken:
+            clips.give_back(item)
+        raise
+    return taken
 
 
 def widest_slots(lines: list) -> list[int]:

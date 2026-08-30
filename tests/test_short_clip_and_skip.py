@@ -63,6 +63,44 @@ def test_message_names_the_longest_left():
     assert "9.50" in str(caught.value)
 
 
+def test_taken_clip_can_be_given_back():
+    """Набор не сложился — клип должен вернуться в пул, а не пропасть."""
+    pool = _pool(4.0, 15.0)
+    taken = pool.take_longest_enough(14.0)
+    assert len(pool.items) == 1
+
+    pool.give_back(taken)
+    assert len(pool.items) == 2
+    assert pool.take_longest_enough(14.0) is taken
+
+
+def test_giving_back_twice_does_not_double():
+    pool = _pool(15.0)
+    taken = pool.take_longest_enough(14.0)
+    pool.give_back(taken)
+    pool.give_back(taken)
+    assert len(pool.items) == 1
+
+
+def test_pair_is_returned_when_the_second_clip_is_missing():
+    """Первый клип уже взят, второго нет — оба должны остаться в пуле."""
+    from capcut_uniq.batch import _take_clips
+
+    pool = _pool(4.0, 9.0)
+    with pytest.raises(AssetShortage):
+        _take_clips(pool, [3_000_000, 20_000_000], 0.0)
+    assert len(pool.items) == 2
+
+
+def test_pair_is_taken_when_both_fit():
+    from capcut_uniq.batch import _take_clips
+
+    pool = _pool(4.0, 9.0, 20.0)
+    taken = _take_clips(pool, [3_000_000, 19_000_000], 0.0)
+    assert [item.duration_s for item in taken] == [4.0, 20.0]
+    assert len(pool.items) == 1
+
+
 def test_stretch_lowers_the_bar_by_the_right_amount():
     """Порог должен быть длиной слота, поделённой на запас."""
     pool = _pool(14.30)
