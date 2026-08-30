@@ -618,20 +618,23 @@ def test_recreate_flag_deletes_old_voice(workspace, store, monkeypatch):
     assert len(second.designs) == 1
 
 
-def test_changing_settings_forces_regeneration(workspace, store, monkeypatch):
+def test_changing_settings_does_not_overwrite_existing_file(workspace, store, monkeypatch):
     write_prompts(workspace["prompts"], 1)
     write_texts(workspace["texts"], 1)
 
     first = FakeClient()
     run_with(monkeypatch, make_settings(workspace, max_voices=1), store, first)
+    produced = list(workspace["output"].glob("*.mp3"))
+    assert produced
+    original = produced[0].read_bytes()
 
-    # Другая скорость речи — прежний результат больше не подходит.
     second = FakeClient()
     second.existing_voices = list(first.existing_voices)
     stats = run_with(monkeypatch, make_settings(workspace, max_voices=1, speed=1.3), store, second)
 
-    assert stats.texts_done == 1
-    assert len(second.tts_calls) == 1
+    assert stats.texts_skipped == 1
+    assert second.tts_calls == []
+    assert produced[0].read_bytes() == original
 
 
 # ======================================================================
@@ -920,6 +923,27 @@ def test_second_run_beside_texts_skips_finished(workspace, store, monkeypatch):
 
     assert stats.texts_skipped == 2
     assert second.tts_calls == []
+
+
+def test_existing_mp3_on_disk_is_not_replaced(workspace, store, monkeypatch):
+    """Готовые mp3 нельзя затирать — надо озвучивать те, которых ещё нет."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 5)
+    settings = make_settings(workspace, max_voices=1, save_next_to_texts=True)
+
+    already = MP3 + b"KEEP"
+    (workspace["texts"] / "текст1.mp3").write_bytes(already)
+    (workspace["texts"] / "текст2.mp3").write_bytes(already)
+
+    client = FakeClient()
+    stats = run_with(monkeypatch, settings, store, client)
+
+    assert stats.texts_skipped == 2
+    assert stats.texts_done == 3
+    assert len(client.tts_calls) == 3
+    assert (workspace["texts"] / "текст1.mp3").read_bytes() == already
+    assert (workspace["texts"] / "текст2.mp3").read_bytes() == already
+    assert (workspace["texts"] / "текст3.mp3").exists()
 
 
 def test_uses_voices_from_account(workspace, store, monkeypatch):

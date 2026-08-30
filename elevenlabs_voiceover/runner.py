@@ -185,6 +185,14 @@ def count_txt_files(directory: Path) -> int:
         return 0
 
 
+def output_file_ready(path: Path) -> bool:
+    """Готовый файл уже лежит на диске и его нельзя затирать."""
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
+
+
 # ----------------------------------------------------------------------
 class Runner:
     def __init__(
@@ -342,6 +350,20 @@ class Runner:
         try:
             for job in jobs:
                 self._check_cancelled()
+                if output_file_ready(job.output_path):
+                    # Ориентир — файл на диске, а не база: иначе готовые mp3
+                    # перезаписываются, когда прогресс сброшен или голос сменился.
+                    self.stats.texts_skipped += 1
+                    self._done_units += 1
+                    if self.stats.texts_skipped <= 10 or self.stats.texts_skipped % 1000 == 0:
+                        log.info(
+                            "«%s» уже есть на диске (%s), пропускаю",
+                            job.text.name,
+                            job.output_path.name,
+                        )
+                    self._progress(f"Пропущен «{job.text.name}» (файл уже есть)")
+                    self._retire_source(job.text, jobs_by_text[job.text.path])
+                    continue
                 if not self._ensure_text_loaded(job.text):
                     self._done_units += 1
                     continue
