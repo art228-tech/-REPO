@@ -17,6 +17,7 @@ from elevenlabs_voiceover.config import (
 from elevenlabs_voiceover.runner import (
     PreflightError,
     Runner,
+    count_txt_files,
     estimate_plan,
     list_txt_files,
     natural_key,
@@ -69,6 +70,17 @@ def test_list_txt_files_ignores_other_extensions(tmp_path):
 
 def test_list_txt_files_on_missing_directory(tmp_path):
     assert list_txt_files(tmp_path / "нет") == []
+
+
+def test_count_txt_files_matches_list(tmp_path):
+    (tmp_path / "a.txt").write_text("1", encoding="utf-8")
+    (tmp_path / "b.md").write_text("2", encoding="utf-8")
+    (tmp_path / "c.TXT").write_text("3", encoding="utf-8")
+    (tmp_path / "подпапка").mkdir()
+    (tmp_path / "подпапка" / "внутри.txt").write_text("4", encoding="utf-8")
+
+    assert count_txt_files(tmp_path) == 2
+    assert count_txt_files(tmp_path / "нет") == 0
 
 
 # ======================================================================
@@ -349,12 +361,59 @@ def test_line_breaks_can_be_removed(workspace, store, monkeypatch):
     assert client.tts_calls[0][1] == "Раз. Два. Три."
 
 
-def test_estimate_counts_line_breaks(workspace):
-    (workspace["texts"] / "речь.txt").write_text("Раз.\nДва.\n\nТри.\nЧетыре.", encoding="utf-8")
+def test_estimate_does_not_read_text_files(workspace, monkeypatch):
+    """Выбор папки текстов не должен открывать файлы — в ней их может быть очень много."""
     write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 3)
 
+    def boom(path):
+        raise AssertionError(f"оценке незачем читать {path}")
+
+    monkeypatch.setattr(runner_module, "read_text_file", boom)
     plan = estimate_plan(make_settings(workspace, max_voices=1))
-    assert plan["line_breaks"] == 2
+    assert plan["texts"] == 3
+    assert plan["characters"] == 0
+    assert plan["line_breaks"] == 0
+
+
+def test_run_does_not_read_texts_before_client_starts(workspace, store, monkeypatch):
+    """Старт не должен открывать все txt сразу — иначе на большой папке всё зависает."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 8)
+    text_names = {path.name for path in workspace["texts"].glob("*.txt")}
+
+    reads: list = []
+    original = runner_module.read_text_file
+
+    def tracking(path):
+        reads.append(path.name)
+        return original(path)
+
+    texts_seen_when_client_created = []
+
+    def factory(*_args, **_kwargs):
+        texts_seen_when_client_created.append([name for name in reads if name in text_names])
+        return FakeClient()
+
+    monkeypatch.setattr(runner_module, "read_text_file", tracking)
+    monkeypatch.setattr(runner_module, "ElevenLabsClient", factory)
+
+    stats = Runner(make_settings(workspace, max_voices=1), store).run()
+
+    assert texts_seen_when_client_created == [[]]
+    assert stats.texts_done == 8
+    assert text_names <= set(reads)
+
+
+def test_empty_text_is_skipped_without_blocking_others(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+    (workspace["texts"] / "пустой.txt").write_text("   \n", encoding="utf-8")
+
+    stats = run_with(monkeypatch, make_settings(workspace, max_voices=1), store, FakeClient())
+
+    assert stats.texts_done == 2
+    assert stats.texts_total == 3
 
 
 def test_manifest_records_pace(workspace, store, monkeypatch):
@@ -559,20 +618,23 @@ def test_recreate_flag_deletes_old_voice(workspace, store, monkeypatch):
     assert len(second.designs) == 1
 
 
-def test_changing_settings_forces_regeneration(workspace, store, monkeypatch):
+def test_changing_settings_does_not_overwrite_existing_file(workspace, store, monkeypatch):
     write_prompts(workspace["prompts"], 1)
     write_texts(workspace["texts"], 1)
 
     first = FakeClient()
     run_with(monkeypatch, make_settings(workspace, max_voices=1), store, first)
+    produced = list(workspace["output"].glob("*.mp3"))
+    assert produced
+    original = produced[0].read_bytes()
 
-    # Другая скорость речи — прежний результат больше не подходит.
     second = FakeClient()
     second.existing_voices = list(first.existing_voices)
     stats = run_with(monkeypatch, make_settings(workspace, max_voices=1, speed=1.3), store, second)
 
-    assert stats.texts_done == 1
-    assert len(second.tts_calls) == 1
+    assert stats.texts_skipped == 1
+    assert second.tts_calls == []
+    assert produced[0].read_bytes() == original
 
 
 # ======================================================================
@@ -620,7 +682,7 @@ def test_finished_work_is_resumable_after_quota_stop(workspace, store, monkeypat
 # ======================================================================
 # Оценка без обращения к API
 # ======================================================================
-def test_estimate_counts_files_and_characters(workspace):
+def test_estimate_counts_files_without_reading_them(workspace):
     write_prompts(workspace["prompts"], 3)
     write_texts(workspace["texts"], 4)
 
@@ -629,7 +691,7 @@ def test_estimate_counts_files_and_characters(workspace):
     assert plan["prompts"] == 3
     assert plan["voices"] == 3
     assert plan["texts"] == 4
-    assert plan["characters"] > 0
+    assert plan["characters"] == 0
     assert plan["design_credits"] > 0
 
 
@@ -654,16 +716,8 @@ def test_estimate_accounts_for_all_voices_mode(workspace):
     single = estimate_plan(make_settings(workspace, max_voices=2))
     everyone = estimate_plan(make_settings(workspace, max_voices=2, voice_mode=MODE_ALL_VOICES))
 
-    assert everyone["characters"] == single["characters"] * 2
-
-
-def test_estimate_flash_is_half_of_multilingual(workspace):
-    write_prompts(workspace["prompts"], 1)
-    write_texts(workspace["texts"], 2)
-
-    plan = estimate_plan(make_settings(workspace, max_voices=1))
-    body = plan["total_credits_multilingual"] - plan["design_credits"]
-    assert plan["total_credits_flash"] - plan["design_credits"] == pytest.approx(body / 2, abs=1)
+    assert single["outputs"] == 3
+    assert everyone["outputs"] == 6
 
 
 def test_source_texts_stay_by_default(workspace, store, monkeypatch):
@@ -869,6 +923,27 @@ def test_second_run_beside_texts_skips_finished(workspace, store, monkeypatch):
 
     assert stats.texts_skipped == 2
     assert second.tts_calls == []
+
+
+def test_existing_mp3_on_disk_is_not_replaced(workspace, store, monkeypatch):
+    """Готовые mp3 нельзя затирать — надо озвучивать те, которых ещё нет."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 5)
+    settings = make_settings(workspace, max_voices=1, save_next_to_texts=True)
+
+    already = MP3 + b"KEEP"
+    (workspace["texts"] / "текст1.mp3").write_bytes(already)
+    (workspace["texts"] / "текст2.mp3").write_bytes(already)
+
+    client = FakeClient()
+    stats = run_with(monkeypatch, settings, store, client)
+
+    assert stats.texts_skipped == 2
+    assert stats.texts_done == 3
+    assert len(client.tts_calls) == 3
+    assert (workspace["texts"] / "текст1.mp3").read_bytes() == already
+    assert (workspace["texts"] / "текст2.mp3").read_bytes() == already
+    assert (workspace["texts"] / "текст3.mp3").exists()
 
 
 def test_uses_voices_from_account(workspace, store, monkeypatch):

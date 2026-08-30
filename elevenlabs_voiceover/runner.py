@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import csv
-import math
+import os
 import re
 import threading
 from dataclasses import dataclass, field
@@ -12,7 +12,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import audio as audio_utils
 from .api_client import ElevenLabsClient, ModelInfo, Subscription
-from .chunker import Chunk, count_line_breaks, split_text
+from .chunker import Chunk, split_text
 from .config import (
     DONE_DELETE,
     DONE_FOLDER_NAME,
@@ -60,8 +60,9 @@ class PromptSpec:
 class TextSpec:
     path: Path
     name: str
-    text: str
-    chunks: List[Chunk]
+    text: str = ""
+    chunks: List[Chunk] = field(default_factory=list)
+    loaded: bool = False
 
     @property
     def characters(self) -> int:
@@ -169,6 +170,27 @@ def list_txt_files(directory: Path) -> List[Path]:
         return []
     files = [p for p in directory.iterdir() if p.is_file() and p.suffix.lower() == ".txt"]
     return sorted(files, key=lambda p: natural_key(p.name))
+
+
+def count_txt_files(directory: Path) -> int:
+    """Сколько .txt лежит прямо в папке — без открытия файлов."""
+    try:
+        with os.scandir(directory) as entries:
+            return sum(
+                1
+                for entry in entries
+                if entry.is_file(follow_symlinks=False) and entry.name.lower().endswith(".txt")
+            )
+    except OSError:
+        return 0
+
+
+def output_file_ready(path: Path) -> bool:
+    """Готовый файл уже лежит на диске и его нельзя затирать."""
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
 
 
 # ----------------------------------------------------------------------
@@ -301,9 +323,6 @@ class Runner:
         self._sync_subscription(initial=True)
         self._resolve_model()
 
-        # Пересчитываем нарезку под реальный лимит выбранной модели.
-        self._rechunk(texts)
-
         if from_account:
             voices = self._voices_from_account()
         else:
@@ -314,21 +333,15 @@ class Runner:
         jobs = self._build_jobs(texts, voices, service_dir)
         self.stats.texts_total = len(jobs)
 
-        self._total_units = max(1, sum(len(job.text.chunks) for job in jobs))
+        self._total_units = max(1, len(jobs))
         self._done_units = 0
 
-        estimated = sum(job.text.characters for job in jobs) * self._cost_multiplier()
         log.info(
-            "К озвучке %d заданий, %d кусков, примерно %s кредитов. Доступно %s",
+            "К озвучке %d заданий. Доступно %s кредитов. "
+            "Тексты читаю по одному, когда до них дойдёт очередь",
             len(jobs),
-            self._total_units,
-            f"{estimated:,.0f}".replace(",", " "),
             f"{self._credits_budget:,.0f}".replace(",", " "),
         )
-        if estimated > self._credits_budget:
-            log.warning(
-                "Кредитов не хватит на всё задание — работа остановится, когда они закончатся"
-            )
 
         jobs_by_text: Dict[Path, List[Job]] = {}
         for job in jobs:
@@ -337,6 +350,23 @@ class Runner:
         try:
             for job in jobs:
                 self._check_cancelled()
+                if output_file_ready(job.output_path):
+                    # Ориентир — файл на диске, а не база: иначе готовые mp3
+                    # перезаписываются, когда прогресс сброшен или голос сменился.
+                    self.stats.texts_skipped += 1
+                    self._done_units += 1
+                    if self.stats.texts_skipped <= 10 or self.stats.texts_skipped % 1000 == 0:
+                        log.info(
+                            "«%s» уже есть на диске (%s), пропускаю",
+                            job.text.name,
+                            job.output_path.name,
+                        )
+                    self._progress(f"Пропущен «{job.text.name}» (файл уже есть)")
+                    self._retire_source(job.text, jobs_by_text[job.text.path])
+                    continue
+                if not self._ensure_text_loaded(job.text):
+                    self._done_units += 1
+                    continue
                 if not self._has_budget_for(job.text.chunks[0].characters if job.text.chunks else 0):
                     self.stats.stopped_reason = "Кредиты закончились"
                     log.warning("Кредиты закончились, останавливаюсь до следующего файла")
@@ -375,39 +405,39 @@ class Runner:
         return prompts
 
     def _load_texts(self, directory: Path) -> List[TextSpec]:
+        """Только список файлов: содержимое читается в момент озвучки."""
+        self._progress("Смотрю папку с текстами…")
         files = list_txt_files(directory)
         if not files:
             raise PreflightError(f"В папке текстов нет ни одного .txt файла: {directory}")
-
-        texts: List[TextSpec] = []
-        for path in files:
-            content = read_text_file(path)
-            chunks = split_text(
-                content, self.settings.chunk_target_chars, line_breaks=self.settings.line_breaks
-            )
-            if not chunks:
-                log.warning("Текст %s пустой, пропускаю", path.name)
-                continue
-            texts.append(TextSpec(path=path, name=path.stem, text=content, chunks=chunks))
-
-        if not texts:
-            raise PreflightError("Все файлы текстов пустые")
-        return texts
-
-    def _rechunk(self, texts: List[TextSpec]) -> None:
-        """Перенарезать тексты с учётом лимита символов выбранной модели."""
-        max_chars = self._model.max_chars_per_request if self._model else 0
-        if not max_chars or max_chars >= self.settings.chunk_target_chars:
-            return
         log.info(
-            "Модель принимает не больше %d символов за запрос — уменьшаю размер куска",
-            max_chars,
+            "Найдено %d текстов, каждый открою только когда до него дойдёт очередь",
+            len(files),
         )
-        for spec in texts:
-            spec.chunks = split_text(
-                spec.text, self.settings.chunk_target_chars, max_chars,
-                line_breaks=self.settings.line_breaks,
-            )
+        self._progress(f"Найдено текстов: {len(files)}")
+        return [TextSpec(path=path, name=path.stem) for path in files]
+
+    def _ensure_text_loaded(self, spec: TextSpec) -> bool:
+        """Прочитать и нарезать один текст. False, если файл пустой или не читается."""
+        if spec.loaded:
+            return bool(spec.chunks)
+        spec.loaded = True
+        try:
+            spec.text = read_text_file(spec.path)
+        except OSError as exc:
+            log.warning("Не удалось прочитать %s (%s), пропускаю", spec.path.name, exc)
+            return False
+        max_chars = self._model.max_chars_per_request if self._model else 0
+        spec.chunks = split_text(
+            spec.text,
+            self.settings.chunk_target_chars,
+            max_chars,
+            line_breaks=self.settings.line_breaks,
+        )
+        if not spec.chunks:
+            log.warning("Текст %s пустой, пропускаю", spec.path.name)
+            return False
+        return True
 
     # ------------------------------------------------------------------
     def _resolve_model(self) -> None:
@@ -1022,15 +1052,17 @@ class Runner:
 
 # ----------------------------------------------------------------------
 def estimate_plan(settings: Settings) -> Dict[str, object]:
-    """Оценить объём работы без единого обращения к API.
+    """Оценить объём работы без обращения к API и без чтения текстов.
 
-    Нужна, чтобы показать в окне стоимость до нажатия «Начать».
+    Тексты не открываются: в папке их может быть очень много, а разбор
+    содержимого до запуска ничего не даёт — озвучка всё равно прочитает
+    каждый файл в свой черёд.
     """
     prompts_dir = Path(settings.prompts_dir) if settings.prompts_dir else None
     texts_dir = Path(settings.texts_dir) if settings.texts_dir else None
 
     prompt_files = list_txt_files(prompts_dir) if prompts_dir else []
-    text_files = list_txt_files(texts_dir) if texts_dir else []
+    text_count = count_txt_files(texts_dir) if texts_dir else 0
 
     from_account = settings.voice_source == SOURCE_ACCOUNT
     if from_account:
@@ -1038,23 +1070,9 @@ def estimate_plan(settings: Settings) -> Dict[str, object]:
         voices = min(len(settings.selected_voice_ids) or settings.max_voices, settings.max_voices)
     else:
         voices = min(len(prompt_files), settings.max_voices)
-    total_chars = 0
-    total_chunks = 0
-    line_breaks = 0
-    for path in text_files:
-        try:
-            content = read_text_file(path)
-        except OSError:
-            continue
-        chunks = split_text(content, settings.chunk_target_chars, line_breaks=settings.line_breaks)
-        line_breaks += count_line_breaks(content)
-        total_chunks += len(chunks)
-        total_chars += sum(c.characters for c in chunks)
 
-    outputs = len(text_files)
+    outputs = text_count
     if settings.voice_mode == MODE_ALL_VOICES and voices:
-        total_chars *= voices
-        total_chunks *= voices
         outputs *= voices
 
     if from_account or settings.auto_generate_preview:
@@ -1065,12 +1083,12 @@ def estimate_plan(settings: Settings) -> Dict[str, object]:
     return {
         "prompts": len(prompt_files),
         "voices": voices,
-        "texts": len(text_files),
+        "texts": text_count,
         "outputs": outputs,
-        "line_breaks": line_breaks,
-        "chunks": total_chunks,
-        "characters": total_chars,
+        "line_breaks": 0,
+        "chunks": 0,
+        "characters": 0,
         "design_credits": design_cost,
-        "total_credits_multilingual": total_chars + design_cost,
-        "total_credits_flash": math.ceil(total_chars * 0.5) + design_cost,
+        "total_credits_multilingual": design_cost,
+        "total_credits_flash": design_cost,
     }
