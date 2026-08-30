@@ -289,12 +289,42 @@ def _apply_slots(draft: Draft, profile: TemplateProfile, plan: RenderPlan,
             if plan.black_background and not is_overlay:
                 clip["alpha"] = 0.0
                 _drop_alpha_keyframes(segment)
+
+            if plan.frame_shift:
+                _shift_frame(clip, scale, plan.frame_shift, position, is_overlay, notes)
             if changed and not is_overlay:
                 notes.append(
                     f"слот {position + 1}: у клипа другое соотношение сторон, "
                     f"масштаб пересчитан {base_scale:.3f} → {scale:.3f}"
                 )
         start += duration
+
+
+def _shift_frame(clip: dict, scale: float, share: float, position: int,
+                 is_overlay: bool, notes: list[str]) -> None:
+    """Двигает рамку вбок, показывая другую часть клипа.
+
+    Клип шире кадра — при масштабе больше единицы его бока обрезаны, и там
+    остаётся неиспользованная картинка. Сдвиг открывает её: часть прежнего кадра
+    уходит, столько же приходит с обрезанной стороны.
+
+    Сдвиг задан долей ширины кадра, а в черновике он записан в долях половины
+    ширины, отсюда удвоение. Дальше некуда — за краем клипа пойдёт пустота,
+    поэтому сдвиг обрезается по тому, сколько картинки в запасе.
+    """
+    transform = clip.setdefault("transform", {})
+    current = float(transform.get("x") or 0.0)
+
+    room = max(0.0, scale - 1.0)
+    wanted = current + share * 2.0
+    limit = max(-room, min(room, wanted))
+
+    transform["x"] = limit
+    if abs(limit - wanted) > 1e-6 and not is_overlay:
+        notes.append(
+            f"слот {position + 1}: кадр сдвинут на {abs(limit) / 2:.0%} вместо "
+            f"{abs(share):.0%} — дальше у клипа нет запаса по краям"
+        )
 
 
 def _drop_alpha_keyframes(segment: dict) -> None:

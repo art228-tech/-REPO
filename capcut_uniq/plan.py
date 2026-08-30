@@ -83,6 +83,9 @@ class RenderPlan:
     black_background: bool = False
     """Фон погашен: под наложением чёрное поле вместо размытой копии клипа."""
 
+    frame_shift: float = 0.0
+    """Сдвиг рамки вбок в долях ширины кадра: видно другую часть клипа."""
+
     swoosh: SfxPlacement | None = None
     sticker: DecorPlacement | None = None
     qr: DecorPlacement | None = None

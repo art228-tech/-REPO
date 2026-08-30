@@ -44,6 +44,18 @@ class VideoOutcome:
 # Сколько неудач подряд стерпеть, прежде чем признать, что материалы не подходят.
 GIVE_UP_AFTER = 5
 
+# Насколько сдвигается кадр в дополнительных роликах: на треть ширины в каждую
+# сторону. Треть исходного кадра уходит, треть приходит с той стороны, которая
+# в обычном ролике обрезана.
+FRAME_SHIFT = 1 / 3
+
+
+def frame_shifts(config: Config) -> list[float]:
+    """Какие рамки собирать из одного набора материалов."""
+    if not config.three_frames:
+        return [0.0]
+    return [0.0, -FRAME_SHIFT, FRAME_SHIFT]
+
 
 @dataclass
 class BatchReport:
@@ -164,6 +176,10 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
         log.warning("Озвучек %d, а заказано роликов %d — партия остановится раньше", len(voices), config.count)
 
     stamp = datetime.now().strftime("%m%d_%H%M")
+    shifts = frame_shifts(config)
+    if len(shifts) > 1:
+        log.info("Из каждого набора материалов выйдет роликов: %d (сдвиги кадра %s)",
+                 len(shifts), ", ".join(f"{s:+.0%}" if s else "обычный" for s in shifts))
     black = naming.black_background_numbers(config.count, config.black_bg_of_six, rng)
     if black:
         log.info("Без размытого фона: %d из %d (%d из каждых шести)",
@@ -176,34 +192,48 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
     in_a_row = 0
     skipped: list[str] = []
 
-    for number in range(1, config.count + 1):
-        profile = profiles[(number - 1) % len(profiles)]
+    done = 0
+    sets = 0
+    while done < config.count:
+        profile = profiles[sets % len(profiles)]
+        portion = min(len(shifts), config.count - done)
+        numbers = list(range(done + 1, done + 1 + portion))
         started = time.monotonic()
-        outcome = VideoOutcome(number=number, template=profile.name, ok=False)
+
         if progress:
-            progress(number, config.count, f"ролик {number} из {config.count}, шаблон {profile.name}")
+            progress(done + 1, config.count,
+                     f"ролик {numbers[0]} из {config.count}, шаблон {profile.name}")
 
+        made: list[VideoOutcome] = []
         try:
-            outcome = _one(config, profile, clips, voices, rng, number, stamp,
-                           black_background=number in black, taken=taken)
+            made = _one(config, profile, clips, voices, rng, numbers, stamp,
+                        shifts[:portion], black, taken)
         except PipelineError as exc:
-            outcome.error = str(exc)
-            log.error("Ролик %d: %s", number, exc)
+            log.error("Ролики %s: %s", ", ".join(str(n) for n in numbers), exc)
+            made = [VideoOutcome(number=n, template=profile.name, ok=False,
+                                 error=str(exc)) for n in numbers]
         except Exception as exc:  # noqa: BLE001 - в журнал попадает всё
-            outcome.error = f"неожиданная ошибка: {exc}"
-            log.error("Ролик %d упал: %s", number, exc)
+            log.error("Ролики %s упали: %s", ", ".join(str(n) for n in numbers), exc)
             log.debug("%s", traceback.format_exc())
-        finally:
-            outcome.seconds = time.monotonic() - started
+            made = [VideoOutcome(number=n, template=profile.name, ok=False,
+                                 error=f"неожиданная ошибка: {exc}") for n in numbers]
 
-        report.outcomes.append(outcome)
+        spent = time.monotonic() - started
+        for item in made:
+            if not item.seconds:
+                item.seconds = spent / max(1, len(made))
+        report.outcomes.extend(made)
 
-        if outcome.ok:
+        done += portion
+        sets += 1
+
+        if all(item.ok for item in made):
             in_a_row = 0
             continue
 
         in_a_row += 1
-        skipped.append(outcome.error)
+        skipped.extend(item.error for item in made if not item.ok)
+        outcome = next(item for item in made if not item.ok)
 
         if not len(voices):
             report.stopped_reason = "закончились озвучки"
@@ -226,12 +256,17 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
 
 
 def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
-         rng: random.Random, number: int, stamp: str,
-         black_background: bool = False, taken: set[str] | None = None) -> VideoOutcome:
-    outcome = VideoOutcome(number=number, template=profile.name, ok=False)
+         rng: random.Random, numbers: list[int], stamp: str, shifts: list[float],
+         black: set[int], taken: set[str] | None = None) -> list[VideoOutcome]:
+    """Собирает по одному набору материалов столько роликов, сколько задано кадров.
 
+    Озвучка и клипы берутся один раз, а ролики из них выходят с разной рамкой:
+    обычной и сдвинутой в стороны. Материалы расходуются тоже один раз, в конце.
+    """
     voice = voices.take_next()
-    log.info("Ролик %d: шаблон %s, озвучка %s (%.2fс)", number, profile.name, voice.path.name, voice.duration_s)
+    log.info("Ролики %s: шаблон %s, озвучка %s (%.2fс)",
+             ", ".join(str(n) for n in numbers), profile.name,
+             voice.path.name, voice.duration_s)
 
     transcript = asr.transcribe(voice.path, config.asr_model, config.asr_language)
 
@@ -266,16 +301,51 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
         [c.path for c in chosen], [c.duration_s for c in chosen], rng,
     )
 
-    render_plan.black_background = black_background
-    if black_background:
-        log.info("   фон погашен: под наложением чёрное поле")
-
     if config.make_subtitles:
         render_plan.cues = _cues_for(transcript, config, line)
         if not render_plan.cues:
             render_plan.notes.append("субтитры не собраны: речь не распознана")
 
     log.debug("план:\n%s", render_plan.describe())
+
+    outcomes: list[VideoOutcome] = []
+    for number, shift in zip(numbers, shifts):
+        outcome = VideoOutcome(number=number, template=profile.name, ok=False)
+        started = time.monotonic()
+        try:
+            outcome = _render(config, profile, render_plan, number, stamp, shift,
+                              rng, black_background=number in black, taken=taken)
+        except PipelineError as exc:
+            outcome.error = str(exc)
+            log.error("Ролик %d: %s", number, exc)
+        finally:
+            outcome.seconds = time.monotonic() - started
+        outcomes.append(outcome)
+
+    if config.consume_inputs:
+        # Сценарий уносим вместе с озвучкой: они одно целое, и без этого в папке
+        # копятся текстовики без своих звуковых файлов.
+        used = [voice.path, chosen[0].path, chosen[1].path]
+        if script_path:
+            used.append(script_path)
+        assets.consume(used, config.used_dir)
+
+    return outcomes
+
+
+def _render(config: Config, profile, render_plan, number: int, stamp: str,
+            shift: float, rng: random.Random, black_background: bool,
+            taken: set[str] | None) -> VideoOutcome:
+    """Собирает один ролик из готового плана с заданной рамкой."""
+    outcome = VideoOutcome(number=number, template=profile.name, ok=False)
+
+    render_plan.black_background = black_background
+    render_plan.frame_shift = shift
+    if black_background:
+        log.info("   ролик %d: фон погашен, под наложением чёрное поле", number)
+    if shift:
+        log.info("   ролик %d: кадр сдвинут %s на %.0f%% ширины",
+                 number, "влево" if shift < 0 else "вправо", abs(shift) * 100)
 
     if config.random_names:
         name = naming.random_name(rng, config.name_length, taken)
@@ -292,11 +362,11 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
             "Ролик получился бы с текстом из шаблона, поэтому останавливаюсь."
         )
 
-    report = validate.check(result.folder)
-    for warning in report.warnings:
+    checked = validate.check(result.folder)
+    for warning in checked.warnings:
         log.warning("   проверка: %s", warning)
-    if not report.ok:
-        for error in report.errors:
+    if not checked.ok:
+        for error in checked.errors:
             log.error("   проверка: %s", error)
         raise PipelineError(f"Черновик {name} не прошёл самопроверку, подробности в журнале")
 
@@ -314,14 +384,6 @@ def _one(config: Config, profile, clips: assets.Pool, voices: assets.Pool,
                 )
         except Exception as exc:  # noqa: BLE001 - диагностика не должна валить сборку
             log.warning("Снять слепок субтитров не удалось: %s", exc)
-
-    if config.consume_inputs:
-        # Сценарий уносим вместе с озвучкой: они одно целое, и без этого в папке
-        # копятся текстовики без своих звуковых файлов.
-        used = [voice.path, chosen[0].path, chosen[1].path]
-        if script_path:
-            used.append(script_path)
-        assets.consume(used, config.used_dir)
 
     log.info("   готово: %s, %s, субтитров %d", name, fmt(result.duration_us), result.subtitle_count)
 

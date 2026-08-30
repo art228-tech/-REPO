@@ -197,6 +197,7 @@ class BatchTab(ttk.Frame):
         self.consume = tk.BooleanVar(value=True)
         self.asr_model = tk.StringVar(value="small")
         self.black_bg = tk.StringVar(value="0")
+        self.three_frames = tk.BooleanVar(value=False)
         self.random_names = tk.BooleanVar(value=False)
         self.name_length = tk.StringVar(value="10")
 
@@ -255,6 +256,10 @@ class BatchTab(ttk.Frame):
 
         checks = ttk.Frame(self)
         checks.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        ttk.Checkbutton(checks, text="Три кадра из набора", variable=self.three_frames).pack(side="left")
+        ttk.Label(checks, foreground="#666",
+                  text="обычный и два со сдвигом вбок — из одних клипов выходит втрое больше").pack(
+            side="left", padx=(4, PAD))
         ttk.Checkbutton(checks, text="Собирать субтитры", variable=self.make_subtitles).pack(side="left")
         ttk.Checkbutton(checks, text="Убирать использованные материалы",
                         variable=self.consume).pack(side="left", padx=(PAD, 0))
@@ -309,6 +314,7 @@ class BatchTab(ttk.Frame):
             fps=float(self.fps.get()),
             name_prefix=self.prefix.get().strip() or "auto",
             black_bg_of_six=int(self.black_bg.get() or 0),
+            three_frames=bool(self.three_frames.get()),
             random_names=bool(self.random_names.get()),
             name_length=int(self.name_length.get() or 10),
             make_subtitles=bool(self.make_subtitles.get()),

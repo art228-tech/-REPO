@@ -64,6 +64,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--prefix", default="auto", help="префикс имён проектов")
     run.add_argument("--black-bg", type=int, default=0, metavar="N",
                      help="сколько роликов из каждых шести собрать без размытого фона (0-6)")
+    run.add_argument("--three-frames", action="store_true",
+                     help="из одного набора материалов три ролика: обычный и два со сдвигом кадра")
     run.add_argument("--random-names", action="store_true",
                      help="случайные имена проектов из русских и английских букв и цифр")
     run.add_argument("--name-length", type=int, default=10, help="длина случайного имени")
@@ -115,6 +117,7 @@ def _config_from(args) -> Config:
         fps=getattr(args, "fps", 60.0),
         name_prefix=getattr(args, "prefix", "auto"),
         black_bg_of_six=getattr(args, "black_bg", 0),
+        three_frames=getattr(args, "three_frames", False),
         random_names=getattr(args, "random_names", False),
         name_length=getattr(args, "name_length", 10),
         make_subtitles=not getattr(args, "no_subtitles", False),
