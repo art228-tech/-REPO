@@ -1074,32 +1074,21 @@ class App:
             self.lbl_estimate.configure(text=f"Не удалось оценить объём: {exc}")
             return
 
-        model = self.var_model.get()
-        cheap = "flash" in model or "turbo" in model
-        credits = plan["total_credits_flash"] if cheap else plan["total_credits_multilingual"]
-
         if needs_prompts:
             head = f"Найдено: промптов {plan['prompts']} (будет создано голосов {plan['voices']})"
-            tail = f", из них {_fmt(plan['design_credits'])} на создание голосов."
+            if plan["design_credits"]:
+                tail = f"На создание голосов уйдёт около {_fmt(plan['design_credits'])} кредитов."
+            else:
+                tail = "Текст прослушивания задаёт ElevenLabs, кредиты на голоса заранее не считаются."
         else:
             head = f"Голосов выбрано: {plan['voices']}"
-            tail = ". Голоса уже созданы, кредиты на них не тратятся."
-
-        breaks = int(plan.get("line_breaks") or 0)
-        breaks_note = ""
-        if breaks and _breaks_from_label(self.var_line_breaks.get()) == LINE_BREAKS_KEEP:
-            breaks_note = (
-                f"\nВ текстах {_fmt(breaks)} переносов строк — на каждом будет пауза. "
-                "Если читать нужно слитно, поменяйте «Переносы строк» в настройках."
-            )
+            tail = "Голоса уже созданы, кредиты на них не тратятся."
 
         self.lbl_estimate.configure(
             text=(
                 f"{head}, текстов {plan['texts']}, "
-                f"файлов на выходе {_fmt(plan['outputs'])}, "
-                f"символов {_fmt(plan['characters'])}.\n"
-                f"Ориентировочный расход: около {_fmt(credits)} кредитов{tail}"
-                f"{breaks_note}"
+                f"файлов на выходе {_fmt(plan['outputs'])}.\n"
+                f"{tail}"
             )
         )
         self._refresh_voice_mode_hint(plan)

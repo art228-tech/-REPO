@@ -17,6 +17,7 @@ from elevenlabs_voiceover.config import (
 from elevenlabs_voiceover.runner import (
     PreflightError,
     Runner,
+    count_txt_files,
     estimate_plan,
     list_txt_files,
     natural_key,
@@ -69,6 +70,17 @@ def test_list_txt_files_ignores_other_extensions(tmp_path):
 
 def test_list_txt_files_on_missing_directory(tmp_path):
     assert list_txt_files(tmp_path / "нет") == []
+
+
+def test_count_txt_files_matches_list(tmp_path):
+    (tmp_path / "a.txt").write_text("1", encoding="utf-8")
+    (tmp_path / "b.md").write_text("2", encoding="utf-8")
+    (tmp_path / "c.TXT").write_text("3", encoding="utf-8")
+    (tmp_path / "подпапка").mkdir()
+    (tmp_path / "подпапка" / "внутри.txt").write_text("4", encoding="utf-8")
+
+    assert count_txt_files(tmp_path) == 2
+    assert count_txt_files(tmp_path / "нет") == 0
 
 
 # ======================================================================
@@ -349,12 +361,19 @@ def test_line_breaks_can_be_removed(workspace, store, monkeypatch):
     assert client.tts_calls[0][1] == "Раз. Два. Три."
 
 
-def test_estimate_counts_line_breaks(workspace):
-    (workspace["texts"] / "речь.txt").write_text("Раз.\nДва.\n\nТри.\nЧетыре.", encoding="utf-8")
+def test_estimate_does_not_read_text_files(workspace, monkeypatch):
+    """Выбор папки текстов не должен открывать файлы — в ней их может быть очень много."""
     write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 3)
 
+    def boom(path):
+        raise AssertionError(f"оценке незачем читать {path}")
+
+    monkeypatch.setattr(runner_module, "read_text_file", boom)
     plan = estimate_plan(make_settings(workspace, max_voices=1))
-    assert plan["line_breaks"] == 2
+    assert plan["texts"] == 3
+    assert plan["characters"] == 0
+    assert plan["line_breaks"] == 0
 
 
 def test_manifest_records_pace(workspace, store, monkeypatch):
@@ -620,7 +639,7 @@ def test_finished_work_is_resumable_after_quota_stop(workspace, store, monkeypat
 # ======================================================================
 # Оценка без обращения к API
 # ======================================================================
-def test_estimate_counts_files_and_characters(workspace):
+def test_estimate_counts_files_without_reading_them(workspace):
     write_prompts(workspace["prompts"], 3)
     write_texts(workspace["texts"], 4)
 
@@ -629,7 +648,7 @@ def test_estimate_counts_files_and_characters(workspace):
     assert plan["prompts"] == 3
     assert plan["voices"] == 3
     assert plan["texts"] == 4
-    assert plan["characters"] > 0
+    assert plan["characters"] == 0
     assert plan["design_credits"] > 0
 
 
@@ -654,16 +673,8 @@ def test_estimate_accounts_for_all_voices_mode(workspace):
     single = estimate_plan(make_settings(workspace, max_voices=2))
     everyone = estimate_plan(make_settings(workspace, max_voices=2, voice_mode=MODE_ALL_VOICES))
 
-    assert everyone["characters"] == single["characters"] * 2
-
-
-def test_estimate_flash_is_half_of_multilingual(workspace):
-    write_prompts(workspace["prompts"], 1)
-    write_texts(workspace["texts"], 2)
-
-    plan = estimate_plan(make_settings(workspace, max_voices=1))
-    body = plan["total_credits_multilingual"] - plan["design_credits"]
-    assert plan["total_credits_flash"] - plan["design_credits"] == pytest.approx(body / 2, abs=1)
+    assert single["outputs"] == 3
+    assert everyone["outputs"] == 6
 
 
 def test_source_texts_stay_by_default(workspace, store, monkeypatch):

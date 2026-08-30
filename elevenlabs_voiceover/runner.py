@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import csv
-import math
+import os
 import re
 import threading
 from dataclasses import dataclass, field
@@ -12,7 +12,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import audio as audio_utils
 from .api_client import ElevenLabsClient, ModelInfo, Subscription
-from .chunker import Chunk, count_line_breaks, split_text
+from .chunker import Chunk, split_text
 from .config import (
     DONE_DELETE,
     DONE_FOLDER_NAME,
@@ -169,6 +169,19 @@ def list_txt_files(directory: Path) -> List[Path]:
         return []
     files = [p for p in directory.iterdir() if p.is_file() and p.suffix.lower() == ".txt"]
     return sorted(files, key=lambda p: natural_key(p.name))
+
+
+def count_txt_files(directory: Path) -> int:
+    """Сколько .txt лежит прямо в папке — без открытия файлов."""
+    try:
+        with os.scandir(directory) as entries:
+            return sum(
+                1
+                for entry in entries
+                if entry.is_file(follow_symlinks=False) and entry.name.lower().endswith(".txt")
+            )
+    except OSError:
+        return 0
 
 
 # ----------------------------------------------------------------------
@@ -1022,15 +1035,17 @@ class Runner:
 
 # ----------------------------------------------------------------------
 def estimate_plan(settings: Settings) -> Dict[str, object]:
-    """Оценить объём работы без единого обращения к API.
+    """Оценить объём работы без обращения к API и без чтения текстов.
 
-    Нужна, чтобы показать в окне стоимость до нажатия «Начать».
+    Тексты не открываются: в папке их может быть очень много, а разбор
+    содержимого до запуска ничего не даёт — озвучка всё равно прочитает
+    каждый файл в свой черёд.
     """
     prompts_dir = Path(settings.prompts_dir) if settings.prompts_dir else None
     texts_dir = Path(settings.texts_dir) if settings.texts_dir else None
 
     prompt_files = list_txt_files(prompts_dir) if prompts_dir else []
-    text_files = list_txt_files(texts_dir) if texts_dir else []
+    text_count = count_txt_files(texts_dir) if texts_dir else 0
 
     from_account = settings.voice_source == SOURCE_ACCOUNT
     if from_account:
@@ -1038,23 +1053,9 @@ def estimate_plan(settings: Settings) -> Dict[str, object]:
         voices = min(len(settings.selected_voice_ids) or settings.max_voices, settings.max_voices)
     else:
         voices = min(len(prompt_files), settings.max_voices)
-    total_chars = 0
-    total_chunks = 0
-    line_breaks = 0
-    for path in text_files:
-        try:
-            content = read_text_file(path)
-        except OSError:
-            continue
-        chunks = split_text(content, settings.chunk_target_chars, line_breaks=settings.line_breaks)
-        line_breaks += count_line_breaks(content)
-        total_chunks += len(chunks)
-        total_chars += sum(c.characters for c in chunks)
 
-    outputs = len(text_files)
+    outputs = text_count
     if settings.voice_mode == MODE_ALL_VOICES and voices:
-        total_chars *= voices
-        total_chunks *= voices
         outputs *= voices
 
     if from_account or settings.auto_generate_preview:
@@ -1065,12 +1066,12 @@ def estimate_plan(settings: Settings) -> Dict[str, object]:
     return {
         "prompts": len(prompt_files),
         "voices": voices,
-        "texts": len(text_files),
+        "texts": text_count,
         "outputs": outputs,
-        "line_breaks": line_breaks,
-        "chunks": total_chunks,
-        "characters": total_chars,
+        "line_breaks": 0,
+        "chunks": 0,
+        "characters": 0,
         "design_credits": design_cost,
-        "total_credits_multilingual": total_chars + design_cost,
-        "total_credits_flash": math.ceil(total_chars * 0.5) + design_cost,
+        "total_credits_multilingual": design_cost,
+        "total_credits_flash": design_cost,
     }

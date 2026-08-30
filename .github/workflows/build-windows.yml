@@ -3,7 +3,9 @@ name: Сборка для Windows
 on:
   workflow_dispatch:
   push:
-    branches: ["cursor/elevenlabs-api-voiceover-gui-edb4"]
+    branches:
+      - "cursor/elevenlabs-api-voiceover-gui-edb4"
+      - "cursor/remove-text-folder-check-3b81"
     paths:
       - "elevenlabs_voiceover/**"
       - "app.py"
