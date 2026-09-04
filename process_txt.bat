@@ -14,7 +14,7 @@ chcp 65001 >nul
 set "SCRIPT_PATH=%~f0"
 set "PS_MARK=TXTAPPEND_PS_BEGIN"
 
-powershell -NoProfile -ExecutionPolicy Bypass -STA -Command "try { $raw = Get-Content -LiteralPath $env:SCRIPT_PATH -Raw -Encoding UTF8; $m = $env:PS_MARK + '_SECTION'; $i = $raw.IndexOf($m); if ($i -lt 0) { throw 'internal marker missing' }; Invoke-Expression $raw.Substring($i + $m.Length); exit $(if ($LASTEXITCODE -ne $null) { $LASTEXITCODE } else { 0 }) } catch { Write-Host $_ -ForegroundColor Red; exit 1 }"
+powershell -NoProfile -ExecutionPolicy Bypass -STA -Command "try { $utf8 = New-Object System.Text.UTF8Encoding $false; $raw = [System.IO.File]::ReadAllText($env:SCRIPT_PATH, $utf8); $m = $env:PS_MARK + '_SECTION'; $i = $raw.IndexOf($m); if ($i -lt 0) { throw 'internal marker missing' }; Invoke-Expression $raw.Substring($i + $m.Length); exit $(if ($LASTEXITCODE -ne $null) { $LASTEXITCODE } else { 0 }) } catch { Write-Host $_ -ForegroundColor Red; exit 1 }"
 
 set "ERR=%ERRORLEVEL%"
 if not "%ERR%"=="0" (
@@ -194,6 +194,11 @@ function Invoke-Process {
     }
 
     if ($null -eq $Sentences -or $Sentences.Count -eq 0) {
+        if ($script:GuiMode) {
+            $msg = 'Нужно хотя бы одно предложение. Каждое — с новой строки.'
+            Write-Status $msg 'Red'
+            return @{ Ok = 0; Fail = 0; LogPath = $null; Message = $msg }
+        }
         $Sentences = @(Get-SentencesInteractive)
     }
     $Sentences = @($Sentences | ForEach-Object { "$_".Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
@@ -340,7 +345,6 @@ function Show-Gui {
     Add-Type -AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
     $script:GuiMode = $true
-    Hide-ConsoleWindow
 
     $form = New-Object System.Windows.Forms.Form
     $form.Text = 'Обработка TXT'
@@ -462,7 +466,10 @@ function Show-Gui {
     })
 
     $form.Controls.AddRange(@($lblFolder, $lblSkip, $numSkip, $lblStats, $lblSent, $box, $btnGo, $btnRestore, $script:StatusLabel))
-    $form.Add_Shown({ $script:SentBox.Focus() })
+    $form.Add_Shown({
+        Hide-ConsoleWindow
+        $script:SentBox.Focus()
+    })
     [void]$form.ShowDialog()
 }
 
