@@ -41,6 +41,11 @@ DONE_ACTIONS = {
     DONE_DELETE: "Удалять безвозвратно",
 }
 
+#: Границы длительности готовой озвучки в секундах. Ноль снимает ограничение.
+DEFAULT_MIN_DURATION = 10.0
+DEFAULT_MAX_DURATION = 16.0
+DURATION_LIMIT_MAX = 3600.0
+
 #: Голоса создаются программой по промптам через Voice Design.
 SOURCE_DESIGN = "design"
 #: Голоса уже созданы в личном кабинете, программа только выбирает из них.
@@ -120,6 +125,8 @@ class Settings:
 
     # --- вывод ---
     done_action: str = DONE_KEEP
+    min_duration: float = DEFAULT_MIN_DURATION
+    max_duration: float = DEFAULT_MAX_DURATION
     save_next_to_texts: bool = False
     keep_chunks: bool = False
     use_ffmpeg: bool = True
@@ -151,6 +158,12 @@ class Settings:
         self.selected_voice_ids = [
             str(v).strip() for v in (self.selected_voice_ids or []) if str(v).strip()
         ]
+
+        self.min_duration = _clamp_float(self.min_duration, 0.0, DURATION_LIMIT_MAX, DEFAULT_MIN_DURATION)
+        self.max_duration = _clamp_float(self.max_duration, 0.0, DURATION_LIMIT_MAX, DEFAULT_MAX_DURATION)
+        if self.max_duration and self.min_duration > self.max_duration:
+            # Границы, поставленные наоборот, отсеивали бы вообще всё.
+            self.min_duration, self.max_duration = self.max_duration, self.min_duration
 
         self.chunk_target_chars = _clamp_int(self.chunk_target_chars, 200, 40000, 2500)
         self.reserve_credits = max(0, _clamp_int(self.reserve_credits, 0, 10**9, 0))
@@ -246,6 +259,20 @@ class Settings:
         settings = cls.from_dict(data)
         register_secret(settings.api_key)
         return settings
+
+
+def describe_duration_limits(minimum: float, maximum: float) -> str:
+    """Границы длительности словами: «от 10 до 16 с», «не длиннее 16 с».
+
+    Пустая строка означает, что длительность не проверяется.
+    """
+    if minimum and maximum:
+        return f"от {minimum:g} до {maximum:g} с"
+    if minimum:
+        return f"не короче {minimum:g} с"
+    if maximum:
+        return f"не длиннее {maximum:g} с"
+    return ""
 
 
 #: Схемы прокси, которые понимает requests. socks5h отдаёт разрешение имён

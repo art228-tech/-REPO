@@ -21,6 +21,7 @@ from .config import (
     SOURCE_ACCOUNT,
     SOURCE_DESIGN,
     Settings,
+    describe_duration_limits,
 )
 from .errors import (
     Cancelled,
@@ -83,6 +84,8 @@ class Job:
     voice: VoiceRef
     output_path: Path
     duration: Optional[float] = None
+    #: Чем запись не подошла по длительности, если её пришлось удалить.
+    rejected: str = ""
 
 
 @dataclass
@@ -93,6 +96,7 @@ class RunStats:
     texts_done: int = 0
     texts_skipped: int = 0
     texts_failed: int = 0
+    texts_rejected: int = 0
     chunks_done: int = 0
     chunks_reused: int = 0
     characters_spent: int = 0
@@ -109,6 +113,7 @@ class RunStats:
             "texts_done": self.texts_done,
             "texts_skipped": self.texts_skipped,
             "texts_failed": self.texts_failed,
+            "texts_rejected": self.texts_rejected,
             "chunks_done": self.chunks_done,
             "chunks_reused": self.chunks_reused,
             "characters_spent": self.characters_spent,
@@ -133,6 +138,21 @@ def _pace(characters: int, seconds: Optional[float]) -> Optional[float]:
     if not seconds or seconds <= 0 or characters <= 0:
         return None
     return characters / seconds
+
+
+def duration_problem(seconds: Optional[float], minimum: float, maximum: float) -> str:
+    """Чем готовая запись не укладывается в заданные границы.
+
+    Пустая строка означает, что запись подходит. Неизмеренная длительность
+    претензией не считается: файл, о котором ничего не известно, не удаляем.
+    """
+    if seconds is None:
+        return ""
+    if minimum and seconds < minimum:
+        return f"короче {minimum:g} с"
+    if maximum and seconds > maximum:
+        return f"длиннее {maximum:g} с"
+    return ""
 
 
 def read_text_file(path: Path) -> str:
@@ -342,6 +362,7 @@ class Runner:
             len(jobs),
             f"{self._credits_budget:,.0f}".replace(",", " "),
         )
+        self._announce_duration_limits()
 
         jobs_by_text: Dict[Path, List[Job]] = {}
         for job in jobs:
@@ -377,6 +398,27 @@ class Runner:
             # Манифест нужен и при остановке по кредитам или по кнопке: он
             # показывает, что успело озвучиться и каким голосом.
             self._write_manifest(jobs, service_dir)
+
+    def _announce_duration_limits(self) -> None:
+        """Сказать заранее, какие записи будут удалены и почему.
+
+        Удаление уже оплаченной озвучки должно быть видно в журнале с самого
+        начала, а не всплывать посреди работы.
+        """
+        settings = self.settings
+        limits = describe_duration_limits(settings.min_duration, settings.max_duration)
+        if not limits:
+            return
+
+        if audio_utils.format_family(settings.output_format) == "mp3":
+            log.info("Оставляю только записи %s, остальные удаляю сразу после склейки", limits)
+        else:
+            log.warning(
+                "Длительность измеряется только у MP3, а выбран формат %s — "
+                "границы %s проверены не будут",
+                settings.output_format,
+                limits,
+            )
 
     # ------------------------------------------------------------------
     def _load_prompts(self, directory: Path) -> List[PromptSpec]:
@@ -893,6 +935,12 @@ class Runner:
             self.stats.failures.append(f"{job.text.name}: склейка не удалась — {exc}")
             return
 
+        job.duration = self._measure(job.output_path)
+        problem = duration_problem(job.duration, settings.min_duration, settings.max_duration)
+        if problem:
+            self._discard_output(job, problem, chunks_dir)
+            return
+
         self.state.mark_output_done(
             output_key,
             text_file=job.text.name,
@@ -902,7 +950,6 @@ class Runner:
             characters=job.text.characters,
         )
         self.stats.texts_done += 1
-        job.duration = self._measure(job.output_path)
         if job.duration:
             self.stats.seconds_produced += job.duration
 
@@ -917,6 +964,37 @@ class Runner:
         )
 
         if not settings.keep_chunks:
+            self._remove_chunks(chunks_dir)
+
+    def _discard_output(self, job: Job, problem: str, chunks_dir: Path) -> None:
+        """Убрать озвучку, не уложившуюся в границы длительности.
+
+        Готовой в базе такая озвучка не отмечается: файла на диске больше нет,
+        и следующий запуск должен взяться за текст заново, а не считать его
+        сделанным. Исходный текст тоже остаётся на месте — его убирают, только
+        увидев результат на диске.
+        """
+        job.rejected = problem
+        self.stats.texts_rejected += 1
+
+        try:
+            job.output_path.unlink()
+        except OSError as exc:
+            log.warning("Не удалось удалить %s: %s", job.output_path.name, exc)
+            self.stats.failures.append(
+                f"{job.text.name}: озвучка {problem}, но удалить файл не удалось — {exc}"
+            )
+        else:
+            log.warning(
+                "Озвучка «%s» вышла %.1f с — это %s, файл удалён",
+                job.text.name,
+                job.duration or 0.0,
+                problem,
+            )
+
+        self._progress(f"«{job.text.name}»: озвучка {problem}, удалена")
+
+        if not self.settings.keep_chunks:
             self._remove_chunks(chunks_dir)
 
     @staticmethod
@@ -1032,6 +1110,9 @@ class Runner:
                     if ready and job.duration is None:
                         job.duration = self._measure(job.output_path)
                     pace = _pace(job.text.characters, job.duration)
+                    # У удалённой озвучки длительность известна, и она здесь
+                    # самое ценное: сразу видно, насколько текст промахнулся.
+                    status = f"удалён: {job.rejected}" if job.rejected else ("да" if ready else "нет")
                     writer.writerow(
                         [
                             job.output_path.name,
@@ -1042,7 +1123,7 @@ class Runner:
                             audio_utils.format_duration(job.duration),
                             f"{job.duration:.1f}".replace(".", ",") if job.duration else "",
                             f"{pace:.1f}".replace(".", ",") if pace else "",
-                            "да" if ready else "нет",
+                            status,
                         ]
                     )
             log.info("Список готовых файлов записан в %s", manifest.name)
