@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from . import batch, logging_setup, profile as profile_module, validate
-from .config import Config, _default_drafts_dir
+from .config import DEFAULT_FRAME_SHIFT, Config, _default_drafts_dir, parse_shift
 from .errors import PipelineError
 from .logging_setup import get_logger
 
@@ -64,8 +64,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--prefix", default="auto", help="префикс имён проектов")
     run.add_argument("--black-bg", type=int, default=0, metavar="N",
                      help="сколько роликов из каждых шести собрать без размытого фона (0-6)")
-    run.add_argument("--three-frames", action="store_true",
-                     help="из одного набора материалов три ролика: обычный и два со сдвигом кадра")
+    run.add_argument("--frames-per-set", type=int, default=1, choices=(1, 2, 3), metavar="N",
+                     help="сколько роликов делать из одного набора клипов: 1 — обычная сборка, "
+                          "2 — только со сдвигом влево и вправо, 3 — плюс обычный кадр посередине")
+    run.add_argument("--frame-shift", default=None, metavar="ДОЛЯ",
+                     help="насколько сдвигать кадр: доля ширины («1/3», «1/4»), "
+                          "число («0.25») или проценты («25%%»); по умолчанию 1/3")
+    run.add_argument("--three-frames", dest="frames_per_set", action="store_const", const=3,
+                     default=1, help="прежнее название ключа, то же что --frames-per-set 3")
     run.add_argument("--random-names", action="store_true",
                      help="случайные имена проектов из русских и английских букв и цифр")
     run.add_argument("--name-length", type=int, default=10, help="длина случайного имени")
@@ -117,7 +123,8 @@ def _config_from(args) -> Config:
         fps=getattr(args, "fps", 60.0),
         name_prefix=getattr(args, "prefix", "auto"),
         black_bg_of_six=getattr(args, "black_bg", 0),
-        three_frames=getattr(args, "three_frames", False),
+        frames_per_set=getattr(args, "frames_per_set", 1) or 1,
+        frame_shift=parse_shift(getattr(args, "frame_shift", None) or DEFAULT_FRAME_SHIFT),
         random_names=getattr(args, "random_names", False),
         name_length=getattr(args, "name_length", 10),
         make_subtitles=not getattr(args, "no_subtitles", False),
@@ -146,7 +153,14 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         return gui_main()
 
-    config = _config_from(args)
+    try:
+        config = _config_from(args)
+    except PipelineError as exc:
+        # Ключи разбираются до того, как поднят журнал, поэтому сказать о плохом
+        # значении можно только в консоль.
+        print(exc)
+        return 2
+
     log_path = logging_setup.setup(config.log_dir, verbose=getattr(args, "verbose", False))
 
     try:
