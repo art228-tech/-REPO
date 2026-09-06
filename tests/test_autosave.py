@@ -184,6 +184,40 @@ def test_keeping_texts_is_the_default(app):
     assert reload_settings().done_action == DONE_KEEP
 
 
+def test_duration_limits_are_saved(app):
+    app.var_min_duration.set(8.0)
+    app.var_max_duration.set(14.0)
+    flush(app)
+
+    restored = reload_settings()
+    assert (restored.min_duration, restored.max_duration) == (8.0, 14.0)
+
+
+def test_duration_limits_start_at_ten_and_sixteen(app):
+    assert (app.var_min_duration.get(), app.var_max_duration.get()) == (10.0, 16.0)
+
+
+def test_duration_hint_warns_about_deletion(app):
+    app.var_min_duration.set(10.0)
+    app.var_max_duration.set(16.0)
+    app._refresh_duration_hint()
+
+    hint = app.lbl_duration.cget("text")
+    assert "от 10 до 16 с" in hint
+    assert "удаляется" in hint
+    # Удаление уже оплаченной озвучки должно быть заметно.
+    assert app.lbl_duration.cget("style") == "Bad.TLabel"
+
+
+def test_zeroes_turn_the_duration_check_off(app):
+    app.var_min_duration.set(0.0)
+    app.var_max_duration.set(0.0)
+    app._refresh_duration_hint()
+
+    assert "не проверяется" in app.lbl_duration.cget("text")
+    assert app.lbl_duration.cget("style") == "Hint.TLabel"
+
+
 def test_save_beside_flag_is_saved(app):
     app.var_save_beside.set(True)
     flush(app)

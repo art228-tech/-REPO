@@ -54,11 +54,14 @@ from .chunker import (
 )
 from .config import (
     DEFAULT_GUIDANCE,
+    DEFAULT_MAX_DURATION,
+    DEFAULT_MIN_DURATION,
     DONE_ACTIONS,
     DONE_DELETE,
     DONE_FOLDER_NAME,
     DONE_KEEP,
     DONE_MOVE,
+    DURATION_LIMIT_MAX,
     MODE_ALL_VOICES,
     MODE_ROUND_ROBIN,
     SOURCE_ACCOUNT,
@@ -66,6 +69,7 @@ from .config import (
     VOICE_MODES,
     VOICE_SOURCES,
     Settings,
+    describe_duration_limits,
     normalize_proxy_url,
 )
 from .errors import ElevenLabsError
@@ -131,6 +135,7 @@ class App:
         self._on_save_beside_changed()
         self._on_voice_source_changed()
         self._refresh_done_hint()
+        self._refresh_duration_hint()
 
     # ==================================================================
     # Построение интерфейса
@@ -581,6 +586,29 @@ class App:
 
         row = self._separator(canvas_frame, row, "Файлы на выходе")
 
+        ttk.Label(canvas_frame, text="Длительность озвучки:").grid(row=row, column=0, sticky="w", pady=3)
+        limits = ttk.Frame(canvas_frame)
+        limits.grid(row=row, column=1, columnspan=2, sticky="w", pady=3)
+
+        self.var_min_duration = DoubleVar(value=DEFAULT_MIN_DURATION)
+        self.var_max_duration = DoubleVar(value=DEFAULT_MAX_DURATION)
+
+        ttk.Label(limits, text="от").pack(side=LEFT)
+        ttk.Spinbox(limits, from_=0.0, to=DURATION_LIMIT_MAX, increment=1.0, width=8,
+                    textvariable=self.var_min_duration).pack(side=LEFT, padx=(4, 10))
+        ttk.Label(limits, text="до").pack(side=LEFT)
+        ttk.Spinbox(limits, from_=0.0, to=DURATION_LIMIT_MAX, increment=1.0, width=8,
+                    textvariable=self.var_max_duration).pack(side=LEFT, padx=(4, 6))
+        ttk.Label(limits, text="секунд").pack(side=LEFT)
+        row += 1
+
+        self.lbl_duration = ttk.Label(canvas_frame, text="", style="Hint.TLabel",
+                                      justify=LEFT, wraplength=700)
+        self.lbl_duration.grid(row=row, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        self.var_min_duration.trace_add("write", lambda *_: self._refresh_duration_hint())
+        self.var_max_duration.trace_add("write", lambda *_: self._refresh_duration_hint())
+        row += 1
+
         ttk.Label(canvas_frame, text="Текст после озвучки:").grid(row=row, column=0, sticky="w", pady=3)
         self.var_done_action = StringVar(value=DONE_ACTIONS[DONE_KEEP])
         combo_done = ttk.Combobox(
@@ -757,6 +785,8 @@ class App:
         self.var_retries.set(s.max_retries)
         self.var_timeout.set(s.request_timeout)
         self.var_done_action.set(DONE_ACTIONS.get(s.done_action, DONE_ACTIONS[DONE_KEEP]))
+        self.var_min_duration.set(s.min_duration)
+        self.var_max_duration.set(s.max_duration)
         self.var_save_beside.set(s.save_next_to_texts)
         self.var_keep_chunks.set(s.keep_chunks)
         self.var_use_ffmpeg.set(s.use_ffmpeg)
@@ -800,6 +830,8 @@ class App:
         s.max_retries = _safe_int(self.var_retries, s.max_retries)
         s.request_timeout = _safe_int(self.var_timeout, s.request_timeout)
         s.done_action = _done_from_label(self.var_done_action.get())
+        s.min_duration = _safe_float(self.var_min_duration, s.min_duration)
+        s.max_duration = _safe_float(self.var_max_duration, s.max_duration)
         s.save_next_to_texts = bool(self.var_save_beside.get())
         s.keep_chunks = bool(self.var_keep_chunks.get())
         s.use_ffmpeg = bool(self.var_use_ffmpeg.get())
@@ -859,6 +891,26 @@ class App:
 
     def _open_keys_page(self) -> None:
         webbrowser.open("https://elevenlabs.io/app/developers/api-keys")
+
+    def _refresh_duration_hint(self) -> None:
+        """Показать, какие записи будут удалены при нынешних границах."""
+        minimum = _safe_float(self.var_min_duration, self.settings.min_duration)
+        maximum = _safe_float(self.var_max_duration, self.settings.max_duration)
+        limits = describe_duration_limits(minimum, maximum)
+
+        if not limits:
+            self.lbl_duration.configure(
+                text="Длительность не проверяется: в папку попадёт любая готовая озвучка.",
+                style="Hint.TLabel",
+            )
+            return
+
+        self.lbl_duration.configure(
+            text=f"Останутся только записи {limits}. Всё, что не уложилось, удаляется сразу "
+                 "после склейки — кредиты за него уже списаны. Исходный txt при этом остаётся "
+                 "на месте, и следующий запуск озвучит его заново. Ноль в поле снимает границу.",
+            style="Bad.TLabel",
+        )
 
     def _refresh_done_hint(self) -> None:
         action = _done_from_label(self.var_done_action.get())
@@ -1418,9 +1470,11 @@ class App:
         self._set_busy(False)
         self.progress.configure(value=1000 if not stats.stopped_reason else self.progress["value"])
 
+        limits = describe_duration_limits(self.settings.min_duration, self.settings.max_duration)
         summary = (
             f"Готово файлов: {stats.texts_done}\n"
             f"Пропущено (уже были готовы): {stats.texts_skipped}\n"
+            f"Удалено по длительности ({limits or 'без границ'}): {stats.texts_rejected}\n"
             f"С ошибками: {stats.texts_failed}\n"
             f"Голосов создано: {stats.voices_created}, использовано готовых: {stats.voices_reused}\n"
             f"Озвучено символов: {_fmt(stats.characters_spent)}\n"
@@ -1436,7 +1490,7 @@ class App:
         self.lbl_status.configure(text=stats.stopped_reason or "Работа завершена")
         log.info("Работа завершена")
 
-        if stats.texts_failed or stats.stopped_reason:
+        if stats.texts_failed or stats.texts_rejected or stats.stopped_reason:
             messagebox.showwarning(APP_TITLE, summary, parent=self.root)
         else:
             messagebox.showinfo(APP_TITLE, summary, parent=self.root)

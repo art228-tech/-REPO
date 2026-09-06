@@ -76,6 +76,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-system-proxy", action="store_true", help="игнорировать настройки прокси из системы"
     )
     parser.add_argument("--chunk", type=int, help="символов в одном куске")
+    parser.add_argument(
+        "--min-duration", type=float,
+        help="удалять озвучку короче стольких секунд (0 — не проверять)",
+    )
+    parser.add_argument(
+        "--max-duration", type=float,
+        help="удалять озвучку длиннее стольких секунд (0 — не проверять)",
+    )
     parser.add_argument("--recreate-voices", action="store_true", help="создать голоса заново")
     parser.add_argument("--check", action="store_true", help="проверить ключ и выйти")
     parser.add_argument(
@@ -107,6 +115,11 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
         settings.reserve_credits = args.reserve
     if args.chunk:
         settings.chunk_target_chars = args.chunk
+    # Ноль — осмысленное значение «не проверять», поэтому сверяемся с None.
+    if args.min_duration is not None:
+        settings.min_duration = args.min_duration
+    if args.max_duration is not None:
+        settings.max_duration = args.max_duration
     if args.recreate_voices:
         settings.recreate_voices = True
     if args.proxy is not None:
