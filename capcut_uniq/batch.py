@@ -44,17 +44,29 @@ class VideoOutcome:
 # Сколько неудач подряд стерпеть, прежде чем признать, что материалы не подходят.
 GIVE_UP_AFTER = 5
 
-# Насколько сдвигается кадр в дополнительных роликах: на треть ширины в каждую
-# сторону. Треть исходного кадра уходит, треть приходит с той стороны, которая
-# в обычном ролике обрезана.
-FRAME_SHIFT = 1 / 3
+# Больше трёх роликов из набора не выходит: сдвигать рамку есть куда только
+# влево и вправо, а середина — это обычный кадр.
+MAX_FRAMES_PER_SET = 3
 
 
 def frame_shifts(config: Config) -> list[float]:
-    """Какие рамки собирать из одного набора материалов."""
-    if not config.three_frames:
+    """Какие рамки собирать из одного набора материалов.
+
+    Один ролик — обычный кадр, как при сборке без сдвигов. Два — только
+    сдвинутые влево и вправо: середина отпадает, потому что она повторяла бы
+    обычную сборку, зато оба ролика показывают разные части клипа. Три — плюс
+    середина.
+
+    Нулевой сдвиг обесценивает всю затею: ролики вышли бы одинаковыми по кадру,
+    поэтому такой набор сводим к одному ролику.
+    """
+    count = max(1, min(MAX_FRAMES_PER_SET, int(config.frames_per_set)))
+    shift = abs(float(config.frame_shift))
+    if count == 1 or shift <= 0:
         return [0.0]
-    return [0.0, -FRAME_SHIFT, FRAME_SHIFT]
+    if count == 2:
+        return [-shift, shift]
+    return [0.0, -shift, shift]
 
 
 @dataclass
@@ -178,8 +190,20 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
     stamp = datetime.now().strftime("%m%d_%H%M")
     shifts = frame_shifts(config)
     if len(shifts) > 1:
-        log.info("Из каждого набора материалов выйдет роликов: %d (сдвиги кадра %s)",
-                 len(shifts), ", ".join(f"{s:+.0%}" if s else "обычный" for s in shifts))
+        log.info(
+            "Из каждого набора клипов выйдет роликов: %d (кадры: %s). "
+            "Заказано роликов %d — уйдёт пар клипов: %d",
+            len(shifts),
+            ", ".join(f"сдвиг {s:+.0%}" if s else "обычный" for s in shifts),
+            config.count,
+            (config.count + len(shifts) - 1) // len(shifts),
+        )
+    elif config.frames_per_set > 1:
+        log.warning(
+            "Сдвиг кадра нулевой, поэтому из набора выйдет один ролик, а не %d: "
+            "иначе все они показывали бы один и тот же кадр",
+            config.frames_per_set,
+        )
     black = naming.black_background_numbers(config.count, config.black_bg_of_six, rng)
     if black:
         log.info("Без размытого фона: %d из %d (%d из каждых шести)",

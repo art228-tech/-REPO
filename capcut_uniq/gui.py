@@ -20,7 +20,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Callable
 
 from . import batch, logging_setup, splitter
-from .config import Config, _default_drafts_dir
+from .config import Config, _default_drafts_dir, parse_shift
 from .errors import PipelineError
 
 PAD = 8
@@ -197,7 +197,8 @@ class BatchTab(ttk.Frame):
         self.consume = tk.BooleanVar(value=True)
         self.asr_model = tk.StringVar(value="small")
         self.black_bg = tk.StringVar(value="0")
-        self.three_frames = tk.BooleanVar(value=False)
+        self.frames_per_set = tk.StringVar(value="1")
+        self.frame_shift = tk.StringVar(value="1/3")
         self.random_names = tk.BooleanVar(value=False)
         self.name_length = tk.StringVar(value="10")
 
@@ -254,18 +255,29 @@ class BatchTab(ttk.Frame):
         self.length_box.pack(side="left", padx=(4, 0))
         self._names_changed()
 
+        frames = ttk.Frame(self)
+        frames.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        ttk.Label(frames, text="Роликов из одного набора клипов").pack(side="left")
+        ttk.Combobox(frames, width=3, textvariable=self.frames_per_set, state="readonly",
+                     values=("1", "2", "3")).pack(side="left", padx=(4, PAD))
+        ttk.Label(frames, text="сдвиг кадра").pack(side="left")
+        # Не readonly: список — это подсказка с ходовыми долями, а вписать можно
+        # что угодно, вплоть до процентов.
+        ttk.Combobox(frames, width=6, textvariable=self.frame_shift,
+                     values=("1/2", "1/3", "1/4", "1/5", "1/6")).pack(side="left", padx=(4, 0))
+        self.frames_hint = ttk.Label(frames, foreground="#666", text="")
+        self.frames_hint.pack(side="left", padx=(PAD, 0))
+        self.frames_per_set.trace_add("write", self._frames_changed)
+        self._frames_changed()
+
         checks = ttk.Frame(self)
-        checks.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(4, 0))
-        ttk.Checkbutton(checks, text="Три кадра из набора", variable=self.three_frames).pack(side="left")
-        ttk.Label(checks, foreground="#666",
-                  text="обычный и два со сдвигом вбок — из одних клипов выходит втрое больше").pack(
-            side="left", padx=(4, PAD))
+        checks.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(4, 0))
         ttk.Checkbutton(checks, text="Собирать субтитры", variable=self.make_subtitles).pack(side="left")
         ttk.Checkbutton(checks, text="Убирать использованные материалы",
                         variable=self.consume).pack(side="left", padx=(PAD, 0))
 
         actions = ttk.Frame(self)
-        actions.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
+        actions.grid(row=10, column=0, columnspan=3, sticky="ew", pady=(PAD, 0))
         start = ttk.Button(actions, text="Собрать", command=self._start)
         start.pack(side="left")
         check = ttk.Button(actions, text="Проверить окружение", command=self._doctor)
@@ -314,7 +326,8 @@ class BatchTab(ttk.Frame):
             fps=float(self.fps.get()),
             name_prefix=self.prefix.get().strip() or "auto",
             black_bg_of_six=int(self.black_bg.get() or 0),
-            three_frames=bool(self.three_frames.get()),
+            frames_per_set=int(self.frames_per_set.get() or 1),
+            frame_shift=parse_shift(self.frame_shift.get()),
             random_names=bool(self.random_names.get()),
             name_length=int(self.name_length.get() or 10),
             make_subtitles=bool(self.make_subtitles.get()),
@@ -340,6 +353,16 @@ class BatchTab(ttk.Frame):
         random_on = bool(self.random_names.get())
         self.prefix_entry.configure(state="disabled" if random_on else "normal")
         self.length_box.configure(state="normal" if random_on else "disabled")
+
+    def _frames_changed(self, *_) -> None:
+        """Подсказка под выбором: какие кадры выйдут и сколько уйдёт клипов."""
+        # Коротко: строка идёт до правого края окна и длиннее не влезает.
+        hints = {
+            "1": "обычная сборка: пара клипов на один ролик",
+            "2": "только влево и вправо, без обычного кадра — пара на два ролика",
+            "3": "обычный кадр плюс влево и вправо — пара на три ролика",
+        }
+        self.frames_hint.configure(text=hints.get(self.frames_per_set.get(), ""))
 
     def _variants(self) -> None:
         """Собирает один ролик несколькими способами записи субтитров."""
