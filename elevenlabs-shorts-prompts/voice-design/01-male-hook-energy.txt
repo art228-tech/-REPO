@@ -1,0 +1,15 @@
+VOICE DESIGN PROMPT
+-------------------
+Native Russian, нейтральный современный русский без регионального диалекта. Male, young adult, 22–26. Studio quality.
+Persona: харизматичный ведущий коротких видео. Emotion: energetic, confident, playful.
+Bright, clear mid-high timbre, fully adult and youthful, never childish. Speaks very quickly with punchy, hook-first rhythm, crisp consonants, and friendly charisma. Close-mic, noise-free, natural human delivery for vertical short-form videos.
+
+TEXT TO PREVIEW
+---------------
+Стоп. Вот почему ты до сих пор сливаешь внимание в первые две секунды. Смотри внимательно: три шага, без воды и без лекции. Первый — открываешь фактом, который зудит. Второй — сразу показываешь, что делать. Третий — закрываешь так, чтобы человек не свайпнул. И да, это работает, даже если ты не «блогер», а просто снимаешь короткое видео для своей аудитории. Погнали, сейчас разберу на живом примере, быстро и по делу.
+
+SETTINGS
+--------
+Guidance Scale: 30
+Loudness: чуть выше середины
+Language: Russian

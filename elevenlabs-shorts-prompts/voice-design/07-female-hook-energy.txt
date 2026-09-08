@@ -1,0 +1,15 @@
+VOICE DESIGN PROMPT
+-------------------
+Native Russian, нейтральный современный русский без диалекта. Female, young adult, 22–26. Studio quality.
+Persona: харизматичная ведущая коротких видео. Emotion: energetic, confident, playful.
+Bright, clear female timbre, fully adult and youthful, never girlish or childish. Speaks very quickly with punchy hook-first rhythm, crisp articulation, friendly charisma. Close-mic, noise-free, natural human delivery for vertical short-form videos.
+
+TEXT TO PREVIEW
+---------------
+Стоп. Если ролик не цепляет в первую секунду, дальше ты уже не спасаешь. Смотри, как это собирается: крючок, обещание, быстрый разбор, удар в конце. Без сюсюканья и без дикторского пафоса. Голос живой, темп высокий, смысл плотный. Я сейчас прогоню схему на примере, и ты сможешь повторить это в следующем видео сегодня.
+
+SETTINGS
+--------
+Guidance Scale: 30
+Loudness: чуть выше середины
+Language: Russian

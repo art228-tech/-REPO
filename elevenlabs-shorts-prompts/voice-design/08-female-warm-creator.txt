@@ -1,0 +1,15 @@
+VOICE DESIGN PROMPT
+-------------------
+Native Russian. Female, young adult, early 20s. Excellent quality.
+Persona: тёплая подруга в камеру. Emotion: upbeat, sincere, charismatic.
+Warm, smooth female voice, adult in her early twenties. Fast conversational pacing with a smile, high energy without shouting. Natural, close, studio-quality, clear and likeable.
+
+TEXT TO PREVIEW
+---------------
+Короче, вот что я поняла слишком поздно. Люди остаются не за «экспертность», а за ощущение, что ты говоришь с ними, а не читаешь текст. Поэтому в коротком видео я ускоряю темп, но оставляю тепло. Смотри: фраза-крючок, потом одна мысль, потом пример. Всё. Если хочешь — забирай эту схему и ставь на свой следующий ролик, она реально простая.
+
+SETTINGS
+--------
+Guidance Scale: 28
+Loudness: середина+
+Language: Russian

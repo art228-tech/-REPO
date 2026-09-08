@@ -1,0 +1,15 @@
+VOICE DESIGN PROMPT
+-------------------
+Native Russian. Male, young adult, 24–26. Broadcast quality.
+Persona: динамичный факт-ведущий. Emotion: curious, punchy, upbeat.
+Crisp, articulate male voice with youthful brightness and adult control. Speaks quickly in short bursts, high energy without screaming, precise diction for fast information. Clean, forward, studio-quality signal.
+
+TEXT TO PREVIEW
+---------------
+Три факта, которые бесят, потому что они работают. Один: люди решают остаться или уйти раньше, чем ты успеваешь представиться. Два: конкретная цифра бьёт красивую фразу. Три: если обещал секрет — отдай его до середины, не копи. Вот как собрать короткий ролик, который досматривают. Без теории, только схема. Первый кадр, вторая фраза, финальный удар. Поехали.
+
+SETTINGS
+--------
+Guidance Scale: 33
+Loudness: чуть выше середины
+Language: Russian

@@ -1,0 +1,13 @@
+VOICE DESIGN PROMPT
+-------------------
+Native Russian. Female, young adult in her early 20s. Studio quality. Persona: charismatic short-form host. Emotion: energetic, playful. Bright adult female voice, very fast pacing, warm charisma, never childish, clean close-mic.
+
+TEXT TO PREVIEW
+---------------
+Короче, вот рабочая схема. Быстрый вход, одна мысль, живой пример, финал с крючком. Говори плотно, не громче. Если человек не завис в первую секунду — режь начало и пиши заново.
+
+SETTINGS
+--------
+Guidance Scale: 26
+Loudness: чуть выше середины
+Language: Russian

@@ -1,0 +1,15 @@
+VOICE DESIGN PROMPT
+-------------------
+Native Russian, современный городской русский, без диалекта и без imitating any public figure. Male, 23–27. Studio quality.
+Persona: уверенный сторителлер. Emotion: charismatic, sharp, amused.
+Clear mid timbre with a slight edge, fully adult. Very fast cadence, street-smart confidence, witty emphasis, never aggressive. Sounds like a sharp host explaining a plot twist, close and dry studio mic, high clarity.
+
+TEXT TO PREVIEW
+---------------
+Окей, запомни этот момент. Все делают один и тот же ход — и потом удивляются, почему ролик умирает. Не потому что «алгоритм злой». Потому что крючок слабый, а середина тянется. Я сейчас разрежу это на куски: где ты теряешь человека, где возвращаешь, и какой фразой добиваешь. Быстро, жёстко по смыслу, без морали. Смотри до конца, там самое полезное.
+
+SETTINGS
+--------
+Guidance Scale: 32
+Loudness: чуть выше середины
+Language: Russian
