@@ -1189,8 +1189,8 @@ def test_source_text_survives_a_deleted_voiceover(workspace, store, monkeypatch)
     assert len(list(workspace["texts"].glob("*.txt"))) == 2
 
 
-def test_deleted_voiceover_is_tried_again_on_next_run(workspace, store, monkeypatch):
-    """Готовым текст не считается: файла нет, значит работа не сделана."""
+def test_rejected_text_is_not_voiced_again_for_the_same_limits(workspace, store, monkeypatch):
+    """Второй раз за ту же запись не платим: длина выйдет прежней."""
     write_prompts(workspace["prompts"], 1)
     write_texts(workspace["texts"], 1)
     settings = make_settings(workspace, max_voices=1, min_duration=10, max_duration=16)
@@ -1198,12 +1198,82 @@ def test_deleted_voiceover_is_tried_again_on_next_run(workspace, store, monkeypa
     first = voicing(21)
     run_with(monkeypatch, settings, store, first)
 
+    second = voicing(21)
+    second.existing_voices = list(first.existing_voices)
+    stats = run_with(monkeypatch, settings, store, second)
+
+    assert stats.texts_rejected_earlier == 1
+    assert stats.texts_rejected == 0
+    assert second.tts_calls == []
+
+
+def test_widened_limits_bring_the_rejected_text_back(workspace, store, monkeypatch):
+    """Раздвинули границы — прошлый отказ больше не в силе, текст озвучивается."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+
+    first = voicing(21)
+    run_with(
+        monkeypatch,
+        make_settings(workspace, max_voices=1, min_duration=10, max_duration=16),
+        store,
+        first,
+    )
+
+    second = voicing(21)
+    second.existing_voices = list(first.existing_voices)
+    stats = run_with(
+        monkeypatch,
+        make_settings(workspace, max_voices=1, min_duration=10, max_duration=30),
+        store,
+        second,
+    )
+
+    assert stats.texts_done == 1
+    assert (workspace["output"] / "текст1.mp3").exists()
+
+
+def test_fitting_voiceover_forgets_the_earlier_rejection(workspace, store, monkeypatch):
+    """Запись уложилась в новые границы — помнить о прошлом отказе нечего."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+
+    first = voicing(21)
+    run_with(
+        monkeypatch,
+        make_settings(workspace, max_voices=1, min_duration=10, max_duration=16),
+        store,
+        first,
+    )
+    assert store.summary()["rejected_by_duration"] == 1
+
+    second = voicing(21)
+    second.existing_voices = list(first.existing_voices)
+    run_with(
+        monkeypatch,
+        make_settings(workspace, max_voices=1, min_duration=10, max_duration=30),
+        store,
+        second,
+    )
+
+    assert store.summary()["rejected_by_duration"] == 0
+
+
+def test_reset_progress_forgets_rejections(workspace, store, monkeypatch):
+    """Сброс прогресса возвращает право попробовать ещё раз."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+    settings = make_settings(workspace, max_voices=1, min_duration=10, max_duration=16)
+
+    first = voicing(21)
+    run_with(monkeypatch, settings, store, first)
+    store.reset_progress()
+
     second = voicing(12)
     second.existing_voices = list(first.existing_voices)
     stats = run_with(monkeypatch, settings, store, second)
 
     assert stats.texts_done == 1
-    assert stats.texts_skipped == 0
     assert (workspace["output"] / "текст1.mp3").exists()
 
 

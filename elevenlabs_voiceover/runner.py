@@ -98,6 +98,7 @@ class RunStats:
     texts_skipped: int = 0
     texts_failed: int = 0
     texts_rejected: int = 0
+    texts_rejected_earlier: int = 0
     chunks_done: int = 0
     chunks_reused: int = 0
     characters_spent: int = 0
@@ -115,6 +116,7 @@ class RunStats:
             "texts_skipped": self.texts_skipped,
             "texts_failed": self.texts_failed,
             "texts_rejected": self.texts_rejected,
+            "texts_rejected_earlier": self.texts_rejected_earlier,
             "chunks_done": self.chunks_done,
             "chunks_reused": self.chunks_reused,
             "characters_spent": self.characters_spent,
@@ -817,6 +819,9 @@ class Runner:
             self._progress(f"Пропущен «{job.text.name}» (уже готов)")
             return
 
+        if self._already_rejected(job, output_key):
+            return
+
         chunks_dir = job.output_path.parent / "_chunks" / job.output_path.stem
         chunks_dir.mkdir(parents=True, exist_ok=True)
 
@@ -924,9 +929,11 @@ class Runner:
         job.duration = self._measure(job.output_path)
         problem = duration_problem(job.duration, settings.min_duration, settings.max_duration)
         if problem:
-            self._discard_output(job, problem, chunks_dir)
+            self._discard_output(job, output_key, problem, chunks_dir)
             return
 
+        # Прошлый отказ больше не в силе: с этими границами запись подходит.
+        self.state.forget_rejection(output_key)
         self.state.mark_output_done(
             output_key,
             text_file=job.text.name,
@@ -952,7 +959,33 @@ class Runner:
         if not settings.keep_chunks:
             self._remove_chunks(chunks_dir)
 
-    def _discard_output(self, job: Job, problem: str, chunks_dir: Path) -> None:
+    def _already_rejected(self, job: Job, output_key: str) -> bool:
+        """Отказались от этой озвучки раньше и отказались бы снова?
+
+        Повторная озвучка того же текста тем же голосом выйдет той же длины, а
+        кредиты за неё спишут заново. Поэтому измеренную длительность помним и
+        сверяем с нынешними границами: раздвинули их — текст озвучится снова,
+        оставили как были — не тратим деньги во второй раз.
+        """
+        seconds = self.state.rejected_seconds(output_key)
+        problem = duration_problem(seconds, self.settings.min_duration, self.settings.max_duration)
+        if not problem:
+            return False
+
+        job.duration = seconds
+        job.rejected = problem
+        self.stats.texts_rejected_earlier += 1
+        self._done_units += len(job.text.chunks)
+        log.info(
+            "«%s» в прошлый раз вышел %.1f с — это %s, не озвучиваю заново",
+            job.text.name,
+            seconds or 0.0,
+            problem,
+        )
+        self._progress(f"Пропущен «{job.text.name}» (озвучка {problem})")
+        return True
+
+    def _discard_output(self, job: Job, output_key: str, problem: str, chunks_dir: Path) -> None:
         """Убрать озвучку, не уложившуюся в границы длительности.
 
         Готовой в базе такая озвучка не отмечается: файла на диске больше нет,
@@ -962,6 +995,15 @@ class Runner:
         """
         job.rejected = problem
         self.stats.texts_rejected += 1
+        self.state.remember_rejection(
+            output_key,
+            text_file=job.text.name,
+            voice_id=job.voice.voice_id,
+            voice_name=job.voice.name,
+            output_path=str(job.output_path),
+            seconds=job.duration or 0.0,
+            problem=problem,
+        )
 
         try:
             job.output_path.unlink()

@@ -1252,7 +1252,8 @@ class App:
             "Да — забыть, какие тексты уже озвучены (голоса останутся).\n"
             "Нет — забыть ещё и созданные голоса.\n"
             "Отмена — ничего не делать.\n\n"
-            "Файлы на диске не удаляются, но повторная озвучка потратит кредиты заново.",
+            "Файлы на диске не удаляются, но повторная озвучка потратит кредиты заново. "
+            "Тексты, отсеянные по длительности, тоже будут озвучены снова.",
             parent=self.root,
         )
         if answer is None:
@@ -1471,16 +1472,23 @@ class App:
         self.progress.configure(value=1000 if not stats.stopped_reason else self.progress["value"])
 
         limits = describe_duration_limits(self.settings.min_duration, self.settings.max_duration)
-        summary = (
-            f"Готово файлов: {stats.texts_done}\n"
-            f"Пропущено (уже были готовы): {stats.texts_skipped}\n"
-            f"Удалено по длительности ({limits or 'без границ'}): {stats.texts_rejected}\n"
-            f"С ошибками: {stats.texts_failed}\n"
-            f"Голосов создано: {stats.voices_created}, использовано готовых: {stats.voices_reused}\n"
-            f"Озвучено символов: {_fmt(stats.characters_spent)}\n"
-            f"Получено звука: {format_duration(stats.seconds_produced) or '—'}\n"
-            f"Потрачено кредитов (оценка): {_fmt(stats.credits_estimated)}"
-        )
+        lines = [
+            f"Готово файлов: {stats.texts_done}",
+            f"Пропущено (уже были готовы): {stats.texts_skipped}",
+            f"Удалено по длительности ({limits or 'без границ'}): {stats.texts_rejected}",
+        ]
+        if stats.texts_rejected_earlier:
+            lines.append(
+                f"Не озвучено повторно (отсеяны прошлым разом): {stats.texts_rejected_earlier}"
+            )
+        lines += [
+            f"С ошибками: {stats.texts_failed}",
+            f"Голосов создано: {stats.voices_created}, использовано готовых: {stats.voices_reused}",
+            f"Озвучено символов: {_fmt(stats.characters_spent)}",
+            f"Получено звука: {format_duration(stats.seconds_produced) or '—'}",
+            f"Потрачено кредитов (оценка): {_fmt(stats.credits_estimated)}",
+        ]
+        summary = "\n".join(lines)
 
         if stats.stopped_reason:
             summary += f"\n\nОстановлено: {stats.stopped_reason}"
