@@ -6,6 +6,8 @@ from elevenlabs_voiceover import runner as runner_module
 from elevenlabs_voiceover.api_client import ModelInfo, Subscription, TtsResult, VoicePreview
 from elevenlabs_voiceover.chunker import Chunk
 from elevenlabs_voiceover.config import (
+    DEFAULT_MAX_DURATION,
+    DEFAULT_MIN_DURATION,
     DONE_DELETE,
     DONE_FOLDER_NAME,
     DONE_MOVE,
@@ -26,6 +28,15 @@ from elevenlabs_voiceover.runner import (
 from elevenlabs_voiceover.state import StateStore
 
 MP3 = b"\xff\xfb\x90\x00" + b"\x00" * 200
+
+#: Целый кадр MPEG1 Layer III: 128 кбит/с, 44100 Гц, 1152 отсчёта.
+FRAME = b"\xff\xfb\x90\x00" + b"\x00" * 413
+FRAME_SECONDS = 1152 / 44100
+
+
+def mp3_lasting(seconds: float) -> bytes:
+    """Запись нужной длины: столько кадров, сколько в неё помещается."""
+    return FRAME * max(1, round(seconds / FRAME_SECONDS))
 
 
 # ======================================================================
@@ -121,6 +132,11 @@ class FakeClient:
         self.deleted = []
         self.existing_voices = []
         self.account_catalog = []
+        #: Что отдавать в ответ на озвучку: тесты про длительность подменяют.
+        self.audio = MP3
+        #: Если задано, длина ответа считается от длины текста, как у живого
+        #: голоса: так в одном прогоне получаются записи разной длительности.
+        self.chars_per_second = 0.0
         self._counter = 0
 
     # -- служебное -----------------------------------------------------
@@ -198,7 +214,8 @@ class FakeClient:
         self.tts_calls.append((voice_id, text, kwargs))
         self.used += len(text)
         self._counter += 1
-        return TtsResult(audio=MP3, request_id=f"req-{self._counter}", characters=len(text))
+        audio = mp3_lasting(len(text) / self.chars_per_second) if self.chars_per_second else self.audio
+        return TtsResult(audio=audio, request_id=f"req-{self._counter}", characters=len(text))
 
     def close(self):
         pass
@@ -238,6 +255,10 @@ def make_settings(workspace, **overrides):
         pause_between_requests=0.0,
         use_ffmpeg=False,
         chunk_target_chars=2500,
+        # Поддельный клиент отдаёт кадр в четверть секунды, и границы по
+        # умолчанию удаляли бы всё подряд. Проверяются они отдельным набором.
+        min_duration=0.0,
+        max_duration=0.0,
     )
     values.update(overrides)
     return Settings(**values)
@@ -247,6 +268,13 @@ def run_with(monkeypatch, settings, store, client):
     monkeypatch.setattr(runner_module, "ElevenLabsClient", lambda *a, **k: client)
     runner = Runner(settings, store)
     return runner.run()
+
+
+def voicing(seconds: float) -> FakeClient:
+    """Клиент, который на любой текст отдаёт запись заданной длины."""
+    client = FakeClient()
+    client.audio = mp3_lasting(seconds)
+    return client
 
 
 @pytest.fixture
@@ -1076,3 +1104,247 @@ def test_estimate_on_empty_folders(workspace):
     plan = estimate_plan(make_settings(workspace))
     assert plan["texts"] == 0
     assert plan["characters"] == 0
+
+
+# ======================================================================
+# Длительность готовой озвучки
+# ======================================================================
+def test_short_voiceover_is_deleted(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+
+    settings = make_settings(workspace, max_voices=1, min_duration=10, max_duration=16)
+    stats = run_with(monkeypatch, settings, store, voicing(4))
+
+    assert stats.texts_rejected == 2
+    assert stats.texts_done == 0
+    assert list(workspace["output"].glob("*.mp3")) == []
+
+
+def test_long_voiceover_is_deleted(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+
+    settings = make_settings(workspace, max_voices=1, min_duration=10, max_duration=16)
+    stats = run_with(monkeypatch, settings, store, voicing(21))
+
+    assert stats.texts_rejected == 2
+    assert stats.texts_done == 0
+    assert list(workspace["output"].glob("*.mp3")) == []
+
+
+def test_voiceover_within_limits_survives(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 3)
+
+    settings = make_settings(workspace, max_voices=1, min_duration=10, max_duration=16)
+    stats = run_with(monkeypatch, settings, store, voicing(12))
+
+    assert stats.texts_rejected == 0
+    assert stats.texts_done == 3
+    assert len(list(workspace["output"].glob("*.mp3"))) == 3
+
+
+def test_default_limits_are_the_ones_asked_for(workspace, store, monkeypatch):
+    """С настройками по умолчанию остаются записи от 10 до 16 секунд."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+    settings = make_settings(
+        workspace, max_voices=1,
+        min_duration=DEFAULT_MIN_DURATION, max_duration=DEFAULT_MAX_DURATION,
+    )
+
+    assert run_with(monkeypatch, settings, store, voicing(20)).texts_rejected == 1
+    assert list(workspace["output"].glob("*.mp3")) == []
+
+
+def test_only_files_outside_the_limits_are_deleted(workspace, store, monkeypatch):
+    """В одной папке лежат тексты на 0,5, 12 и 30 секунд — остаться должен один."""
+    write_prompts(workspace["prompts"], 1)
+    (workspace["texts"] / "короткий.txt").write_text("Совсем немного слов.", encoding="utf-8")
+    (workspace["texts"] / "нормальный.txt").write_text("Слово. " * 51, encoding="utf-8")
+    (workspace["texts"] / "длинный.txt").write_text("Слово. " * 130, encoding="utf-8")
+
+    client = FakeClient()
+    client.chars_per_second = 30.0
+
+    settings = make_settings(workspace, max_voices=1, min_duration=10, max_duration=16)
+    stats = run_with(monkeypatch, settings, store, client)
+
+    assert stats.texts_done == 1
+    assert stats.texts_rejected == 2
+    assert [p.name for p in workspace["output"].glob("*.mp3")] == ["нормальный.mp3"]
+
+
+def test_source_text_survives_a_deleted_voiceover(workspace, store, monkeypatch):
+    """Удалять исходник не за что: озвучки после проверки не осталось."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+
+    settings = make_settings(
+        workspace, max_voices=1, done_action=DONE_DELETE, min_duration=10, max_duration=16
+    )
+    run_with(monkeypatch, settings, store, voicing(21))
+
+    assert len(list(workspace["texts"].glob("*.txt"))) == 2
+
+
+def test_rejected_text_is_not_voiced_again_for_the_same_limits(workspace, store, monkeypatch):
+    """Второй раз за ту же запись не платим: длина выйдет прежней."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+    settings = make_settings(workspace, max_voices=1, min_duration=10, max_duration=16)
+
+    first = voicing(21)
+    run_with(monkeypatch, settings, store, first)
+
+    second = voicing(21)
+    second.existing_voices = list(first.existing_voices)
+    stats = run_with(monkeypatch, settings, store, second)
+
+    assert stats.texts_rejected_earlier == 1
+    assert stats.texts_rejected == 0
+    assert second.tts_calls == []
+
+
+def test_widened_limits_bring_the_rejected_text_back(workspace, store, monkeypatch):
+    """Раздвинули границы — прошлый отказ больше не в силе, текст озвучивается."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+
+    first = voicing(21)
+    run_with(
+        monkeypatch,
+        make_settings(workspace, max_voices=1, min_duration=10, max_duration=16),
+        store,
+        first,
+    )
+
+    second = voicing(21)
+    second.existing_voices = list(first.existing_voices)
+    stats = run_with(
+        monkeypatch,
+        make_settings(workspace, max_voices=1, min_duration=10, max_duration=30),
+        store,
+        second,
+    )
+
+    assert stats.texts_done == 1
+    assert (workspace["output"] / "текст1.mp3").exists()
+
+
+def test_fitting_voiceover_forgets_the_earlier_rejection(workspace, store, monkeypatch):
+    """Запись уложилась в новые границы — помнить о прошлом отказе нечего."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+
+    first = voicing(21)
+    run_with(
+        monkeypatch,
+        make_settings(workspace, max_voices=1, min_duration=10, max_duration=16),
+        store,
+        first,
+    )
+    assert store.summary()["rejected_by_duration"] == 1
+
+    second = voicing(21)
+    second.existing_voices = list(first.existing_voices)
+    run_with(
+        monkeypatch,
+        make_settings(workspace, max_voices=1, min_duration=10, max_duration=30),
+        store,
+        second,
+    )
+
+    assert store.summary()["rejected_by_duration"] == 0
+
+
+def test_reset_progress_forgets_rejections(workspace, store, monkeypatch):
+    """Сброс прогресса возвращает право попробовать ещё раз."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+    settings = make_settings(workspace, max_voices=1, min_duration=10, max_duration=16)
+
+    first = voicing(21)
+    run_with(monkeypatch, settings, store, first)
+    store.reset_progress()
+
+    second = voicing(12)
+    second.existing_voices = list(first.existing_voices)
+    stats = run_with(monkeypatch, settings, store, second)
+
+    assert stats.texts_done == 1
+    assert (workspace["output"] / "текст1.mp3").exists()
+
+
+def test_deleted_voiceover_is_explained_in_manifest(workspace, store, monkeypatch):
+    """Что удалено и насколько промахнулось — видно в таблице, а не только в журнале."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+
+    settings = make_settings(workspace, max_voices=1, min_duration=10, max_duration=16)
+    run_with(monkeypatch, settings, store, voicing(21))
+
+    with (workspace["output"] / "_manifest.csv").open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.reader(handle, delimiter=";"))
+
+    row = dict(zip(rows[0], rows[1]))
+    assert row["Готов"] == "удалён: длиннее 16 с"
+    assert row["Секунд"].startswith("21")
+
+
+def test_chunks_of_a_deleted_voiceover_are_cleaned_up(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    (workspace["texts"] / "длинный.txt").write_text(
+        " ".join(f"Фраза {i} для нарезки текста." for i in range(100)), encoding="utf-8"
+    )
+
+    settings = make_settings(
+        workspace, max_voices=1, chunk_target_chars=300, min_duration=10, max_duration=16
+    )
+    stats = run_with(monkeypatch, settings, store, voicing(21))
+
+    assert stats.texts_rejected == 1
+    assert not (workspace["output"] / "_chunks").exists()
+
+
+def test_deleted_audio_is_not_counted_as_produced(workspace, store, monkeypatch):
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 2)
+
+    settings = make_settings(workspace, max_voices=1, min_duration=10, max_duration=16)
+    stats = run_with(monkeypatch, settings, store, voicing(21))
+
+    assert stats.seconds_produced == 0
+    assert stats.as_dict()["texts_rejected"] == 2
+
+
+def test_ready_files_on_disk_are_left_alone(workspace, store, monkeypatch):
+    """Проверяем то, что сделали сами: чужие файлы в папке не наша забота."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+    already = mp3_lasting(30)
+    workspace["output"].mkdir(parents=True, exist_ok=True)
+    (workspace["output"] / "текст1.mp3").write_bytes(already)
+
+    settings = make_settings(workspace, max_voices=1, min_duration=10, max_duration=16)
+    stats = run_with(monkeypatch, settings, store, voicing(12))
+
+    assert stats.texts_skipped == 1
+    assert stats.texts_rejected == 0
+    assert (workspace["output"] / "текст1.mp3").read_bytes() == already
+
+
+def test_limits_do_not_apply_to_formats_we_cannot_measure(workspace, store, monkeypatch):
+    """Длительность считается только у MP3, наугад ничего не удаляем."""
+    write_prompts(workspace["prompts"], 1)
+    write_texts(workspace["texts"], 1)
+
+    settings = make_settings(
+        workspace, max_voices=1, output_format="pcm_24000", min_duration=10, max_duration=16
+    )
+    stats = run_with(monkeypatch, settings, store, voicing(1))
+
+    assert stats.texts_rejected == 0
+    assert stats.texts_done == 1
+    assert (workspace["output"] / "текст1.pcm").exists()

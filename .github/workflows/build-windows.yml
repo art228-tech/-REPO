@@ -6,6 +6,7 @@ on:
     branches:
       - "cursor/elevenlabs-api-voiceover-gui-edb4"
       - "cursor/remove-text-folder-check-3b81"
+      - "cursor/voiceover-duration-filter-b7c1"
     paths:
       - "elevenlabs_voiceover/**"
       - "app.py"
@@ -68,8 +69,34 @@ jobs:
           $made = @(Get-ChildItem "$reports\*.zip" -ErrorAction SilentlyContinue)
           if ($made.Count -eq 0) { throw "отчёт не появился, сборка нерабочая" }
 
+          # Отбор по длительности удаляет файлы, поэтому проверяем его на
+          # настоящих mp3: один заведомо короткий, второй в границах.
+          function New-Mp3([string] $Path, [double] $Seconds) {
+            # Кадр MPEG1 Layer III: 128 кбит/с, 44100 Гц, 1152 отсчёта.
+            $frame = New-Object byte[] 417
+            $frame[0] = 0xFF; $frame[1] = 0xFB; $frame[2] = 0x90
+
+            $count = [math]::Max(1, [math]::Round($Seconds / (1152 / 44100)))
+            $stream = [System.IO.File]::Create($Path)
+            try { for ($i = 0; $i -lt $count; $i++) { $stream.Write($frame, 0, $frame.Length) } }
+            finally { $stream.Close() }
+          }
+
+          Remove-Item -Recurse -Force check -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path check | Out-Null
+          New-Mp3 "check\short.mp3" 4
+          New-Mp3 "check\good.mp3" 12
+
+          $code = Invoke-Exe @("--filter", "check", "--min-duration", "10", "--max-duration", "16")
+          if ($code -ne 0) { throw "отбор по длительности завершился с кодом $code" }
+
+          $left = @(Get-ChildItem "check\*.mp3" | Select-Object -ExpandProperty Name)
+          if ($left.Count -ne 1 -or $left[0] -ne "good.mp3") {
+            throw "отбор по длительности оставил не то: $($left -join ', ')"
+          }
+
           $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
-          Write-Host "exe собран и работает: $size МБ, отчёт $($made[0].Name)"
+          Write-Host "exe собран и работает: $size МБ, отчёт $($made[0].Name), отбор по длительности на месте"
 
       - name: Собрать комплект для раздачи
         shell: pwsh

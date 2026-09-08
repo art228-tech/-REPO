@@ -224,6 +224,10 @@ def settings_for(root: Path, **extra) -> Settings:
         max_voices=3,
         pause_between_requests=0.0,
         chunk_target_chars=2500,
+        # Сервер отдаёт восемь кадров, около 0,2 с: границы по умолчанию
+        # удалили бы каждый файл. Их проверяет отдельный тест ниже.
+        min_duration=0.0,
+        max_duration=0.0,
     )
     values.update(extra)
     return Settings(**values)
@@ -340,6 +344,28 @@ def test_run_stops_on_quota_and_resumes(api, tmp_path):
     assert second.texts_skipped == first.texts_done
     assert second.texts_done == 8 - first.texts_done
     assert len(list((root / "out").glob("*.mp3"))) == 8
+
+
+def test_short_voiceover_is_deleted_over_http(api, tmp_path):
+    """Сервер отдаёт около 0,2 с на кусок — до нижней границы такому не дотянуть."""
+    root = build_workspace(tmp_path / "work", prompts=1, texts=3)
+    stats = run(root, tmp_path / "state.sqlite3", max_voices=1, min_duration=10, max_duration=16)
+
+    assert api.tts_requests == 3
+    assert stats.texts_rejected == 3
+    assert stats.texts_done == 0
+    assert list((root / "out").glob("*.mp3")) == []
+    # Тексты не тронуты: следующий запуск возьмётся за них снова.
+    assert len(list((root / "texts").glob("*.txt"))) == 3
+
+
+def test_voiceover_within_limits_survives_over_http(api, tmp_path):
+    root = build_workspace(tmp_path / "work", prompts=1, texts=2)
+    stats = run(root, tmp_path / "state.sqlite3", max_voices=1, min_duration=0.1, max_duration=1)
+
+    assert stats.texts_rejected == 0
+    assert stats.texts_done == 2
+    assert len(list((root / "out").glob("*.mp3"))) == 2
 
 
 def test_recreate_deletes_voice_over_http(api, tmp_path):

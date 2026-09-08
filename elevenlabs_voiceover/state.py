@@ -22,7 +22,7 @@ from .paths import state_db_path
 
 log = get_logger("state")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -63,6 +63,17 @@ CREATE TABLE IF NOT EXISTS outputs (
     voice_name  TEXT NOT NULL,
     output_path TEXT NOT NULL,
     characters  INTEGER NOT NULL,
+    created_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS rejected (
+    output_key  TEXT PRIMARY KEY,
+    text_file   TEXT NOT NULL,
+    voice_id    TEXT NOT NULL,
+    voice_name  TEXT NOT NULL,
+    output_path TEXT NOT NULL,
+    seconds     REAL NOT NULL,
+    problem     TEXT NOT NULL,
     created_at  TEXT NOT NULL
 );
 
@@ -326,6 +337,51 @@ class StateStore:
             )
 
     # ------------------------------------------------------------------
+    # Отсеянные по длительности
+    # ------------------------------------------------------------------
+    def rejected_seconds(self, output_key: str) -> Optional[float]:
+        """Сколько длилась озвучка, удалённая за неподходящий хронометраж.
+
+        Храним измеренную длительность, а не сам факт отказа: границы человек
+        меняет, и по числу видно, подошла бы запись под новые.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT seconds FROM rejected WHERE output_key = ?", (output_key,)
+            ).fetchone()
+        return float(row["seconds"]) if row else None
+
+    def remember_rejection(
+        self,
+        output_key: str,
+        *,
+        text_file: str,
+        voice_id: str,
+        voice_name: str,
+        output_path: str,
+        seconds: float,
+        problem: str,
+    ) -> None:
+        with self._write() as conn:
+            conn.execute(
+                """
+                INSERT INTO rejected (output_key, text_file, voice_id, voice_name,
+                                      output_path, seconds, problem, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(output_key) DO UPDATE SET
+                    output_path = excluded.output_path,
+                    seconds     = excluded.seconds,
+                    problem     = excluded.problem,
+                    created_at  = excluded.created_at
+                """,
+                (output_key, text_file, voice_id, voice_name, output_path, seconds, problem[:200], _now()),
+            )
+
+    def forget_rejection(self, output_key: str) -> None:
+        with self._write() as conn:
+            conn.execute("DELETE FROM rejected WHERE output_key = ?", (output_key,))
+
+    # ------------------------------------------------------------------
     # Учёт расхода и прогоны
     # ------------------------------------------------------------------
     def log_usage(self, kind: str, characters: int, voice_id: Optional[str] = None, note: str = "") -> None:
@@ -373,6 +429,7 @@ class StateStore:
                 "chunks_done": scalar("SELECT COUNT(*) FROM chunks WHERE status = 'done'"),
                 "chunks_failed": scalar("SELECT COUNT(*) FROM chunks WHERE status = 'failed'"),
                 "outputs": scalar("SELECT COUNT(*) FROM outputs"),
+                "rejected_by_duration": scalar("SELECT COUNT(*) FROM rejected"),
                 "characters_spent": scalar("SELECT SUM(characters) FROM usage_log"),
                 "recent_runs": recent_runs,
                 "recent_errors": recent_errors,
@@ -383,6 +440,7 @@ class StateStore:
         with self._write() as conn:
             conn.execute("DELETE FROM chunks")
             conn.execute("DELETE FROM outputs")
+            conn.execute("DELETE FROM rejected")
             if drop_voices:
                 conn.execute("DELETE FROM voices")
         log.info("Прогресс сброшен (голоса %s)", "стёрты" if drop_voices else "сохранены")

@@ -2,7 +2,10 @@ import json
 
 from elevenlabs_voiceover.config import (
     DEFAULT_GUIDANCE,
+    DEFAULT_MAX_DURATION,
+    DEFAULT_MIN_DURATION,
     DEFAULT_PREVIEW_TEXT,
+    DURATION_LIMIT_MAX,
     GUIDANCE_MAX,
     GUIDANCE_MIN,
     MODE_ALL_VOICES,
@@ -10,6 +13,7 @@ from elevenlabs_voiceover.config import (
     VOICE_PREVIEW_MAX_CHARS,
     VOICE_PREVIEW_MIN_CHARS,
     Settings,
+    describe_duration_limits,
 )
 
 
@@ -142,3 +146,55 @@ def test_guidance_is_clamped_to_scale():
 def test_voice_settings_payload_shape():
     payload = Settings().voice_settings_payload()
     assert set(payload) == {"stability", "similarity_boost", "style", "use_speaker_boost", "speed"}
+
+
+# ----------------------------------------------------------------------
+# Границы длительности
+# ----------------------------------------------------------------------
+def test_duration_limits_default_to_ten_and_sixteen():
+    s = Settings()
+    assert (s.min_duration, s.max_duration) == (10.0, 16.0)
+    assert (DEFAULT_MIN_DURATION, DEFAULT_MAX_DURATION) == (10.0, 16.0)
+
+
+def test_duration_limits_can_be_switched_off():
+    s = Settings(min_duration=0, max_duration=0)
+    assert (s.min_duration, s.max_duration) == (0.0, 0.0)
+
+
+def test_duration_limits_are_clamped():
+    s = Settings(min_duration=-5, max_duration=99999)
+    assert s.min_duration == 0.0
+    assert s.max_duration == DURATION_LIMIT_MAX
+
+
+def test_garbage_duration_limits_fall_back_to_defaults():
+    s = Settings(min_duration="десять", max_duration=None)  # type: ignore[arg-type]
+    assert (s.min_duration, s.max_duration) == (DEFAULT_MIN_DURATION, DEFAULT_MAX_DURATION)
+
+
+def test_swapped_duration_limits_are_put_back_in_order():
+    """Границы наоборот отсеивали бы вообще всё, поэтому меняем их местами."""
+    s = Settings(min_duration=16, max_duration=10)
+    assert (s.min_duration, s.max_duration) == (10.0, 16.0)
+
+
+def test_lower_limit_alone_is_not_treated_as_swapped():
+    s = Settings(min_duration=20, max_duration=0)
+    assert (s.min_duration, s.max_duration) == (20.0, 0.0)
+
+
+def test_duration_limits_survive_saving(tmp_path):
+    path = tmp_path / "config.json"
+    Settings(min_duration=8, max_duration=14).save(path)
+
+    restored = Settings.load(path)
+    assert (restored.min_duration, restored.max_duration) == (8.0, 14.0)
+
+
+def test_describe_duration_limits():
+    assert describe_duration_limits(10, 16) == "от 10 до 16 с"
+    assert describe_duration_limits(10, 0) == "не короче 10 с"
+    assert describe_duration_limits(0, 16) == "не длиннее 16 с"
+    assert describe_duration_limits(0, 0) == ""
+    assert describe_duration_limits(9.5, 16) == "от 9.5 до 16 с"

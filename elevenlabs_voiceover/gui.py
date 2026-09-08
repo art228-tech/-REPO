@@ -31,7 +31,7 @@ from tkinter import (
 )
 from typing import Any, List, Optional
 
-from . import clipboard, diagnostics
+from . import clipboard, diagnostics, duration
 from .api_client import (
     PROXY_SCHEME_CANDIDATES,
     ElevenLabsClient,
@@ -54,11 +54,14 @@ from .chunker import (
 )
 from .config import (
     DEFAULT_GUIDANCE,
+    DEFAULT_MAX_DURATION,
+    DEFAULT_MIN_DURATION,
     DONE_ACTIONS,
     DONE_DELETE,
     DONE_FOLDER_NAME,
     DONE_KEEP,
     DONE_MOVE,
+    DURATION_LIMIT_MAX,
     MODE_ALL_VOICES,
     MODE_ROUND_ROBIN,
     SOURCE_ACCOUNT,
@@ -66,9 +69,10 @@ from .config import (
     VOICE_MODES,
     VOICE_SOURCES,
     Settings,
+    describe_duration_limits,
     normalize_proxy_url,
 )
-from .errors import ElevenLabsError
+from .errors import Cancelled, ElevenLabsError
 from .logging_setup import add_gui_handler, get_logger, register_secret, setup_logging
 from .paths import logs_dir
 from .runner import PreflightError, Runner, estimate_plan
@@ -98,6 +102,10 @@ OUTPUT_FORMATS = [
 VOICE_DESIGN_MODELS = ["eleven_multilingual_ttv_v2", "eleven_ttv_v3"]
 
 MAX_LOG_LINES = 2000
+
+#: Сколько отсеянных файлов показать в вопросе перед удалением. Список нужен,
+#: чтобы согласие давали, увидев конкретные имена, а не только счётчик.
+_FILTER_EXAMPLES = 8
 
 
 class App:
@@ -131,6 +139,7 @@ class App:
         self._on_save_beside_changed()
         self._on_voice_source_changed()
         self._refresh_done_hint()
+        self._refresh_duration_hint()
 
     # ==================================================================
     # Построение интерфейса
@@ -581,6 +590,38 @@ class App:
 
         row = self._separator(canvas_frame, row, "Файлы на выходе")
 
+        ttk.Label(canvas_frame, text="Длительность озвучки:").grid(row=row, column=0, sticky="w", pady=3)
+        limits = ttk.Frame(canvas_frame)
+        limits.grid(row=row, column=1, columnspan=2, sticky="w", pady=3)
+
+        self.var_min_duration = DoubleVar(value=DEFAULT_MIN_DURATION)
+        self.var_max_duration = DoubleVar(value=DEFAULT_MAX_DURATION)
+
+        ttk.Label(limits, text="от").pack(side=LEFT)
+        ttk.Spinbox(limits, from_=0.0, to=DURATION_LIMIT_MAX, increment=1.0, width=8,
+                    textvariable=self.var_min_duration).pack(side=LEFT, padx=(4, 10))
+        ttk.Label(limits, text="до").pack(side=LEFT)
+        ttk.Spinbox(limits, from_=0.0, to=DURATION_LIMIT_MAX, increment=1.0, width=8,
+                    textvariable=self.var_max_duration).pack(side=LEFT, padx=(4, 6))
+        ttk.Label(limits, text="секунд").pack(side=LEFT)
+        row += 1
+
+        self.lbl_duration = ttk.Label(canvas_frame, text="", style="Hint.TLabel",
+                                      justify=LEFT, wraplength=700)
+        self.lbl_duration.grid(row=row, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        self.var_min_duration.trace_add("write", lambda *_: self._refresh_duration_hint())
+        self.var_max_duration.trace_add("write", lambda *_: self._refresh_duration_hint())
+        row += 1
+
+        ttk.Button(canvas_frame, text="Отобрать готовые файлы в папке…",
+                   command=self._filter_ready_files).grid(
+            row=row, column=1, sticky="w", pady=(0, 3)
+        )
+        ttk.Label(canvas_frame,
+                  text="Проверить по этим же границам то, что уже озвучено",
+                  style="Hint.TLabel").grid(row=row, column=2, sticky="w", padx=(8, 0))
+        row += 1
+
         ttk.Label(canvas_frame, text="Текст после озвучки:").grid(row=row, column=0, sticky="w", pady=3)
         self.var_done_action = StringVar(value=DONE_ACTIONS[DONE_KEEP])
         combo_done = ttk.Combobox(
@@ -757,6 +798,8 @@ class App:
         self.var_retries.set(s.max_retries)
         self.var_timeout.set(s.request_timeout)
         self.var_done_action.set(DONE_ACTIONS.get(s.done_action, DONE_ACTIONS[DONE_KEEP]))
+        self.var_min_duration.set(s.min_duration)
+        self.var_max_duration.set(s.max_duration)
         self.var_save_beside.set(s.save_next_to_texts)
         self.var_keep_chunks.set(s.keep_chunks)
         self.var_use_ffmpeg.set(s.use_ffmpeg)
@@ -800,6 +843,8 @@ class App:
         s.max_retries = _safe_int(self.var_retries, s.max_retries)
         s.request_timeout = _safe_int(self.var_timeout, s.request_timeout)
         s.done_action = _done_from_label(self.var_done_action.get())
+        s.min_duration = _safe_float(self.var_min_duration, s.min_duration)
+        s.max_duration = _safe_float(self.var_max_duration, s.max_duration)
         s.save_next_to_texts = bool(self.var_save_beside.get())
         s.keep_chunks = bool(self.var_keep_chunks.get())
         s.use_ffmpeg = bool(self.var_use_ffmpeg.get())
@@ -859,6 +904,161 @@ class App:
 
     def _open_keys_page(self) -> None:
         webbrowser.open("https://elevenlabs.io/app/developers/api-keys")
+
+    def _refresh_duration_hint(self) -> None:
+        """Показать, какие записи будут удалены при нынешних границах."""
+        minimum = _safe_float(self.var_min_duration, self.settings.min_duration)
+        maximum = _safe_float(self.var_max_duration, self.settings.max_duration)
+        limits = describe_duration_limits(minimum, maximum)
+
+        if not limits:
+            self.lbl_duration.configure(
+                text="Длительность не проверяется: в папку попадёт любая готовая озвучка.",
+                style="Hint.TLabel",
+            )
+            return
+
+        self.lbl_duration.configure(
+            text=f"Останутся только записи {limits}. Всё, что не уложилось, удаляется сразу "
+                 "после склейки — кредиты за него уже списаны. Исходный txt остаётся на месте, "
+                 "но второй раз за ту же запись программа не платит: пока границы те же, текст "
+                 "будет пропущен. Ноль в поле снимает границу.",
+            style="Bad.TLabel",
+        )
+
+    def _filter_ready_files(self) -> None:
+        """Проверить по границам длительности папку с уже готовыми озвучками.
+
+        Во время работы программа судит только то, что склеила сама. Всё, что
+        лежало в папке до запуска — сделанное прошлыми прогонами или принесённое
+        со стороны, — остаётся нетронутым, и разобрать его можно только так.
+        """
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo(APP_TITLE, "Сначала остановите работу.", parent=self.root)
+            return
+
+        settings = self._widgets_to_settings()
+        limits = describe_duration_limits(settings.min_duration, settings.max_duration)
+        if not limits:
+            messagebox.showinfo(
+                APP_TITLE,
+                "Границы длительности не заданы, отбирать нечего.\n\n"
+                "Впишите хотя бы одно из полей «от» и «до».",
+                parent=self.root,
+            )
+            return
+
+        initial = settings.texts_dir if settings.save_next_to_texts else settings.output_dir
+        chosen = filedialog.askdirectory(
+            initialdir=initial or str(Path.home()),
+            title="Папка с готовыми озвучками",
+            parent=self.root,
+        )
+        if not chosen:
+            return
+
+        folder = Path(chosen)
+        log.info("Смотрю «%s»: оставить нужно записи %s", folder, limits)
+
+        self.cancel_event = threading.Event()
+        self._set_busy(True)
+        self.progress.configure(value=0)
+        self.lbl_status.configure(text="Измеряю готовые файлы…")
+
+        def work() -> None:
+            try:
+                scan = duration.scan_folder(
+                    folder,
+                    settings.min_duration,
+                    settings.max_duration,
+                    on_progress=lambda done, total, name: self.events.put(
+                        ("progress", done / total if total else 1.0,
+                         f"Измеряю {name} — {done} из {total}")
+                    ),
+                    cancel=self.cancel_event,
+                )
+            except Cancelled:
+                self.events.put(("filter_stopped",))
+            except Exception as exc:
+                log.exception("Разбор папки не удался")
+                self.events.put(("failed", f"Не удалось разобрать папку:\n{exc}"))
+            else:
+                self.events.put(("filter_scanned", scan))
+
+        self.worker = threading.Thread(target=work, daemon=True)
+        self.worker.start()
+
+    def _on_filter_scanned(self, scan: Any) -> None:
+        """Показать, что нашлось, и спросить разрешение на удаление."""
+        self._set_busy(False)
+        self.progress.configure(value=1000)
+        limits = describe_duration_limits(scan.minimum, scan.maximum)
+
+        if not scan.checked:
+            self.lbl_status.configure(text="Готовых mp3 в папке нет")
+            messagebox.showinfo(
+                APP_TITLE,
+                f"В папке {scan.folder} нет ни одного mp3.\n\n"
+                "Служебные подпапки «_chunks» и «_voices» не просматриваются: "
+                "там лежат куски и превью голосов, а не готовые озвучки.",
+                parent=self.root,
+            )
+            return
+
+        report = (
+            f"Папка: {scan.folder}\n"
+            f"Проверено файлов: {scan.checked}\n"
+            f"Уложились {limits}: {len(scan.fitting)}\n"
+            f"Не по длительности: {len(scan.rejected)} "
+            f"(короче — {scan.too_short}, длиннее — {scan.too_long})"
+        )
+        if scan.unmeasured:
+            report += f"\nИзмерить не удалось: {len(scan.unmeasured)} — эти файлы останутся на месте"
+
+        if not scan.rejected:
+            self.lbl_status.configure(text="Все записи в границах, удалять нечего")
+            messagebox.showinfo(APP_TITLE, report + "\n\nУдалять нечего.", parent=self.root)
+            return
+
+        self.lbl_status.configure(text=f"Не по длительности: {len(scan.rejected)}")
+        shown = [f"• {item.line()}" for item in scan.rejected[:_FILTER_EXAMPLES]]
+        if len(scan.rejected) > _FILTER_EXAMPLES:
+            shown.append(f"• …и ещё {len(scan.rejected) - _FILTER_EXAMPLES}")
+
+        if not messagebox.askyesno(
+            APP_TITLE,
+            f"{report}\n\n" + "\n".join(shown) + f"\n\nУдалить эти файлы ({len(scan.rejected)} шт.)? "
+            "Корзина не используется, вернуть их будет неоткуда.",
+            icon="warning",
+            default="no",
+            parent=self.root,
+        ):
+            self.lbl_status.configure(text="Ничего не удалено")
+            log.info("Удаление отменено, файлы остались на месте")
+            return
+
+        self._set_busy(True)
+        self.lbl_status.configure(text="Удаляю…")
+
+        def work() -> None:
+            deleted, errors = duration.delete(scan.rejected)
+            self.events.put(("filter_deleted", deleted, errors))
+
+        self.worker = threading.Thread(target=work, daemon=True)
+        self.worker.start()
+
+    def _on_filter_deleted(self, deleted: int, errors: List[str]) -> None:
+        self._set_busy(False)
+        self.lbl_status.configure(text=f"Удалено файлов: {deleted}")
+
+        if errors:
+            messagebox.showwarning(
+                APP_TITLE,
+                f"Удалено файлов: {deleted}\n\nНе удалось удалить:\n• " + "\n• ".join(errors[:10]),
+                parent=self.root,
+            )
+        else:
+            messagebox.showinfo(APP_TITLE, f"Удалено файлов: {deleted}", parent=self.root)
 
     def _refresh_done_hint(self) -> None:
         action = _done_from_label(self.var_done_action.get())
@@ -1200,7 +1400,8 @@ class App:
             "Да — забыть, какие тексты уже озвучены (голоса останутся).\n"
             "Нет — забыть ещё и созданные голоса.\n"
             "Отмена — ничего не делать.\n\n"
-            "Файлы на диске не удаляются, но повторная озвучка потратит кредиты заново.",
+            "Файлы на диске не удаляются, но повторная озвучка потратит кредиты заново. "
+            "Тексты, отсеянные по длительности, тоже будут озвучены снова.",
             parent=self.root,
         )
         if answer is None:
@@ -1366,6 +1567,13 @@ class App:
             self._on_verified(event[1], event[2])
         elif kind == "probe_done":
             self._on_probe_done(event[1])
+        elif kind == "filter_scanned":
+            self._on_filter_scanned(event[1])
+        elif kind == "filter_deleted":
+            self._on_filter_deleted(event[1], event[2])
+        elif kind == "filter_stopped":
+            self._set_busy(False)
+            self.lbl_status.configure(text="Отбор остановлен, ничего не удалено")
         elif kind == "voices_loaded":
             self._on_voices_loaded(event[1])
         elif kind == "voices_failed":
@@ -1418,15 +1626,24 @@ class App:
         self._set_busy(False)
         self.progress.configure(value=1000 if not stats.stopped_reason else self.progress["value"])
 
-        summary = (
-            f"Готово файлов: {stats.texts_done}\n"
-            f"Пропущено (уже были готовы): {stats.texts_skipped}\n"
-            f"С ошибками: {stats.texts_failed}\n"
-            f"Голосов создано: {stats.voices_created}, использовано готовых: {stats.voices_reused}\n"
-            f"Озвучено символов: {_fmt(stats.characters_spent)}\n"
-            f"Получено звука: {format_duration(stats.seconds_produced) or '—'}\n"
-            f"Потрачено кредитов (оценка): {_fmt(stats.credits_estimated)}"
-        )
+        limits = describe_duration_limits(self.settings.min_duration, self.settings.max_duration)
+        lines = [
+            f"Готово файлов: {stats.texts_done}",
+            f"Пропущено (уже были готовы): {stats.texts_skipped}",
+            f"Удалено по длительности ({limits or 'без границ'}): {stats.texts_rejected}",
+        ]
+        if stats.texts_rejected_earlier:
+            lines.append(
+                f"Не озвучено повторно (отсеяны прошлым разом): {stats.texts_rejected_earlier}"
+            )
+        lines += [
+            f"С ошибками: {stats.texts_failed}",
+            f"Голосов создано: {stats.voices_created}, использовано готовых: {stats.voices_reused}",
+            f"Озвучено символов: {_fmt(stats.characters_spent)}",
+            f"Получено звука: {format_duration(stats.seconds_produced) or '—'}",
+            f"Потрачено кредитов (оценка): {_fmt(stats.credits_estimated)}",
+        ]
+        summary = "\n".join(lines)
 
         if stats.stopped_reason:
             summary += f"\n\nОстановлено: {stats.stopped_reason}"
@@ -1436,7 +1653,7 @@ class App:
         self.lbl_status.configure(text=stats.stopped_reason or "Работа завершена")
         log.info("Работа завершена")
 
-        if stats.texts_failed or stats.stopped_reason:
+        if stats.texts_failed or stats.texts_rejected or stats.stopped_reason:
             messagebox.showwarning(APP_TITLE, summary, parent=self.root)
         else:
             messagebox.showinfo(APP_TITLE, summary, parent=self.root)
