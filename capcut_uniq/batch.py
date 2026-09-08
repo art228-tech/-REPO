@@ -271,7 +271,8 @@ def run(config: Config, progress: Progress | None = None) -> BatchReport:
                       in_a_row)
             break
 
-        log.warning("Ролик %d пропущен, беру следующую озвучку", number)
+        log.warning("Ролики %s пропущены, беру следующую озвучку",
+                    ", ".join(str(item.number) for item in made if not item.ok))
 
     report.skipped = skipped
 

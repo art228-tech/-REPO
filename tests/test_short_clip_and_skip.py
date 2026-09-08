@@ -110,3 +110,66 @@ def test_stretch_lowers_the_bar_by_the_right_amount():
     pool = _pool(14.20)
     with pytest.raises(AssetShortage):
         pool.take_longest_enough(15.155, stretch=0.06)
+
+
+class _Endless:
+    """Пул, который никогда не кончается: партию должна останавливать не нехватка."""
+
+    def __len__(self) -> int:
+        return 99
+
+    def shuffle(self, rng) -> None:
+        pass
+
+
+def _batch_of(monkeypatch, tmp_path, results: list[bool]):
+    """Прогоняет партию, где ролики выходят или нет по списку `results`."""
+    from capcut_uniq import batch
+    from capcut_uniq.config import Config
+
+    monkeypatch.setattr(batch.ffmpeg, "require_tools", lambda: None)
+    monkeypatch.setattr(batch.naming, "occupied", lambda folder: set())
+    monkeypatch.setattr(batch.assets, "Pool", lambda *args, **kwargs: _Endless())
+
+    profile = type("_Profile", (), {"name": "0813-01"})()
+    monkeypatch.setattr(batch, "discover_templates", lambda config: [profile])
+
+    def fake_one(config, profile, clips, voices, rng, numbers, *args, **kwargs):
+        return [
+            batch.VideoOutcome(
+                number=n,
+                template=profile.name,
+                ok=results[n - 1],
+                error="" if results[n - 1] else "клип короче слота",
+            )
+            for n in numbers
+        ]
+
+    monkeypatch.setattr(batch, "_one", fake_one)
+
+    config = Config(clips_dir=tmp_path, voice_dir=tmp_path, drafts_dir=tmp_path,
+                    count=len(results), seed=1)
+    return batch.run(config)
+
+
+def test_batch_goes_on_after_a_video_fails(monkeypatch, tmp_path):
+    """Партия не должна обрываться на первом же неудачном ролике.
+
+    В строке журнала про пропущенный ролик стояла переменная, которой в `run()`
+    нет, поэтому вместо «отложить озвучку и взять следующую» партия падала с
+    NameError. Из двадцати четырёх роликов доезжали единицы, а причина в журнале
+    выглядела как поломка сборки, а не как одна неподходящая озвучка.
+    """
+    report = _batch_of(monkeypatch, tmp_path, [False, True, True])
+
+    assert [item.number for item in report.outcomes] == [1, 2, 3]
+    assert report.skipped == ["клип короче слота"]
+    assert report.stopped_reason == ""
+
+
+def test_batch_stops_after_five_failures_in_a_row(monkeypatch, tmp_path):
+    """Идти дальше стоит до тех пор, пока есть надежда: пять подряд — уже нет."""
+    report = _batch_of(monkeypatch, tmp_path, [False] * 8)
+
+    assert len(report.outcomes) == 5
+    assert "5 неудач подряд" in report.stopped_reason
