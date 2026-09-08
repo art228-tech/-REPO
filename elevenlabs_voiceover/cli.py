@@ -8,6 +8,7 @@ import threading
 from pathlib import Path
 from typing import List, Optional
 
+from . import duration
 from .api_client import (
     decoder_support,
     describe_route,
@@ -17,7 +18,12 @@ from .api_client import (
     swap_proxy_scheme,
     verify_key,
 )
-from .config import MODE_ALL_VOICES, MODE_ROUND_ROBIN, Settings
+from .config import (
+    MODE_ALL_VOICES,
+    MODE_ROUND_ROBIN,
+    Settings,
+    describe_duration_limits,
+)
 from .diagnostics import build_report
 from .errors import ElevenLabsError
 from .logging_setup import add_gui_handler, get_logger, setup_logging
@@ -84,6 +90,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-duration", type=float,
         help="удалять озвучку длиннее стольких секунд (0 — не проверять)",
     )
+    parser.add_argument(
+        "--filter", metavar="ПАПКА",
+        help="отобрать по длительности готовые mp3 в папке и выйти",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="с --filter: показать, что будет удалено, но ничего не удалять",
+    )
     parser.add_argument("--recreate-voices", action="store_true", help="создать голоса заново")
     parser.add_argument("--check", action="store_true", help="проверить ключ и выйти")
     parser.add_argument(
@@ -130,6 +144,54 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
     return settings
 
 
+def filter_folder(settings: Settings, folder: Path, *, dry_run: bool = False) -> int:
+    """Пройтись по готовой папке и удалить записи не того хронометража.
+
+    Отдельный проход нужен потому, что во время работы программа проверяет
+    только то, что сделала сама: файлы, уже лежавшие в папке, она не трогает.
+    """
+    limits = describe_duration_limits(settings.min_duration, settings.max_duration)
+    if not limits:
+        say("Границы длительности не заданы, отбирать нечего. "
+            "Укажите --min-duration и/или --max-duration.", error=True)
+        return 2
+    if not folder.is_dir():
+        say(f"Папка не найдена: {folder}", error=True)
+        return 2
+
+    say(f"Оставляю записи {limits}. Смотрю папку {folder}")
+    scan = duration.scan_folder(folder, settings.min_duration, settings.max_duration)
+
+    if not scan.checked:
+        say("В папке нет ни одного mp3. Служебные «_chunks» и «_voices» не просматриваются.")
+        return 0
+
+    for item in scan.rejected + scan.unmeasured:
+        say(f"  {item.line()}")
+
+    say("")
+    say(f"Проверено файлов: {scan.checked}")
+    say(f"Подходят: {len(scan.fitting)}")
+    say(f"Не по длительности: {len(scan.rejected)} "
+        f"(короче — {scan.too_short}, длиннее — {scan.too_long})")
+    if scan.unmeasured:
+        say(f"Измерить не удалось: {len(scan.unmeasured)} — эти файлы остаются на месте")
+
+    if not scan.rejected:
+        return 0
+    if dry_run:
+        say("")
+        say("Пробный проход: ничего не удалено. Повторите без --dry-run.")
+        return 0
+
+    deleted, errors = duration.delete(scan.rejected)
+    say("")
+    say(f"Удалено файлов: {deleted}")
+    for error in errors:
+        say(f"  не удалось удалить {error}", error=True)
+    return 1 if errors else 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -150,6 +212,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         for key, value in estimate_plan(settings).items():
             say(f"{key}: {value}")
         return 0
+
+    if args.filter:
+        return filter_folder(settings, Path(args.filter).expanduser(), dry_run=args.dry_run)
 
     if args.diagnose:
         say(f"Путь в сеть: {describe_route(settings.proxy_url, settings.ignore_system_proxy)}")
