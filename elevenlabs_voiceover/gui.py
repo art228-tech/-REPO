@@ -31,7 +31,7 @@ from tkinter import (
 )
 from typing import Any, List, Optional
 
-from . import clipboard, diagnostics
+from . import clipboard, diagnostics, duration
 from .api_client import (
     PROXY_SCHEME_CANDIDATES,
     ElevenLabsClient,
@@ -72,7 +72,7 @@ from .config import (
     describe_duration_limits,
     normalize_proxy_url,
 )
-from .errors import ElevenLabsError
+from .errors import Cancelled, ElevenLabsError
 from .logging_setup import add_gui_handler, get_logger, register_secret, setup_logging
 from .paths import logs_dir
 from .runner import PreflightError, Runner, estimate_plan
@@ -102,6 +102,10 @@ OUTPUT_FORMATS = [
 VOICE_DESIGN_MODELS = ["eleven_multilingual_ttv_v2", "eleven_ttv_v3"]
 
 MAX_LOG_LINES = 2000
+
+#: Сколько отсеянных файлов показать в вопросе перед удалением. Список нужен,
+#: чтобы согласие давали, увидев конкретные имена, а не только счётчик.
+_FILTER_EXAMPLES = 8
 
 
 class App:
@@ -609,6 +613,15 @@ class App:
         self.var_max_duration.trace_add("write", lambda *_: self._refresh_duration_hint())
         row += 1
 
+        ttk.Button(canvas_frame, text="Отобрать готовые файлы в папке…",
+                   command=self._filter_ready_files).grid(
+            row=row, column=1, sticky="w", pady=(0, 3)
+        )
+        ttk.Label(canvas_frame,
+                  text="Проверить по этим же границам то, что уже озвучено",
+                  style="Hint.TLabel").grid(row=row, column=2, sticky="w", padx=(8, 0))
+        row += 1
+
         ttk.Label(canvas_frame, text="Текст после озвучки:").grid(row=row, column=0, sticky="w", pady=3)
         self.var_done_action = StringVar(value=DONE_ACTIONS[DONE_KEEP])
         combo_done = ttk.Combobox(
@@ -911,6 +924,140 @@ class App:
                  "на месте, и следующий запуск озвучит его заново. Ноль в поле снимает границу.",
             style="Bad.TLabel",
         )
+
+    def _filter_ready_files(self) -> None:
+        """Проверить по границам длительности папку с уже готовыми озвучками.
+
+        Во время работы программа судит только то, что склеила сама. Всё, что
+        лежало в папке до запуска — сделанное прошлыми прогонами или принесённое
+        со стороны, — остаётся нетронутым, и разобрать его можно только так.
+        """
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo(APP_TITLE, "Сначала остановите работу.", parent=self.root)
+            return
+
+        settings = self._widgets_to_settings()
+        limits = describe_duration_limits(settings.min_duration, settings.max_duration)
+        if not limits:
+            messagebox.showinfo(
+                APP_TITLE,
+                "Границы длительности не заданы, отбирать нечего.\n\n"
+                "Впишите хотя бы одно из полей «от» и «до».",
+                parent=self.root,
+            )
+            return
+
+        initial = settings.texts_dir if settings.save_next_to_texts else settings.output_dir
+        chosen = filedialog.askdirectory(
+            initialdir=initial or str(Path.home()),
+            title="Папка с готовыми озвучками",
+            parent=self.root,
+        )
+        if not chosen:
+            return
+
+        folder = Path(chosen)
+        log.info("Смотрю «%s»: оставить нужно записи %s", folder, limits)
+
+        self.cancel_event = threading.Event()
+        self._set_busy(True)
+        self.progress.configure(value=0)
+        self.lbl_status.configure(text="Измеряю готовые файлы…")
+
+        def work() -> None:
+            try:
+                scan = duration.scan_folder(
+                    folder,
+                    settings.min_duration,
+                    settings.max_duration,
+                    on_progress=lambda done, total, name: self.events.put(
+                        ("progress", done / total if total else 1.0,
+                         f"Измеряю {name} — {done} из {total}")
+                    ),
+                    cancel=self.cancel_event,
+                )
+            except Cancelled:
+                self.events.put(("filter_stopped",))
+            except Exception as exc:
+                log.exception("Разбор папки не удался")
+                self.events.put(("failed", f"Не удалось разобрать папку:\n{exc}"))
+            else:
+                self.events.put(("filter_scanned", scan))
+
+        self.worker = threading.Thread(target=work, daemon=True)
+        self.worker.start()
+
+    def _on_filter_scanned(self, scan: Any) -> None:
+        """Показать, что нашлось, и спросить разрешение на удаление."""
+        self._set_busy(False)
+        self.progress.configure(value=1000)
+        limits = describe_duration_limits(scan.minimum, scan.maximum)
+
+        if not scan.checked:
+            self.lbl_status.configure(text="Готовых mp3 в папке нет")
+            messagebox.showinfo(
+                APP_TITLE,
+                f"В папке {scan.folder} нет ни одного mp3.\n\n"
+                "Служебные подпапки «_chunks» и «_voices» не просматриваются: "
+                "там лежат куски и превью голосов, а не готовые озвучки.",
+                parent=self.root,
+            )
+            return
+
+        report = (
+            f"Папка: {scan.folder}\n"
+            f"Проверено файлов: {scan.checked}\n"
+            f"Уложились {limits}: {len(scan.fitting)}\n"
+            f"Не по длительности: {len(scan.rejected)} "
+            f"(короче — {scan.too_short}, длиннее — {scan.too_long})"
+        )
+        if scan.unmeasured:
+            report += f"\nИзмерить не удалось: {len(scan.unmeasured)} — эти файлы останутся на месте"
+
+        if not scan.rejected:
+            self.lbl_status.configure(text="Все записи в границах, удалять нечего")
+            messagebox.showinfo(APP_TITLE, report + "\n\nУдалять нечего.", parent=self.root)
+            return
+
+        self.lbl_status.configure(text=f"Не по длительности: {len(scan.rejected)}")
+        shown = [f"• {item.line()}" for item in scan.rejected[:_FILTER_EXAMPLES]]
+        if len(scan.rejected) > _FILTER_EXAMPLES:
+            shown.append(f"• …и ещё {len(scan.rejected) - _FILTER_EXAMPLES}")
+
+        if not messagebox.askyesno(
+            APP_TITLE,
+            f"{report}\n\n" + "\n".join(shown) + f"\n\nУдалить эти файлы ({len(scan.rejected)} шт.)? "
+            "Корзина не используется, вернуть их будет неоткуда.",
+            icon="warning",
+            default="no",
+            parent=self.root,
+        ):
+            self.lbl_status.configure(text="Ничего не удалено")
+            log.info("Удаление отменено, файлы остались на месте")
+            return
+
+        self._set_busy(True)
+        self.lbl_status.configure(text="Удаляю…")
+
+        def work() -> None:
+            deleted, errors = duration.delete(scan.rejected)
+            self.events.put(("filter_deleted", deleted, errors))
+
+        self.worker = threading.Thread(target=work, daemon=True)
+        self.worker.start()
+
+    def _on_filter_deleted(self, deleted: int, errors: List[str]) -> None:
+        self._set_busy(False)
+        self.lbl_status.configure(text=f"Удалено файлов: {deleted}")
+
+        if errors:
+            messagebox.showwarning(
+                APP_TITLE,
+                f"Удалено файлов: {deleted}\n\nНе удалось удалить:\n• " + "\n• ".join(errors[:10]),
+                parent=self.root,
+            )
+        else:
+            messagebox.showinfo(APP_TITLE, f"Удалено файлов: {deleted}", parent=self.root)
 
     def _refresh_done_hint(self) -> None:
         action = _done_from_label(self.var_done_action.get())
@@ -1419,6 +1566,13 @@ class App:
             self._on_verified(event[1], event[2])
         elif kind == "probe_done":
             self._on_probe_done(event[1])
+        elif kind == "filter_scanned":
+            self._on_filter_scanned(event[1])
+        elif kind == "filter_deleted":
+            self._on_filter_deleted(event[1], event[2])
+        elif kind == "filter_stopped":
+            self._set_busy(False)
+            self.lbl_status.configure(text="Отбор остановлен, ничего не удалено")
         elif kind == "voices_loaded":
             self._on_voices_loaded(event[1])
         elif kind == "voices_failed":
