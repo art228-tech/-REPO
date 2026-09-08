@@ -23,6 +23,7 @@ from .config import (
     Settings,
     describe_duration_limits,
 )
+from .duration import duration_problem
 from .errors import (
     Cancelled,
     ElevenLabsError,
@@ -138,21 +139,6 @@ def _pace(characters: int, seconds: Optional[float]) -> Optional[float]:
     if not seconds or seconds <= 0 or characters <= 0:
         return None
     return characters / seconds
-
-
-def duration_problem(seconds: Optional[float], minimum: float, maximum: float) -> str:
-    """Чем готовая запись не укладывается в заданные границы.
-
-    Пустая строка означает, что запись подходит. Неизмеренная длительность
-    претензией не считается: файл, о котором ничего не известно, не удаляем.
-    """
-    if seconds is None:
-        return ""
-    if minimum and seconds < minimum:
-        return f"короче {minimum:g} с"
-    if maximum and seconds > maximum:
-        return f"длиннее {maximum:g} с"
-    return ""
 
 
 def read_text_file(path: Path) -> str:

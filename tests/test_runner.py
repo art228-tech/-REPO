@@ -20,7 +20,6 @@ from elevenlabs_voiceover.runner import (
     PreflightError,
     Runner,
     count_txt_files,
-    duration_problem,
     estimate_plan,
     list_txt_files,
     natural_key,
@@ -1110,31 +1109,6 @@ def test_estimate_on_empty_folders(workspace):
 # ======================================================================
 # Длительность готовой озвучки
 # ======================================================================
-def test_duration_problem_names_the_broken_limit():
-    assert duration_problem(4.0, 10, 16) == "короче 10 с"
-    assert duration_problem(21.0, 10, 16) == "длиннее 16 с"
-    assert duration_problem(12.0, 10, 16) == ""
-
-
-def test_duration_problem_accepts_the_borders():
-    """Ровно 10 и ровно 16 секунд входят в «от 10 до 16»."""
-    assert duration_problem(10.0, 10, 16) == ""
-    assert duration_problem(16.0, 10, 16) == ""
-    assert duration_problem(9.99, 10, 16) == "короче 10 с"
-    assert duration_problem(16.01, 10, 16) == "длиннее 16 с"
-
-
-def test_duration_problem_ignores_switched_off_limits():
-    assert duration_problem(2.0, 0, 16) == ""
-    assert duration_problem(500.0, 10, 0) == ""
-    assert duration_problem(500.0, 0, 0) == ""
-
-
-def test_unmeasured_duration_is_not_a_problem():
-    """О файле, длительность которого измерить не вышло, ничего не известно."""
-    assert duration_problem(None, 10, 16) == ""
-
-
 def test_short_voiceover_is_deleted(workspace, store, monkeypatch):
     write_prompts(workspace["prompts"], 1)
     write_texts(workspace["texts"], 2)
