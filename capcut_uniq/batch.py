@@ -11,7 +11,7 @@ from typing import Callable
 
 from . import (
     asr, assets, builder, diagnose, ffmpeg, naming, plan as plan_module,
-    profile as profile_module, subtitles, textalign, validate,
+    profile as profile_module, registry, subtitles, textalign, validate,
 )
 from .config import Config
 from .errors import AssetShortage, PipelineError
@@ -483,6 +483,11 @@ def _render(config: Config, profile, render_plan, number: int, stamp: str,
             log.warning("Снять слепок субтитров не удалось: %s", exc)
 
     log.info("   готово: %s, %s, субтитров %d", name, fmt(result.duration_us), result.subtitle_count)
+
+    registry.append(
+        config.work_dir,
+        registry.entry(name, render_plan, result.duration_us, profile.name),
+    )
 
     outcome.ok = True
     outcome.name = name
