@@ -1,0 +1,5 @@
+# cmd.exe и PowerShell требуют переносов CRLF, а git не должен их трогать.
+*.bat -text
+*.ps1 -text
+*.py  text eol=lf
+*.md  text eol=lf
