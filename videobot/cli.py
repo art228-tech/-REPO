@@ -12,7 +12,7 @@ import traceback
 from pathlib import Path
 
 from . import config as config_module
-from . import logs
+from . import lock, logs
 
 
 def _folder() -> Path:
@@ -77,9 +77,26 @@ def _work(folder: Path, args) -> int:
 
     if args.command == "doctor":
         return _doctor(folder, journal)
-    if args.command == "headless":
-        return _headless(folder)
 
+    data = folder / "данные"
+    other = lock.take(data)
+    if other:
+        _say("")
+        _say(f"Программа уже запущена (процесс {other}).")
+        _say("Её окно где-то на экране — возможно, за другими окнами.")
+        _say("Две копии одновременно работать не могут: Telegram отдаёт "
+             "сообщения только одной, и бот начинает отвечать через раз.")
+        return 3
+
+    try:
+        if args.command == "headless":
+            return _headless(folder)
+        return _window(folder)
+    finally:
+        lock.release(data)
+
+
+def _window(folder: Path) -> int:
     try:
         from . import gui
     except ImportError as exc:
