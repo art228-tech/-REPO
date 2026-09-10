@@ -16,11 +16,15 @@ import traceback
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramUnauthorizedError
 from aiogram.fsm.storage.memory import MemoryStorage
 
+from .. import config as config_module
 from .. import uploader
 from ..db import Base
+from ..errors import PipelineError
 from ..guard import Guard
 from ..logs import get_logger
 from . import admin, reminders, worker
@@ -66,13 +70,40 @@ def forget_dispatcher() -> None:
 
 
 async def serve(base: Base, settings, guard: Guard, stopping: asyncio.Event) -> None:
-    # Бот пересоздаётся на каждый запуск: токен могли поменять в окне, а он
-    # зашит в объект бота. Диспетчер при этом остаётся прежним.
-    bot = Bot(settings.token,
+    # Бот пересоздаётся на каждый запуск: токен и прокси могли поменять в окне,
+    # а они зашиты в объект бота. Диспетчер при этом остаётся прежним.
+    proxy = config_module.proxy(settings.proxy_url)
+    session = AiohttpSession(proxy=proxy) if proxy else None
+    if proxy:
+        log.info("Иду к Telegram через прокси")
+
+    bot = Bot(settings.token, session=session,
               default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dispatcher = dispatcher_for(base, settings, guard)
 
-    me = await bot.get_me()
+    # Первый же запрос к Telegram отвечает на оба главных вопроса: приняли ли
+    # токен и вообще достучались ли. Обе причины по сообщению aiogram не
+    # понять, а других на этом шаге практически не бывает.
+    try:
+        me = await bot.get_me()
+    except TelegramUnauthorizedError as exc:
+        raise PipelineError(
+            "Telegram не принял токен. Проверьте, что скопировали его целиком "
+            "и что бот не удалён. Новый токен берётся у @BotFather командой "
+            "/mybots → бот → API Token."
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 - к Telegram не достучались
+        # В России api.telegram.org заблокирован, и это самая частая причина.
+        # VPN в режиме «Proxy» не помогает: он уводит браузер, а программа
+        # идёт мимо него.
+        where = "через прокси " if proxy else ""
+        raise PipelineError(
+            f"Не достучался до Telegram {where}— чаще всего это блокировка.\n\n"
+            "Включите VPN в режиме TUN (не Proxy) или впишите адрес прокси в "
+            "настройках.\n\n"
+            f"Что ответила сеть: {type(exc).__name__}: {exc}"
+        ) from exc
+
     log.info("Бот @%s на связи", me.username)
 
     tasks = [

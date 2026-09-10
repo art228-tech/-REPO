@@ -24,6 +24,10 @@ class Settings:
     registry_path: str = ""
     """Файл `данные роликов.jsonl` автомонтажа. Из него берутся данные ролика."""
 
+    proxy_url: str = ""
+    """Прокси до Telegram. В России api.telegram.org заблокирован, и без
+    прокси или VPN в режиме TUN бот до него не достучится."""
+
     # Сколько действий в минуту разрешено одному человеку. Превысил — бот
     # молчит, а не отвечает ошибкой на каждое нажатие: иначе спамом можно
     # раскачать самого бота, отвечающего на спам.
@@ -73,6 +77,30 @@ def save(folder: Path, settings: Settings) -> None:
         json.dumps(asdict(settings), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+
+def proxy(raw: str) -> str:
+    """Приводит запись прокси к виду, который понимает клиент.
+
+    Люди приносят адрес в том виде, в каком его дал продавец: то с протоколом,
+    то без, то с логином через двоеточие. Разбирать это должна программа, а не
+    пользователь — иначе он получит невнятную ошибку соединения и решит, что
+    дело в боте.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+
+    if "://" in raw:
+        return raw
+
+    parts = raw.split(":")
+    if len(parts) == 4:
+        host, port, login, password = parts
+        return f"http://{login}:{password}@{host}:{port}"
+    if len(parts) == 2:
+        return f"http://{raw}"
+    return raw
 
 
 def problems(settings: Settings) -> list[str]:

@@ -248,6 +248,7 @@ class Window(tk.Tk):
         self.token = tk.StringVar(value=self.settings.token)
         self.admin_id = tk.StringVar(value=str(self.settings.admin_id or ""))
         self.registry_path = tk.StringVar(value=self.settings.registry_path)
+        self.proxy_url = tk.StringVar(value=self.settings.proxy_url)
 
         ttk.Label(box, text="Токен бота").grid(row=0, column=0, sticky="w", padx=6, pady=4)
         entry = ttk.Entry(box, textvariable=self.token, show="•")
@@ -287,9 +288,21 @@ class Window(tk.Tk):
                   foreground="#555").grid(row=3, column=1, columnspan=2, sticky="w",
                                           padx=6)
 
+        ttk.Label(box, text="Прокси").grid(row=4, column=0, sticky="w", padx=6, pady=4)
+        proxy_entry = ttk.Entry(box, textvariable=self.proxy_url)
+        proxy_entry.grid(row=4, column=1, sticky="ew", padx=6)
+        add_clipboard(proxy_entry)
+        ttk.Label(box, text="если Telegram не открывается", foreground="#555"
+                  ).grid(row=4, column=2, sticky="w", padx=6)
+
+        ttk.Label(box, text="Можно оставить пустым, если VPN включён в режиме TUN. "
+                           "Формат: socks5://логин:пароль@адрес:порт или адрес:порт.",
+                  foreground="#555").grid(row=5, column=1, columnspan=2, sticky="w",
+                                          padx=6)
+
         ttk.Label(box, text="Вставить можно кнопкой, правой кнопкой мыши или Ctrl+V — "
                            "раскладка значения не имеет.",
-                  foreground="#555").grid(row=4, column=1, columnspan=2, sticky="w",
+                  foreground="#555").grid(row=6, column=1, columnspan=2, sticky="w",
                                           padx=6, pady=(0, 4))
 
         buttons = ttk.Frame(parent)
@@ -383,6 +396,7 @@ class Window(tk.Tk):
     def _save_quietly(self) -> None:
         self.settings.token = self.token.get().strip()
         self.settings.registry_path = self.registry_path.get().strip()
+        self.settings.proxy_url = self.proxy_url.get().strip()
         raw = self.admin_id.get().strip()
         self.settings.admin_id = int(raw) if raw.isdigit() else 0
         config_module.save(self.folder, self.settings)

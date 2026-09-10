@@ -102,6 +102,7 @@ def _settings(settings) -> str:
         ("ID админа в настройках",
          settings.admin_id or "не задан (первый нажавший «Старт»)"),
         ("Файл данных автомонтажа", settings.registry_path or "не указан"),
+        ("Прокси", _proxy(settings.proxy_url)),
         ("Действий в минуту", settings.actions_per_minute),
         ("За раз выдаётся", settings.max_take_at_once),
         ("Порог процессора",
@@ -110,6 +111,19 @@ def _settings(settings) -> str:
     ]
     width = max(len(name) for name, _ in rows)
     return "\n".join(f"{name.ljust(width)} : {value}" for name, value in rows)
+
+
+def _proxy(raw: str) -> str:
+    """Адрес прокси без логина и пароля — они там бывают, и это чужой секрет."""
+    raw = (raw or "").strip()
+    if not raw:
+        return "не указан"
+    if "@" in raw:
+        return raw.split("@", 1)[1] + " (логин и пароль скрыты)"
+    if raw.count(":") >= 3:
+        host, port, *_ = raw.rsplit("://", 1)[-1].split(":")
+        return f"{host}:{port} (логин и пароль скрыты)"
+    return raw
 
 
 def _read(path: Path) -> str:
