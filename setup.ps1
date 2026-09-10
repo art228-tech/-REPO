@@ -162,23 +162,12 @@ if (Test-Path $cache) { Remove-Item $cache -Recurse -Force -ErrorAction Silently
 [string[]]$command = if ($args.Count -gt 0) { $args } else { @('gui') }
 
 Step 'Запускаю'
-if ($command[0] -eq 'gui') {
-    # pythonw не держит консольное окно: программа живёт в своём окне.
-    $silent = Join-Path $venv 'Scripts\pythonw.exe'
-    if (Test-Path $silent) {
-        $app = Start-Process -FilePath $silent -PassThru -WorkingDirectory $root `
-            -ArgumentList @((Join-Path $root 'main.py'), 'gui')
 
-        # pythonw молчит обо всём: ни консоли, ни сообщения об ошибке. Если
-        # программа упала на запуске, человек увидел бы просто пустой экран и
-        # закрывшийся батник. Поэтому ждём и, если она уже умерла, повторяем
-        # запуск с консолью — там причина будет видна.
-        Start-Sleep -Seconds 3
-        if (-not $app.HasExited -or $app.ExitCode -eq 0) { exit 0 }
-        Warn 'Окно не открылось. Запускаю ещё раз, чтобы показать причину.'
-    }
-}
-
+# Запускается обычный python, а не pythonw, и консоль остаётся открытой рядом с
+# окном программы. Так сделано намеренно: pythonw не показывает ни консоли, ни
+# ошибок, и упавшая на запуске программа оставляла человека перед пустым
+# экраном — ровно это и случилось. Лишнее окно консоли — небольшая плата за то,
+# что причина сбоя всегда на виду.
 & $venvPython (Join-Path $root 'main.py') @command
 $code = $LASTEXITCODE
 if ($code -ne 0) {

@@ -89,12 +89,20 @@ def test_setup_script_parses():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_window_failure_does_not_end_in_silence():
-    """pythonw не показывает ошибок: упавший запуск обязан повториться с консолью."""
-    body = SETUP.read_text(encoding="utf-8-sig")
+def test_program_is_not_started_in_silence():
+    """pythonw прячет и консоль, и ошибки — упавший запуск оставлял пустой экран.
 
-    assert "HasExited" in body
-    assert "pythonw.exe" in body
+    Именно так и вышло: программа падала на старте, а человек видел только
+    закрывшийся батник. Консольный python оставляет окно с причиной, и это
+    важнее, чем отсутствие лишнего окна.
+    """
+    # Слово встречается в объяснении, почему pythonw не используется, поэтому
+    # смотрим только исполняемые строки.
+    code = [line for line in SETUP.read_text(encoding="utf-8-sig").splitlines()
+            if not line.lstrip().startswith("#")]
+
+    assert not [line for line in code if "pythonw" in line]
+    assert any("$venvPython (Join-Path $root 'main.py') @command" in line for line in code)
 
 
 def test_the_array_type_is_still_forced():
