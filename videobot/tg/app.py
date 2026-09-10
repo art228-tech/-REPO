@@ -29,11 +29,23 @@ from .access import Access
 log = get_logger("бот")
 
 
-def build(base: Base, settings, guard: Guard) -> tuple[Bot, Dispatcher]:
-    bot = Bot(settings.token,
-              default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+# Диспетчер собирается один раз за всё время работы программы и дальше
+# переиспользуется. Роутеры в aiogram привязываются к диспетчеру навсегда:
+# второй диспетчер на тех же роутерах падает с «Router is already attached».
+# А остановить и снова запустить бота кнопкой — обычное дело, и раньше вторая
+# попытка обрывалась именно на этом.
+_dispatcher: Dispatcher | None = None
+
+
+def dispatcher_for(base: Base, settings, guard: Guard) -> Dispatcher:
+    global _dispatcher
+    if _dispatcher is not None:
+        return _dispatcher
+
     dispatcher = Dispatcher(storage=MemoryStorage())
 
+    # Доступ держит те же объекты настроек и базы, что и окно программы,
+    # поэтому смена токена или выдача доступа доходят до него без пересборки.
     access = Access(base, settings, guard)
     dispatcher.message.middleware(access)
     dispatcher.callback_query.middleware(access)
@@ -42,11 +54,23 @@ def build(base: Base, settings, guard: Guard) -> tuple[Bot, Dispatcher]:
     # чужие сообщения — зато /start админа должен попасть именно в неё.
     dispatcher.include_router(admin.router)
     dispatcher.include_router(worker.router)
-    return bot, dispatcher
+
+    _dispatcher = dispatcher
+    return dispatcher
+
+
+def forget_dispatcher() -> None:
+    """Сбрасывает собранный диспетчер. Нужно тестам, чтобы не тянуть чужой."""
+    global _dispatcher
+    _dispatcher = None
 
 
 async def serve(base: Base, settings, guard: Guard, stopping: asyncio.Event) -> None:
-    bot, dispatcher = build(base, settings, guard)
+    # Бот пересоздаётся на каждый запуск: токен могли поменять в окне, а он
+    # зашит в объект бота. Диспетчер при этом остаётся прежним.
+    bot = Bot(settings.token,
+              default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    dispatcher = dispatcher_for(base, settings, guard)
 
     me = await bot.get_me()
     log.info("Бот @%s на связи", me.username)
