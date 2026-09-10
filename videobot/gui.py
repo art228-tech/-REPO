@@ -1,13 +1,17 @@
-"""Окно программы: загрузка роликов и управление ботом."""
+"""Окно программы: загрузка роликов, бот и журнал."""
 from __future__ import annotations
 
+import os
 import queue
+import subprocess
+import sys
 import tkinter as tk
+import traceback
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from . import config as config_module
-from . import logs, registry
+from . import logs, registry, report
 from .db import Base
 from .guard import Guard
 from .tg.app import Runner
@@ -21,8 +25,8 @@ class Window(tk.Tk):
     def __init__(self, folder: Path):
         super().__init__()
         self.title("Ролики в телеграм-бота")
-        self.geometry("980x680")
-        self.minsize(820, 560)
+        self.geometry("1000x720")
+        self.minsize(860, 600)
 
         self.folder = folder
         self.settings = config_module.load(folder)
@@ -31,27 +35,46 @@ class Window(tk.Tk):
         self.runner = Runner(self.base, self.settings, self.guard)
 
         self.matches: list[registry.Match] = []
-        self._lines: queue.Queue[str] = queue.Queue()
-        logs.listen(self._lines.put)
+        self._lines: queue.Queue[tuple[str, bool]] = queue.Queue()
+        logs.listen(self._catch)
 
         book = ttk.Notebook(self)
         self.upload_tab = ttk.Frame(book)
         self.bot_tab = ttk.Frame(book)
+        self.journal_tab = ttk.Frame(book)
         book.add(self.upload_tab, text="  Загрузка роликов  ")
         book.add(self.bot_tab, text="  Бот  ")
+        book.add(self.journal_tab, text="  Журнал  ")
         book.pack(fill="both", expand=True, padx=8, pady=8)
 
         self._build_upload(self.upload_tab)
         self._build_bot(self.bot_tab)
+        self._build_journal(self.journal_tab)
 
         for line in logs.recent():
-            self._append(line)
+            self._append(line, line in set(logs.errors()))
 
         self.protocol("WM_DELETE_WINDOW", self._close)
         self.after(REFRESH_MS, self._tick)
+        self._to_front()
 
+        log.info("Программа открыта")
         if not config_module.problems(self.settings):
             self.runner.start()
+
+    def _to_front(self) -> None:
+        """Показывает окно поверх остальных.
+
+        Иначе окно открывается за чужими — например за CapCut на весь экран, —
+        и выглядит это как «программа не запустилась».
+        """
+        try:
+            self.lift()
+            self.attributes("-topmost", True)
+            self.after(600, lambda: self.attributes("-topmost", False))
+            self.focus_force()
+        except tk.TclError:
+            pass
 
     # --- вкладка загрузки -------------------------------------------------
 
@@ -200,9 +223,9 @@ class Window(tk.Tk):
         self.state_note = ttk.Label(buttons, text="")
         self.state_note.pack(side="left", padx=10)
 
-        self.journal = tk.Text(parent, height=18, wrap="word", state="disabled",
-                               background="#111", foreground="#ddd", insertbackground="#ddd")
-        self.journal.pack(fill="both", expand=True, pady=(6, 4))
+        self.trouble = ttk.Label(parent, text="", foreground="#a11", wraplength=900,
+                                 justify="left")
+        self.trouble.pack(anchor="w", pady=(8, 0), padx=2)
 
     def _pick_registry(self) -> None:
         chosen = filedialog.askopenfilename(
@@ -212,13 +235,7 @@ class Window(tk.Tk):
             self.registry_path.set(chosen)
 
     def _save(self) -> None:
-        self.settings.token = self.token.get().strip()
-        self.settings.registry_path = self.registry_path.get().strip()
-        raw = self.admin_id.get().strip()
-        self.settings.admin_id = int(raw) if raw.isdigit() else 0
-
-        config_module.save(self.folder, self.settings)
-
+        self._save_quietly()
         troubles = config_module.problems(self.settings)
         if troubles:
             messagebox.showwarning("Сохранено, но бота не запустить",
@@ -246,11 +263,82 @@ class Window(tk.Tk):
         self.settings.admin_id = int(raw) if raw.isdigit() else 0
         config_module.save(self.folder, self.settings)
 
+    # --- вкладка журнала --------------------------------------------------
+
+    def _build_journal(self, parent: ttk.Frame) -> None:
+        top = ttk.Frame(parent)
+        top.pack(fill="x", pady=(8, 4))
+
+        self.only_errors = tk.BooleanVar(value=False)
+        ttk.Checkbutton(top, text="Только ошибки", variable=self.only_errors,
+                        command=self._refill).pack(side="left")
+        ttk.Button(top, text="Собрать отчёт о проблеме",
+                   command=self._report).pack(side="left", padx=(12, 6))
+        ttk.Button(top, text="Открыть папку журналов",
+                   command=self._open_journals).pack(side="left")
+
+        ttk.Label(
+            parent,
+            text="Отчёт — один файл, который можно переслать. "
+                 "Внутри журналы, окружение и настройки; токен из него вырезан.",
+            foreground="#555").pack(anchor="w", pady=(0, 4))
+
+        self.journal = tk.Text(parent, height=22, wrap="word", state="disabled",
+                               background="#111", foreground="#ddd",
+                               insertbackground="#ddd")
+        self.journal.pack(fill="both", expand=True, pady=(4, 4))
+        self.journal.tag_configure("bad", foreground="#ff8a80")
+
+    def _report(self) -> None:
+        try:
+            where = report.build(self.folder, self.settings, self.base)
+        except Exception as exc:  # noqa: BLE001 - отчёт о сбое не должен падать сам
+            log.error("Отчёт собрать не вышло: %s", exc)
+            messagebox.showerror("Не вышло", f"Отчёт собрать не удалось:\n{exc}")
+            return
+
+        log.info("Отчёт собран: %s", where.name)
+        messagebox.showinfo(
+            "Отчёт готов",
+            f"{where}\n\nТокен из отчёта вырезан — файл можно пересылать.")
+        self._reveal(where.parent)
+
+    def _open_journals(self) -> None:
+        self._reveal(self.folder / "данные" / "журналы")
+
+    def _reveal(self, where: Path) -> None:
+        """Открывает папку в проводнике — на каждой системе по-своему."""
+        try:
+            where.mkdir(parents=True, exist_ok=True)
+            if sys.platform == "win32":
+                os.startfile(where)  # noqa: S606 - открыть папку пользователю
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(where)])
+            else:
+                subprocess.Popen(["xdg-open", str(where)])
+        except Exception as exc:  # noqa: BLE001 - не открылось, и ладно
+            log.warning("Папку открыть не вышло: %s", exc)
+            messagebox.showinfo("Папка", str(where))
+
+    def _refill(self) -> None:
+        self.journal.config(state="normal")
+        self.journal.delete("1.0", "end")
+        self.journal.config(state="disabled")
+
+        errors = set(logs.errors())
+        source = logs.errors() if self.only_errors.get() else logs.recent()
+        for line in source:
+            self._append(line, line in errors)
+
     # --- общее ------------------------------------------------------------
 
-    def _append(self, line: str) -> None:
+    def _catch(self, line: str) -> None:
+        """Принимает строку журнала из чужого потока — бот пишет из своего."""
+        self._lines.put((line, False))
+
+    def _append(self, line: str, bad: bool) -> None:
         self.journal.config(state="normal")
-        self.journal.insert("end", line + "\n")
+        self.journal.insert("end", line + "\n", ("bad",) if bad else ())
         self.journal.see("end")
         # Держим в окне только хвост: за сутки работы текста набегает столько,
         # что окно начинает заметно тормозить при прокрутке.
@@ -259,11 +347,15 @@ class Window(tk.Tk):
         self.journal.config(state="disabled")
 
     def _tick(self) -> None:
+        errors = set(logs.errors())
         while True:
             try:
-                self._append(self._lines.get_nowait())
+                line, _ = self._lines.get_nowait()
             except queue.Empty:
                 break
+            if self.only_errors.get() and line not in errors:
+                continue
+            self._append(line, line in errors)
 
         counts = self.base.counts()
         note = (f"В очереди на заливку: {counts['pending']}   "
@@ -278,10 +370,11 @@ class Window(tk.Tk):
             if self.guard.paused:
                 state = f"на паузе, процессор {self.guard.last_percent:.0f}%"
             self.state_note.config(text=state)
+            self.trouble.config(text="")
         else:
             self.power.config(text="Запустить бота")
-            self.state_note.config(
-                text=f"остановлен — {self.runner.error}" if self.runner.error else "остановлен")
+            self.state_note.config(text="остановлен")
+            self.trouble.config(text=self.runner.error)
 
         self.after(REFRESH_MS, self._tick)
 
@@ -291,4 +384,12 @@ class Window(tk.Tk):
 
 
 def run(folder: Path) -> None:
-    Window(folder).mainloop()
+    """Открывает окно. Сбой при построении окна обязан дойти до человека."""
+    try:
+        window = Window(folder)
+    except Exception as error:  # noqa: BLE001 - причина уходит в файл и наверх
+        logs.get_logger("окно").error(
+            "Окно не построилось: %s\n%s", error,
+            "".join(traceback.format_exception(type(error), error, error.__traceback__)))
+        raise
+    window.mainloop()

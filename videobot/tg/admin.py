@@ -1,11 +1,16 @@
-"""Админка: люди, выдача роликов, статистика."""
+"""Админка: люди, выдача роликов, статистика, журнал."""
 from __future__ import annotations
 
-from aiogram import F, Router
+from pathlib import Path
+
+from aiogram import F, Router, html
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message,
+)
 
+from .. import logs, report
 from .. import stats as stats_module
 from ..db import Base
 from ..logs import get_logger
@@ -33,6 +38,7 @@ def _menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Выдать ролики", callback_data="a:give")],
         [InlineKeyboardButton(text="Люди", callback_data="a:people")],
         [InlineKeyboardButton(text="Статистика", callback_data="a:stats")],
+        [InlineKeyboardButton(text="Журнал", callback_data="a:log")],
     ])
 
 
@@ -335,6 +341,59 @@ async def stats_one(call: CallbackQuery, base: Base, person) -> None:
         await call.answer()
         return
     await _show_stats(call, base, owner=target)
+
+
+# --- журнал ---------------------------------------------------------------
+
+# Больше десятка строк в сообщение не влезет по-человечески, а для «что сейчас
+# не так» хватает и последних: старое всё равно лежит в отчёте.
+LOG_LINES = 12
+
+
+@router.callback_query(F.data == "a:log")
+async def journal(call: CallbackQuery, person, settings) -> None:
+    """Последние ошибки прямо в боте — чтобы не бежать к компьютеру."""
+    if not _only_admin(person):
+        await call.answer()
+        return
+
+    lines = logs.errors()[-LOG_LINES:]
+    if lines:
+        body = "\n".join(html.quote(line) for line in lines)
+        text = (f"Последние ошибки ({len(lines)} из {len(logs.errors())}):\n\n"
+                f"<pre>{body}</pre>")
+    else:
+        text = "Ошибок с момента запуска не было."
+
+    await call.message.edit_text(
+        text + "\n\nОтчёт — один файл со всеми журналами, его можно переслать. "
+               "Токен из него вырезан.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Прислать отчёт файлом", callback_data="a:report")],
+            [InlineKeyboardButton(text="Обновить", callback_data="a:log")],
+            [InlineKeyboardButton(text="Назад", callback_data="a:menu")]]))
+    await call.answer()
+
+
+@router.callback_query(F.data == "a:report")
+async def send_report(call: CallbackQuery, base: Base, person, settings) -> None:
+    if not _only_admin(person):
+        await call.answer()
+        return
+
+    await call.answer("Собираю…")
+    folder = Path(__file__).resolve().parent.parent.parent
+    try:
+        where = report.build(folder, settings, base)
+    except Exception as exc:  # noqa: BLE001 - отчёт о сбое не должен падать сам
+        log.error("Отчёт собрать не вышло: %s", exc)
+        await call.message.answer(f"Отчёт собрать не удалось: {exc}")
+        return
+
+    log.info("Отчёт собран и отправлен: %s", where.name)
+    await call.message.answer_document(
+        FSInputFile(where, filename=where.name),
+        caption="Отчёт о проблеме. Токен вырезан, файл можно пересылать.")
 
 
 async def _show_stats(call: CallbackQuery, base: Base, owner: int | None) -> None:
