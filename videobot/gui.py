@@ -20,6 +20,51 @@ log = logs.get_logger("окно")
 
 REFRESH_MS = 1000
 
+# Ctrl+V в tkinter привязан к латинской «v». При русской раскладке приходит
+# «Cyrillic_em» — то есть «м», — и вставка молча не срабатывает. Токен же
+# вставляют именно из буфера, и набирать его руками никто не станет. Поэтому
+# каждое сочетание вешается на обе буквы сразу.
+CLIPBOARD_KEYS = {
+    "<<Paste>>": ("v", "Cyrillic_em"),
+    "<<Copy>>": ("c", "Cyrillic_es"),
+    "<<Cut>>": ("x", "Cyrillic_che"),
+    "<<SelectAll>>": ("a", "Cyrillic_ef"),
+}
+
+
+def add_clipboard(widget) -> None:
+    """Учит поле работать с буфером при любой раскладке и по правой кнопке."""
+    for event, keys in CLIPBOARD_KEYS.items():
+        for key in keys:
+            widget.bind(f"<Control-{key}>", _clipboard_action(widget, event))
+            widget.bind(f"<Control-{key.upper() if len(key) == 1 else key}>",
+                        _clipboard_action(widget, event))
+
+    menu = tk.Menu(widget, tearoff=0)
+    menu.add_command(label="Вставить",
+                     command=lambda: widget.event_generate("<<Paste>>"))
+    menu.add_command(label="Копировать",
+                     command=lambda: widget.event_generate("<<Copy>>"))
+    menu.add_command(label="Вырезать",
+                     command=lambda: widget.event_generate("<<Cut>>"))
+    menu.add_separator()
+    menu.add_command(label="Выделить всё",
+                     command=lambda: widget.event_generate("<<SelectAll>>"))
+
+    def show(event):
+        widget.focus_set()
+        menu.tk_popup(event.x_root, event.y_root)
+
+    widget.bind("<Button-3>", show)
+
+
+def _clipboard_action(widget, event: str):
+    def handler(_):
+        widget.event_generate(event)
+        # Иначе Tk следом обработает нажатие сам и вставит вторую копию.
+        return "break"
+    return handler
+
 
 class Window(tk.Tk):
     def __init__(self, folder: Path):
@@ -201,19 +246,34 @@ class Window(tk.Tk):
         ttk.Label(box, text="Токен бота").grid(row=0, column=0, sticky="w", padx=6, pady=4)
         entry = ttk.Entry(box, textvariable=self.token, show="•")
         entry.grid(row=0, column=1, sticky="ew", padx=6)
+        add_clipboard(entry)
+
+        token_side = ttk.Frame(box)
+        token_side.grid(row=0, column=2, sticky="w", padx=6)
+        ttk.Button(token_side, text="Вставить", width=10,
+                   command=self._paste_token).pack(side="left")
         self.show_token = tk.BooleanVar(value=False)
-        ttk.Checkbutton(box, text="показать", variable=self.show_token,
+        ttk.Checkbutton(token_side, text="показать", variable=self.show_token,
                         command=lambda: entry.config(show="" if self.show_token.get() else "•")
-                        ).grid(row=0, column=2, padx=6)
+                        ).pack(side="left", padx=(6, 0))
 
         ttk.Label(box, text="Ваш ID").grid(row=1, column=0, sticky="w", padx=6, pady=4)
-        ttk.Entry(box, textvariable=self.admin_id, width=20).grid(row=1, column=1, sticky="w", padx=6)
+        admin = ttk.Entry(box, textvariable=self.admin_id, width=20)
+        admin.grid(row=1, column=1, sticky="w", padx=6)
+        add_clipboard(admin)
         ttk.Label(box, text="можно оставить пустым: админом станет тот, кто первым нажмёт «Старт»",
                   foreground="#555").grid(row=1, column=2, sticky="w", padx=6)
 
         ttk.Label(box, text="Данные автомонтажа").grid(row=2, column=0, sticky="w", padx=6, pady=4)
-        ttk.Entry(box, textvariable=self.registry_path).grid(row=2, column=1, sticky="ew", padx=6)
+        path_entry = ttk.Entry(box, textvariable=self.registry_path)
+        path_entry.grid(row=2, column=1, sticky="ew", padx=6)
+        add_clipboard(path_entry)
         ttk.Button(box, text="Выбрать…", command=self._pick_registry).grid(row=2, column=2, padx=6)
+
+        ttk.Label(box, text="Вставить можно кнопкой, правой кнопкой мыши или Ctrl+V — "
+                           "раскладка значения не имеет.",
+                  foreground="#555").grid(row=3, column=1, columnspan=2, sticky="w",
+                                          padx=6, pady=(0, 4))
 
         buttons = ttk.Frame(parent)
         buttons.pack(fill="x", pady=6)
@@ -226,6 +286,31 @@ class Window(tk.Tk):
         self.trouble = ttk.Label(parent, text="", foreground="#a11", wraplength=900,
                                  justify="left")
         self.trouble.pack(anchor="w", pady=(8, 0), padx=2)
+
+    def _paste_token(self) -> None:
+        """Кладёт в поле то, что лежит в буфере обмена.
+
+        Кнопка нужна на случай, когда и Ctrl+V, и правая кнопка почему-то не
+        сработали: токен без буфера не ввести, а руками его не набирают.
+        """
+        try:
+            text = self.clipboard_get()
+        except tk.TclError:
+            messagebox.showinfo("Буфер пуст", "В буфере обмена ничего нет.")
+            return
+
+        text = text.strip()
+        if not text:
+            messagebox.showinfo("Буфер пуст", "В буфере обмена ничего нет.")
+            return
+
+        self.token.set(text)
+        if ":" not in text:
+            messagebox.showwarning(
+                "Это не похоже на токен",
+                "Вставил, но в токене должно быть двоеточие — "
+                "он выглядит как 8123456789:AAH…\n\n"
+                "Проверьте, что скопировали именно токен от @BotFather.")
 
     def _pick_registry(self) -> None:
         chosen = filedialog.askopenfilename(
@@ -288,6 +373,8 @@ class Window(tk.Tk):
                                insertbackground="#ddd")
         self.journal.pack(fill="both", expand=True, pady=(4, 4))
         self.journal.tag_configure("bad", foreground="#ff8a80")
+        # Строку ошибки часто проще скопировать и прислать, чем собирать отчёт.
+        add_clipboard(self.journal)
 
     def _report(self) -> None:
         try:
