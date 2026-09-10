@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import traceback
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -109,8 +110,11 @@ class Runner:
             loop.run_until_complete(
                 serve(self.base, self.settings, self.guard, self._stopping))
         except Exception as exc:  # noqa: BLE001 - в окно должна попасть причина
-            self.error = str(exc)
-            log.error("Бот остановился: %s", exc)
+            self.error = f"{type(exc).__name__}: {exc}"
+            # Одной строки в окне мало: по «Unauthorized» не понять, что токен
+            # чужой, а по «Connection refused» — что дело в прокси. Разбор
+            # уходит в журнал целиком и потом в отчёт.
+            log.error("Бот остановился — %s\n%s", self.error, traceback.format_exc())
         finally:
             try:
                 loop.run_until_complete(loop.shutdown_asyncgens())

@@ -1,8 +1,14 @@
-"""Точка входа: окно программы, проверка окружения, запуск без окна."""
+"""Точка входа: окно программы, проверка окружения, запуск без окна.
+
+Всё завёрнуто в перехват: программа может упасть до того, как появится окно, и
+тогда показать причину больше негде. Она пишется в `данные/журналы/сбой.txt` и
+выводится на экран — а `run.bat` держит консоль открытой, чтобы её было видно.
+"""
 from __future__ import annotations
 
 import argparse
 import sys
+import traceback
 from pathlib import Path
 
 from . import config as config_module
@@ -12,6 +18,24 @@ from . import logs
 def _folder() -> Path:
     """Папка программы: рядом с ней лежат настройки, база и журналы."""
     return Path(__file__).resolve().parent.parent
+
+
+def _journals(folder: Path) -> Path:
+    return folder / "данные" / "журналы"
+
+
+def _say(text: str) -> None:
+    """Печатает, если есть куда.
+
+    Под pythonw и в некоторых службах stdout отсутствует, и обычный print там
+    падает с AttributeError — то есть сообщение об ошибке само становится
+    ошибкой, и причина теряется окончательно.
+    """
+    try:
+        if sys.stdout is not None:
+            print(text)
+    except Exception:  # noqa: BLE001 - вывод сообщения не стоит падения
+        pass
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,7 +51,29 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     folder = _folder()
-    journal = logs.setup(folder / "данные" / "журналы", verbose=args.verbose)
+    try:
+        return _work(folder, args)
+    except Exception as error:  # noqa: BLE001 - причина обязана дойти до человека
+        where = logs.crash(_journals(folder), error)
+        _say("")
+        _say("=" * 60)
+        _say("Программа не смогла запуститься. Причина ниже.")
+        _say("=" * 60)
+        _say("".join(traceback.format_exception(
+            type(error), error, error.__traceback__)))
+        _say(f"То же самое записано в файл: {where}")
+        _say("Пришлите этот файл — по нему видно, что случилось.")
+        return 1
+
+
+def _work(folder: Path, args) -> int:
+    journal = logs.setup(_journals(folder), verbose=args.verbose)
+
+    # Прошлый сбой убираем: иначе он попадёт в отчёт и уведёт разбор в сторону,
+    # хотя проблема давно другая.
+    old = _journals(folder) / logs.CRASH_NAME
+    if old.is_file():
+        old.unlink(missing_ok=True)
 
     if args.command == "doctor":
         return _doctor(folder, journal)
@@ -37,10 +83,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from . import gui
     except ImportError as exc:
-        print("Окно не открылось: не найден tkinter.")
-        print(f"Причина: {exc}")
-        print("На Windows он ставится вместе с Python — переустановите Python "
-              "с python.org, отметив «tcl/tk and IDLE».")
+        _say("Окно не открылось: не найден tkinter.")
+        _say(f"Причина: {exc}")
+        _say("На Windows он ставится вместе с Python — переустановите Python "
+             "с python.org, отметив «tcl/tk and IDLE».")
+        logs.get_logger("запуск").error("tkinter не найден: %s", exc)
         return 2
 
     gui.run(folder)
@@ -48,34 +95,37 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _doctor(folder: Path, journal: Path) -> int:
-    print(f"Папка программы: {folder}")
-    print(f"Журнал: {journal}")
+    _say(f"Папка программы: {folder}")
+    _say(f"Журнал: {journal}")
 
     ok = True
     for name in ("aiogram", "psutil"):
         try:
             __import__(name)
-            print(f"  {name}: есть")
+            _say(f"  {name}: есть")
         except ImportError:
-            print(f"  {name}: НЕТ — выполните: pip install -r requirements.txt")
+            _say(f"  {name}: НЕТ — выполните: pip install -r requirements.txt")
             ok = False
 
     try:
         import tkinter  # noqa: F401
-        print("  tkinter: есть")
-    except ImportError:
-        print("  tkinter: НЕТ — окно не откроется, но бот работает и без него")
+        _say("  tkinter: есть")
+    except ImportError as exc:
+        _say(f"  tkinter: НЕТ ({exc}) — окно не откроется, но бот работает и без него")
+        ok = False
 
     settings = config_module.load(folder)
     troubles = config_module.problems(settings)
     if troubles:
-        print("Настройки:")
+        _say("Настройки:")
         for item in troubles:
-            print(f"  • {item}")
+            _say(f"  • {item}")
         ok = False
     else:
-        print("Настройки: в порядке")
+        _say("Настройки: в порядке")
 
+    _say("")
+    _say(logs.environment())
     return 0 if ok else 1
 
 
@@ -91,7 +141,7 @@ def _headless(folder: Path) -> int:
     troubles = config_module.problems(settings)
     if troubles:
         for item in troubles:
-            print(f"• {item}")
+            _say(f"• {item}")
         return 1
 
     base = Base(folder / "данные" / "bot.sqlite3")
