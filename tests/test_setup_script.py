@@ -105,6 +105,18 @@ def test_program_is_not_started_in_silence():
     assert any("$venvPython (Join-Path $root 'main.py') @command" in line for line in code)
 
 
+def test_instant_close_does_not_pass_for_normal_work():
+    """«Запустил, мигнуло и ничего» обязано оставить сообщение на экране.
+
+    Программа может выйти с нулём и мгновенно — окно не открылось, но и ошибки
+    нет. Без этой проверки консоль гасла молча, и разбираться было не по чему.
+    """
+    body = SETUP.read_text(encoding="utf-8-sig")
+
+    assert "$spent -lt 5" in body
+    assert "Похоже, окно не открылось" in body
+
+
 def test_the_array_type_is_still_forced():
     """Уберут [string[]] — и всё вернётся к запуску по буквам."""
     assert "[string[]]$command" in SETUP.read_text(encoding="utf-8-sig")

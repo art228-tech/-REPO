@@ -168,10 +168,24 @@ Step 'Запускаю'
 # ошибок, и упавшая на запуске программа оставляла человека перед пустым
 # экраном — ровно это и случилось. Лишнее окно консоли — небольшая плата за то,
 # что причина сбоя всегда на виду.
+$started = Get-Date
 & $venvPython (Join-Path $root 'main.py') @command
 $code = $LASTEXITCODE
+$spent = ((Get-Date) - $started).TotalSeconds
+
 if ($code -ne 0) {
-    Write-Host "`nПрограмма завершилась с кодом $code." -ForegroundColor Yellow
+    Write-Host "`nПрограмма завершилась с кодом $code. Причина выше." -ForegroundColor Yellow
+    Write-Host "Подробности лежат в: данные\журналы\сбой.txt"
+    Write-Host 'Окно не закроется, пока вы не нажмёте Enter.'
+    Read-Host | Out-Null
+} elseif ($command[0] -eq 'gui' -and $spent -lt 5) {
+    # Окно, закрывшееся за пять секунд, никто не закрывал руками — значит оно
+    # и не открылось. Молча гасить консоль в этом случае нельзя: со стороны это
+    # выглядит как «запустил, мигнуло и ничего не произошло», и разбираться
+    # снова будет не по чему.
+    Write-Host "`nПрограмма закрылась через $([int]$spent) с, хотя ошибки не было." `
+        -ForegroundColor Yellow
+    Write-Host 'Похоже, окно не открылось. Загляните в: данные\журналы'
     Write-Host 'Окно не закроется, пока вы не нажмёте Enter.'
     Read-Host | Out-Null
 }
