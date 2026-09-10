@@ -34,6 +34,41 @@ class Match:
         return self.data is not None
 
 
+FILE_NAME = "данные роликов.jsonl"
+DATA_DIR = "capcut_uniq_data"
+
+
+def find_nearby(start: Path) -> Path | None:
+    """Ищет реестр автомонтажа рядом — чтобы не заставлять искать руками.
+
+    Автомонтаж кладёт его в `capcut_uniq_data` внутри своей папки, а обе
+    программы обычно лежат по соседству. Поиск нарочно неглубокий: обшаривать
+    диск целиком долго, а найденный где-то далеко чужой файл хуже ненайденного.
+    """
+    roots = [start.parent, start, Path.home() / "Desktop", Path.home() / "Рабочий стол",
+             Path.home() / "Downloads", Path.home()]
+
+    seen: set[Path] = set()
+    for root in roots:
+        try:
+            root = root.resolve()
+        except OSError:
+            continue
+        if root in seen or not root.is_dir():
+            continue
+        seen.add(root)
+
+        for pattern in (f"{DATA_DIR}/{FILE_NAME}", f"*/{DATA_DIR}/{FILE_NAME}"):
+            try:
+                found = sorted(root.glob(pattern))
+            except OSError:
+                continue
+            if found:
+                # Свежий вернее: у человека может лежать старая копия программы.
+                return max(found, key=lambda item: item.stat().st_mtime)
+    return None
+
+
 def read(path: Path) -> dict[str, dict]:
     """Читает реестр автомонтажа в словарь «имя — данные».
 

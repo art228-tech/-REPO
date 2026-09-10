@@ -104,6 +104,12 @@ class Window(tk.Tk):
         self._to_front()
 
         log.info("Программа открыта")
+
+        # Путь к реестру автомонтажа — единственная настройка, которую можно
+        # угадать, и спрашивать её у человека незачем, если она вычисляется.
+        if not self.settings.registry_path and self._find_registry(quiet=True):
+            self._save_quietly()
+
         if not config_module.problems(self.settings):
             self.runner.start()
 
@@ -268,11 +274,22 @@ class Window(tk.Tk):
         path_entry = ttk.Entry(box, textvariable=self.registry_path)
         path_entry.grid(row=2, column=1, sticky="ew", padx=6)
         add_clipboard(path_entry)
-        ttk.Button(box, text="Выбрать…", command=self._pick_registry).grid(row=2, column=2, padx=6)
+
+        path_side = ttk.Frame(box)
+        path_side.grid(row=2, column=2, sticky="w", padx=6)
+        ttk.Button(path_side, text="Найти сам", width=10,
+                   command=self._find_registry).pack(side="left")
+        ttk.Button(path_side, text="Выбрать…", command=self._pick_registry
+                   ).pack(side="left", padx=(6, 0))
+
+        ttk.Label(box, text="Это файл «данные роликов.jsonl» в папке capcut_uniq_data "
+                           "автомонтажа. Он появляется, когда автомонтаж соберёт партию.",
+                  foreground="#555").grid(row=3, column=1, columnspan=2, sticky="w",
+                                          padx=6)
 
         ttk.Label(box, text="Вставить можно кнопкой, правой кнопкой мыши или Ctrl+V — "
                            "раскладка значения не имеет.",
-                  foreground="#555").grid(row=3, column=1, columnspan=2, sticky="w",
+                  foreground="#555").grid(row=4, column=1, columnspan=2, sticky="w",
                                           padx=6, pady=(0, 4))
 
         buttons = ttk.Frame(parent)
@@ -313,11 +330,33 @@ class Window(tk.Tk):
                 "Проверьте, что скопировали именно токен от @BotFather.")
 
     def _pick_registry(self) -> None:
+        start = Path(self.registry_path.get() or "").parent
         chosen = filedialog.askopenfilename(
             title="Файл данных автомонтажа",
+            initialdir=str(start) if start.is_dir() else str(self.folder.parent),
             filetypes=[("Реестр роликов", "*.jsonl"), ("Все файлы", "*.*")])
         if chosen:
             self.registry_path.set(chosen)
+
+    def _find_registry(self, quiet: bool = False) -> bool:
+        """Ищет реестр автомонтажа сам. Возвращает, нашёлся ли."""
+        found = registry.find_nearby(self.folder)
+        if found is not None:
+            self.registry_path.set(str(found))
+            log.info("Реестр автомонтажа найден: %s", found)
+            if not quiet:
+                messagebox.showinfo("Нашёл", f"{found}\n\nНажмите «Сохранить».")
+            return True
+
+        if not quiet:
+            messagebox.showinfo(
+                "Не нашёл",
+                "Файл «данные роликов.jsonl» рядом не нашёлся.\n\n"
+                "Он появляется, когда автомонтаж соберёт хотя бы один ролик, и "
+                "лежит в папке capcut_uniq_data внутри папки автомонтажа.\n\n"
+                "Если автомонтаж давно не обновлялся — обновите его: реестр "
+                "пишут только свежие версии.")
+        return False
 
     def _save(self) -> None:
         self._save_quietly()
