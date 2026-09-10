@@ -156,16 +156,26 @@ if ($needs) {
 
 if (Test-Path $cache) { Remove-Item $cache -Recurse -Force -ErrorAction SilentlyContinue }
 
-$command = if ($args.Count -gt 0) { $args } else { @('gui') }
+# [string[]] здесь обязателен. Без него PowerShell разворачивает массив из
+# одного элемента в строку, и дальше $command[0] даёт не 'gui', а первую букву
+# 'g' — программа получала аргументы по одной букве и отказывалась запускаться.
+[string[]]$command = if ($args.Count -gt 0) { $args } else { @('gui') }
 
 Step 'Запускаю'
 if ($command[0] -eq 'gui') {
     # pythonw не держит консольное окно: программа живёт в своём окне.
     $silent = Join-Path $venv 'Scripts\pythonw.exe'
     if (Test-Path $silent) {
-        Start-Process -FilePath $silent -ArgumentList @((Join-Path $root 'main.py'), 'gui') `
-            -WorkingDirectory $root
-        exit 0
+        $app = Start-Process -FilePath $silent -PassThru -WorkingDirectory $root `
+            -ArgumentList @((Join-Path $root 'main.py'), 'gui')
+
+        # pythonw молчит обо всём: ни консоли, ни сообщения об ошибке. Если
+        # программа упала на запуске, человек увидел бы просто пустой экран и
+        # закрывшийся батник. Поэтому ждём и, если она уже умерла, повторяем
+        # запуск с консолью — там причина будет видна.
+        Start-Sleep -Seconds 3
+        if (-not $app.HasExited -or $app.ExitCode -eq 0) { exit 0 }
+        Warn 'Окно не открылось. Запускаю ещё раз, чтобы показать причину.'
     }
 }
 
