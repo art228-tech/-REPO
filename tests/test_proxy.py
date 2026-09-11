@@ -53,3 +53,29 @@ def test_report_keeps_an_address_without_a_password_readable():
 
 def test_report_says_when_there_is_no_proxy():
     assert report._proxy("") == "не указан"
+
+
+def test_truncated_proxy_is_caught_before_the_bot_starts():
+    """Адрес копируют из чужой панели и часто хватают не с начала строки.
+
+    Логин у прокси длинный, выделение начинают с середины — получается пароль
+    без логина. Соединение при этом отвергается без объяснений, а человек
+    уверен, что вставил всё правильно.
+    """
+    trouble = config.proxy_problems("25a446a67860abf96c@proxy.example.shop:80")
+
+    assert trouble
+    assert "не вся строка" in trouble[0]
+
+
+def test_whole_proxy_line_passes():
+    assert config.proxy_problems("http://login-cc-CZ-s-42:pass@proxy.example.shop:80") == []
+
+
+def test_proxy_without_login_is_fine():
+    """Бывают прокси и без пароля — придираться к ним не за что."""
+    assert config.proxy_problems("1.2.3.4:1080") == []
+
+
+def test_no_proxy_is_no_problem():
+    assert config.proxy_problems("") == []

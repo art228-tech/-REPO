@@ -73,17 +73,17 @@ async def serve(base: Base, settings, guard: Guard, stopping: asyncio.Event) -> 
     # Бот пересоздаётся на каждый запуск: токен и прокси могли поменять в окне,
     # а они зашиты в объект бота. Диспетчер при этом остаётся прежним.
     proxy = config_module.proxy(settings.proxy_url)
-    if proxy.startswith("socks"):
-        # Пакет для socks ставится отдельно: на части машин с Windows его
-        # установка срывается и уносит с собой всю остальную.
+    if proxy:
+        # Пакет нужен для любого прокси, не только socks: aiogram без него
+        # отказывает и на обычном http. Проверяем заранее, чтобы вместо
+        # ссылки на pypi человек увидел, что ему делать.
         try:
             import aiohttp_socks  # noqa: F401
         except ImportError as exc:
             raise PipelineError(
-                "Для прокси socks нужен отдельный пакет — сразу он не ставится.\n\n"
+                "Для работы через прокси не хватает одного пакета.\n\n"
                 "Поставьте его один раз: закройте программу, откройте папку с "
-                "ней и запустите  run.bat socks\n\n"
-                "Либо укажите обычный прокси http — он работает без этого пакета."
+                "ней и запустите  run.bat socks"
             ) from exc
 
     session = AiohttpSession(proxy=proxy) if proxy else None

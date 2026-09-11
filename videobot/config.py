@@ -116,4 +116,26 @@ def problems(settings: Settings) -> list[str]:
     elif not Path(settings.registry_path).is_file():
         found.append(f"файл данных не найден: {settings.registry_path}")
 
+    found.extend(proxy_problems(settings.proxy_url))
     return found
+
+
+def proxy_problems(raw: str) -> list[str]:
+    """Что не так с записью прокси. Пустой список — всё в порядке.
+
+    Адрес копируют из чужой панели и часто хватают не с начала строки: логин у
+    прокси длинный, и выделение начинают с середины. Получается пароль без
+    логина — соединение при этом отвергается без объяснений, а человек уверен,
+    что вставил всё правильно.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return []
+
+    body = raw.split("://", 1)[-1]
+    if "@" in body:
+        credentials = body.rsplit("@", 1)[0]
+        if ":" not in credentials:
+            return ["в адресе прокси нет логина — похоже, скопирована не вся "
+                    "строка. Она начинается с http:// или socks5://"]
+    return []
