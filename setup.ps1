@@ -41,12 +41,6 @@ function Fail($text) {
     exit 1
 }
 
-function Test-Antivirus($text) {
-    # Windows Defender удаляет файл и пишет про «вирус или потенциально
-    # нежелательную программу». Установка после этого обрывается на месте, а
-    # человек видит только «команда не найдена» и не понимает, при чём тут он.
-    return $text -match 'вирус|потенциально нежелательн|virus|unwanted software|Operation did not complete'
-}
 
 function Test-Python($exe) {
     if (-not $exe) { return $false }
@@ -151,7 +145,7 @@ if (-not (Test-Path $venvPython)) {
         Fail @"
 Не удалось создать окружение .venv.
 
-Чаще всего это антивирус или отсутствие модуля venv. Проверьте вручную:
+Проверьте вручную, что скажет Python:
     $python -m venv .venv
 "@
     }
@@ -168,48 +162,26 @@ if (Test-Path $stamp) {
 if ($needs) {
     Step 'Ставлю зависимости (несколько десятков мегабайт, один раз)'
     & $venvPython -m pip install --upgrade pip --quiet
-    $pip = & $venvPython -m pip install -r (Join-Path $root 'requirements.txt') 2>&1
-    $pip | ForEach-Object { Write-Host $_ }
+    & $venvPython -m pip install -r (Join-Path $root 'requirements.txt')
 
     if ($LASTEXITCODE -ne 0) {
-        if (Test-Antivirus ($pip -join "`n")) {
-            Fail @"
-Установку прервал антивирус: он принял один из пакетов за нежелательную
-программу и удалил файл на лету.
-
-Что делать:
-  1. Откройте «Безопасность Windows» - «Защита от вирусов и угроз» -
-     «Журнал защиты» и посмотрите, что именно он забрал.
-  2. Там же можно нажать «Действия» - «Разрешить на устройстве».
-  3. Или добавьте папку программы в исключения:
-     «Параметры» - «Исключения» - «Добавить исключение» - «Папка».
-
-После этого удалите папку .venv рядом с программой и запустите run.bat снова.
-"@
-        }
         Fail @"
-Зависимости не поставились.
+Зависимости не поставились. Что было — записано в файле установки, путь ниже.
 
-Обычно это интернет или прокси. Попробуйте руками:
+Попробовать руками можно так:
     .venv\Scripts\python.exe -m pip install -r requirements.txt
 "@
     }
     Get-Content (Join-Path $root 'requirements.txt') -Raw | Set-Content $stamp -NoNewline
 }
 
-# Отдельная команда: поставить поддержку socks-прокси. Вынесена из обязательных
-# потому, что антивирусы Windows принимают этот пакет за нежелательную
-# программу и обрывают вместе с ним всю установку.
+# Поддержка socks-прокси ставится отдельной командой, а не вместе с остальными:
+# см. requirements.txt, там объяснено почему.
 if ($command[0] -eq 'socks') {
     Step 'Ставлю поддержку socks-прокси'
     & $venvPython -m pip install "aiohttp-socks>=0.8,<1"
     if ($LASTEXITCODE -ne 0) {
-        Fail @"
-Поставить не вышло. Чаще всего мешает антивирус: он принимает этот пакет за
-нежелательную программу. Добавьте папку программы в исключения и повторите.
-
-Обычный прокси http работает и без него.
-"@
+        Fail 'Поставить не вышло. Обычный прокси http работает и без этого.'
     }
     Write-Host "`nГотово. Теперь в поле «Прокси» можно писать socks5://…" -ForegroundColor Green
     try { Stop-Transcript | Out-Null } catch { }
