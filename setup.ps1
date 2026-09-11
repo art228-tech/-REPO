@@ -13,6 +13,16 @@ $venv = Join-Path $root '.venv'
 $venvPython = Join-Path $venv 'Scripts\python.exe'
 $cache = Join-Path $root '.cache'
 
+# Всё, что происходит при установке, пишется в файл. Ошибка уезжает вверх за
+# край окна быстрее, чем человек успевает её прочитать, а пересказать её по
+# памяти нельзя — этот файл можно просто переслать.
+$logDir = Join-Path $root 'данные\журналы'
+$installLog = Join-Path $logDir 'установка.log'
+try {
+    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    Start-Transcript -Path $installLog -Force | Out-Null
+} catch { }
+
 # PowerShell по умолчанию считает вывод в поток ошибок настоящей ошибкой, а pip
 # пишет туда предупреждения. Без этого установка падала бы на первом же из них.
 $PSDefaultParameterValues['*:ErrorAction'] = 'Continue'
@@ -22,9 +32,20 @@ function Step($text) { Write-Host "`n== $text" -ForegroundColor Cyan }
 function Warn($text) { Write-Host $text -ForegroundColor Yellow }
 function Fail($text) {
     Write-Host "`n$text" -ForegroundColor Red
+    Write-Host "`nВесь ход установки записан в файл:"
+    Write-Host "  $installLog"
+    Write-Host 'Его можно переслать — по нему видно, что именно не вышло.'
+    try { Stop-Transcript | Out-Null } catch { }
     Write-Host "`nОкно не закроется, пока вы не нажмёте Enter."
     Read-Host | Out-Null
     exit 1
+}
+
+function Test-Antivirus($text) {
+    # Windows Defender удаляет файл и пишет про «вирус или потенциально
+    # нежелательную программу». Установка после этого обрывается на месте, а
+    # человек видит только «команда не найдена» и не понимает, при чём тут он.
+    return $text -match 'вирус|потенциально нежелательн|virus|unwanted software|Operation did not complete'
 }
 
 function Test-Python($exe) {
@@ -111,6 +132,11 @@ function Install-Python {
 Set-Location $root
 Say 'Раздача роликов через телеграм-бота'
 
+# [string[]] здесь обязателен. Без него PowerShell разворачивает массив из
+# одного элемента в строку, и дальше $command[0] даёт не 'gui', а первую букву
+# 'g' — программа получала аргументы по одной букве и отказывалась запускаться.
+[string[]]$command = if ($args.Count -gt 0) { $args } else { @('gui') }
+
 $python = Find-Python
 if (-not $python) {
     Say 'Python не найден.'
@@ -142,8 +168,25 @@ if (Test-Path $stamp) {
 if ($needs) {
     Step 'Ставлю зависимости (несколько десятков мегабайт, один раз)'
     & $venvPython -m pip install --upgrade pip --quiet
-    & $venvPython -m pip install -r (Join-Path $root 'requirements.txt')
+    $pip = & $venvPython -m pip install -r (Join-Path $root 'requirements.txt') 2>&1
+    $pip | ForEach-Object { Write-Host $_ }
+
     if ($LASTEXITCODE -ne 0) {
+        if (Test-Antivirus ($pip -join "`n")) {
+            Fail @"
+Установку прервал антивирус: он принял один из пакетов за нежелательную
+программу и удалил файл на лету.
+
+Что делать:
+  1. Откройте «Безопасность Windows» - «Защита от вирусов и угроз» -
+     «Журнал защиты» и посмотрите, что именно он забрал.
+  2. Там же можно нажать «Действия» - «Разрешить на устройстве».
+  3. Или добавьте папку программы в исключения:
+     «Параметры» - «Исключения» - «Добавить исключение» - «Папка».
+
+После этого удалите папку .venv рядом с программой и запустите run.bat снова.
+"@
+        }
         Fail @"
 Зависимости не поставились.
 
@@ -154,12 +197,27 @@ if ($needs) {
     Get-Content (Join-Path $root 'requirements.txt') -Raw | Set-Content $stamp -NoNewline
 }
 
-if (Test-Path $cache) { Remove-Item $cache -Recurse -Force -ErrorAction SilentlyContinue }
+# Отдельная команда: поставить поддержку socks-прокси. Вынесена из обязательных
+# потому, что антивирусы Windows принимают этот пакет за нежелательную
+# программу и обрывают вместе с ним всю установку.
+if ($command[0] -eq 'socks') {
+    Step 'Ставлю поддержку socks-прокси'
+    & $venvPython -m pip install "aiohttp-socks>=0.8,<1"
+    if ($LASTEXITCODE -ne 0) {
+        Fail @"
+Поставить не вышло. Чаще всего мешает антивирус: он принимает этот пакет за
+нежелательную программу. Добавьте папку программы в исключения и повторите.
 
-# [string[]] здесь обязателен. Без него PowerShell разворачивает массив из
-# одного элемента в строку, и дальше $command[0] даёт не 'gui', а первую букву
-# 'g' — программа получала аргументы по одной букве и отказывалась запускаться.
-[string[]]$command = if ($args.Count -gt 0) { $args } else { @('gui') }
+Обычный прокси http работает и без него.
+"@
+    }
+    Write-Host "`nГотово. Теперь в поле «Прокси» можно писать socks5://…" -ForegroundColor Green
+    try { Stop-Transcript | Out-Null } catch { }
+    Read-Host 'Нажмите Enter' | Out-Null
+    exit 0
+}
+
+if (Test-Path $cache) { Remove-Item $cache -Recurse -Force -ErrorAction SilentlyContinue }
 
 Step 'Запускаю'
 
@@ -169,6 +227,10 @@ Step 'Запускаю'
 # экраном — ровно это и случилось. Лишнее окно консоли — небольшая плата за то,
 # что причина сбоя всегда на виду.
 $started = Get-Date
+# Дальше работает сама программа, и свой журнал она ведёт отдельно. Запись хода
+# установки на этом заканчивается, иначе файл рос бы всё время работы бота.
+try { Stop-Transcript | Out-Null } catch { }
+
 & $venvPython (Join-Path $root 'main.py') @command
 $code = $LASTEXITCODE
 $spent = ((Get-Date) - $started).TotalSeconds

@@ -73,6 +73,21 @@ async def serve(base: Base, settings, guard: Guard, stopping: asyncio.Event) -> 
     # Бот пересоздаётся на каждый запуск: токен и прокси могли поменять в окне,
     # а они зашиты в объект бота. Диспетчер при этом остаётся прежним.
     proxy = config_module.proxy(settings.proxy_url)
+    if proxy.startswith("socks"):
+        # Пакет для socks не ставится вместе с остальными: антивирусы Windows
+        # принимают его за нежелательную программу и обрывают всю установку.
+        try:
+            import aiohttp_socks  # noqa: F401
+        except ImportError as exc:
+            raise PipelineError(
+                "Для прокси socks нужен отдельный пакет — он не ставится сразу, "
+                "потому что антивирусы Windows принимают его за нежелательную "
+                "программу и обрывают всю установку.\n\n"
+                "Поставьте его один раз: закройте программу, откройте папку с "
+                "ней и запустите  run.bat socks\n\n"
+                "Либо укажите обычный прокси http — он работает без этого пакета."
+            ) from exc
+
     session = AiohttpSession(proxy=proxy) if proxy else None
     if proxy:
         log.info("Иду к Telegram через прокси")
